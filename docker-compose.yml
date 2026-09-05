@@ -1,0 +1,43 @@
+# Local / staging stack: MongoDB + LiveMorph API
+services:
+  mongo:
+    image: mongo:7
+    # Bind localhost only; set credentials for non-dev:
+    # environment:
+    #   MONGO_INITDB_ROOT_USERNAME: livemorph
+    #   MONGO_INITDB_ROOT_PASSWORD: change-me
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "127.0.0.1:27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "3874:3874"
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: livemorph
+      HOST: 0.0.0.0
+      PORT: 3874
+      RUST_ENV: production
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3874/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo_data:

@@ -1,0 +1,10 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/">
+        <file>assets/livemorph-icon.png</file>
+        <file>assets/morphme-icon.png</file>
+        <file>assets/auth-hero.jpg</file>
+        <file>assets/starters/crimson-knight.webp</file>
+        <file>assets/starters/vampire-lord.webp</file>
+    </qresource>
+</RCC>

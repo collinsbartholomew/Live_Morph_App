@@ -1,0 +1,52 @@
+[package]
+name = "livemorph-backend"
+version = "1.8.0"
+edition = "2021"
+description = "LiveMorph production API — auth, credits, catalog, Decart WS signaling proxy, payments"
+license = "Proprietary"
+rust-version = "1.88"
+
+[dependencies]
+urlencoding = "2"
+actix-web = "4"
+actix-cors = "0.7"
+actix-ws = "0.4"
+actix = "0.13"
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+bytes = "1"
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+url = "2"
+mongodb = { version = "3", default-features = true }
+bson = { version = "2", features = ["chrono-0_4"] }
+jsonwebtoken = { version = "11", features = ["rust_crypto"] }
+bcrypt = "0.19"
+rand = "0.10"
+sha2 = "0.11"
+hmac = "0.13"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+dotenvy = "0.15"
+envy = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2"
+anyhow = "1"
+subtle = "2"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+serde_urlencoded = "0.7"
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "builder", "smtp-transport", "hostname"] }
+
+[dev-dependencies]
+hmac = "0.13"
+sha2 = "0.11"
+hex = "0.4"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

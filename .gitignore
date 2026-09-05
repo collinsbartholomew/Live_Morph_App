@@ -1,0 +1,108 @@
+# Environment files with secrets
+backend/.env
+backend/.env.local
+backend/.env.production
+backend/.test.env
+apps/livemorph/.env
+apps/livemorph/.env.local
+apps/liveescape/.env
+apps/liveescape/.env.local
+
+# Build artifacts
+backend/target/
+apps/livemorph/build/
+apps/liveescape/build/
+apps/common/gstpeer/build/
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+
+# Rust
+Cargo.lock
+**/Cargo.lock
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.cmake
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+*.pid
+
+# Test coverage
+coverage/
+*.gcno
+*.gcda
+*.gcov
+lcov.info
+
+# Package managers
+node_modules/
+.pnp
+.pnp.js
+yarn.lock
+package-lock.json
+
+# Docker
+.docker/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+temp/
+
+# Qt
+*.moc
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Cargo
+**/target/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Distribution / packaging
+*.deb
+*.rpm
+*.msi
+*.dmg
+*.appimage
+dist/
+package/

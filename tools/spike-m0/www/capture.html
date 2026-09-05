@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/><title>SDP capture</title></head>
+<body>
+<video id="v" autoplay playsinline muted></video>
+<pre id="hud">CAPTURE</pre>
+<script>
+/* M0.3 capture rig — mirrors decart_peer.html's WebRTC flow and dumps
+ * SDP/ICE/state transitions back to the capture server. */
+const params = new URLSearchParams(location.search);
+const WS_URL = params.get('ws') || '';
+const MODEL = params.get('model') || 'lucy-2.5';
+const DURATION_S = parseInt(params.get('secs') || '15');
+const SEND_IMAGE = params.get('image') !== '0';
+const SEND_VIDEO = params.get('video') === '1';
+let pc = null, ws = null;
+
+function hud(t){ document.getElementById('hud').textContent = t; }
+async function dump(what, obj){
+  try { await fetch('/dump?what=' + encodeURIComponent(what),
+      {method:'POST', headers:{'Content-Type':'text/plain'},
+       body: typeof obj === 'string' ? obj : JSON.stringify(obj)});
+  } catch(e){}
+}
+function iceServers(){
+  return [{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}];
+}
+
+async function start(){
+  await dump('log', 'ws_param=[' + WS_URL + ']');
+  if(!WS_URL){ hud('Missing ws='); return; }
+  pc = new RTCPeerConnection({iceServers: iceServers()});
+  let dimTimer = null;
+  pc.ontrack = (ev)=>{
+    const v = document.getElementById('v');
+    v.srcObject = ev.streams[0] || new MediaStream([ev.track]);
+    hud('TRACK LIVE');
+    dump('log', 'ontrack kind=' + ev.track.kind + ' mid=' + ev.transceiver.mid);
+    if (!dimTimer) dimTimer = setInterval(()=>{
+      dump('log', `VIDEO ${v.videoWidth}x${v.videoHeight} t=${v.currentTime.toFixed(2)} paused=${v.paused}`);
+    }, 2000);
+  };
+  pc.onicecandidate = (ev)=>{
+    if (!ev.candidate) { dump('log', 'local ice complete'); return; }
+    const c = ev.candidate.toJSON();
+    dump('local_ice', JSON.stringify({candidate: c.candidate, sdpMLineIndex: c.sdpMLineIndex}));
+    if (ws && ws.readyState === 1)
+      ws.send(JSON.stringify({type:'ice-candidate', candidate: ev.candidate.toJSON()}));
+  };
+  pc.onicegatheringstatechange = async ()=>{
+    dump('log', 'iceGatheringState=' + pc.iceGatheringState);
+    if (pc.iceGatheringState === 'complete')
+      await dump('offer_gathered', pc.localDescription.sdp);
+  };
+  pc.onconnectionstatechange = ()=>{ dump('log','connectionState='+pc.connectionState); };
+  pc.oniceconnectionstatechange = ()=>{ dump('log','iceConnectionState='+pc.iceConnectionState); };
+  pc.onsignalingstatechange = ()=>{ dump('log','signalingState='+pc.signalingState); };
+
+  ws = new WebSocket(WS_URL);
+  ws.onopen = async ()=>{
+    hud('WS OPEN');
+    if (SEND_VIDEO) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480}},audio:false});
+        stream.getTracks().forEach(t => pc.addTrack(t, stream));
+        dump('log', 'added camera track (sendrecv)');
+      } catch(e){ dump('log', 'getUserMedia err ' + e); }
+    }
+    const offer = await pc.createOffer({offerToReceiveVideo:true, offerToReceiveAudio:false});
+    await pc.setLocalDescription(offer);
+    await dump('offer', pc.localDescription.sdp);
+    ws.send(JSON.stringify({type:'offer', sdp: offer.sdp, model: MODEL}));
+  };
+  let imageSent = false;
+  async function sendImage(){
+    if (imageSent || !SEND_IMAGE) return;
+    imageSent = true;
+    try {
+      const blob = await (await fetch('/ref.png')).blob();
+      const ab = await blob.arrayBuffer();
+      let bin = ''; const bytes = new Uint8Array(ab);
+      for (let i = 0; i < bytes.length; i += 8192)
+        bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      const b64 = btoa(bin);
+      ws.send(JSON.stringify({type:'set_image', image_data:b64,
+        prompt:'a knight in crimson armor, cinematic light', enhance_prompt:true}));
+      ws.send(JSON.stringify({type:'prompt', prompt:'a knight in crimson armor, cinematic light', enhance_prompt:true}));
+      dump('log', 'sent set_image + prompt (post-answer)');
+    } catch(e){ dump('log', 'set_image err ' + e); }
+  }
+  ws.onmessage = async (ev)=>{
+    let msg; try{ msg = JSON.parse(ev.data); }catch(_){ return; }
+    dump('log', 'ws<= type=' + msg.type + (msg.seconds!==undefined?(' sec='+msg.seconds):'') + (msg.error?(' err='+msg.error):''));
+    try{
+      if (msg.type === 'answer' && msg.sdp){
+        await pc.setRemoteDescription({type:'answer', sdp: msg.sdp});
+        await dump('answer', pc.remoteDescription.sdp);
+        await sendImage();
+      } else if (msg.type === 'ice-candidate' && msg.candidate){
+        await pc.addIceCandidate(msg.candidate);
+        await dump('remote_ice', JSON.stringify(msg.candidate));
+      }
+    }catch(e){ dump('log', 'MSG ERR ' + e); }
+  };
+  ws.onclose = (e)=>{ dump('log','ws closed code='+e.code+' reason='+e.reason); };
+  ws.onerror = (e)=>{ dump('log','ws error'); };
+}
+
+window.addEventListener('load', start);
+setTimeout(()=>{
+  dump('log','timeout reached, closing');
+  try{ ws && ws.close(); }catch(e){}
+  try{ pc && pc.close(); }catch(e){}
+  dump('done','1');
+}, DURATION_S * 1000);
+</script>
+</body>
+</html>

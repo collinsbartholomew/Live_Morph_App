@@ -1,0 +1,32 @@
+# LiveEscape stack: MongoDB + the shared LiveMorph platform API.
+# Runs the same unified backend as the root docker-compose (both products).
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - le_mongo:/data/db
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    ports:
+      - "3874:3874"
+    env_file:
+      - ../backend/.env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: liveescape
+      MONGODB_DB_LIVEESCAPE: liveescape
+      HOST: 0.0.0.0
+      PORT: "3874"
+      RUST_ENV: production
+
+volumes:
+  le_mongo:
