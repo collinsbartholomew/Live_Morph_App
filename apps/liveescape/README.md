@@ -18,7 +18,7 @@ cd backend
 cp .env.example .env   # fill secrets
 # MongoDB required
 cargo run --release
-# listens on :8881
+# listens on :3874
 ```
 
 ## Frontend
@@ -28,7 +28,7 @@ Requires Qt 6.5+ (Multimedia, WebSockets; **WebEngine recommended** for AI video
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
-export LIVEESCAPE_API_URL=http://127.0.0.1:8881
+export LIVEESCAPE_API_URL=http://127.0.0.1:3874
 ./build/bin/LiveEscape
 ```
 

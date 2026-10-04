@@ -4,17 +4,25 @@ import QtQuick.Layouts
 import LiveMorph
 
 /**
- * What's New — release notes for the Qt6 native desktop product.
+ * What's New modal (Electron P1 + changelog C1):
+ *   eyebrow "WHAT'S NEW" (mono uppercase) · title "v{version}" 24px
+ *   release headline · markdown-ish release notes (##/bold/bullets)
+ *   fallback: "This update includes performance improvements and bug fixes."
+ *   footer right-aligned "Got it"
  */
 Rectangle {
     id: root
     property bool open: false
+    // Release headline + notes for the current version (set by callers when
+    // the update payload provides them; Electron renders changelog markdown)
+    property string headline: ""
+    property var notes: []
     anchors.fill: parent
     color: Colors.overlayScrim
     visible: open
     z: 200
     opacity: open ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: Theme.motionFast } }
+    Behavior on opacity { NumberAnimation { duration: Theme.motionFast; easing.type: Easing.OutCubic } }
 
     MouseArea {
         anchors.fill: parent
@@ -23,7 +31,7 @@ Rectangle {
 
     Rectangle {
         anchors.centerIn: parent
-        width: Math.min(parent.width - 48, 480)
+        width: Math.min(parent.width - 48, 448) // Electron max-w-md
         height: Math.min(parent.height - 64, panelCol.implicitHeight + 24)
         radius: Theme.radiusLg
         color: Colors.surfaceOverlay
@@ -33,12 +41,18 @@ Rectangle {
 
         MouseArea { anchors.fill: parent /* absorb */ }
 
+        // panel-hairline accent gradient top
         Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
             height: 1
-            color: Colors.insetHighlight
+            gradient: Gradient {
+                orientation: Qt.Horizontal
+                GradientStop { position: 0.0; color: Colors.transparent }
+                GradientStop { position: 0.5; color: Colors.accent60 }
+                GradientStop { position: 1.0; color: Colors.transparent }
+            }
         }
 
         ColumnLayout {
@@ -48,7 +62,7 @@ Rectangle {
 
             Rectangle {
                 Layout.fillWidth: true
-                height: 64
+                height: 72
                 color: Colors.surfaceRaised
                 ColumnLayout {
                     anchors.left: parent.left
@@ -58,16 +72,25 @@ Rectangle {
                     anchors.rightMargin: 20
                     spacing: 2
                     Text {
-                        text: qsTr("What's new")
-                        color: Colors.textPrimary
-                        font.pixelSize: 18
-                        font.weight: Font.DemiBold
+                        text: qsTr("WHAT'S NEW")
+                        color: Colors.textMuted
+                        font.family: Theme.fontMono.family
+                        font.pixelSize: 9
+                        font.letterSpacing: 1.5
                     }
                     Text {
-                        text: "LiveMorph " + (App.appVersion || "1.0.0") + " · Qt6 native"
-                        color: Colors.textMuted
-                        font.pixelSize: 11
-                        font.family: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                        text: "v" + (App.appVersion || Backend.appVersion || "1.0.0")
+                        color: Colors.textPrimary
+                        font.pixelSize: 24
+                        font.weight: Font.Bold
+                    }
+                    Text {
+                        visible: root.headline.length > 0
+                        text: root.headline
+                        color: Colors.textSecondary
+                        font.pixelSize: 13
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
                     }
                 }
             }
@@ -86,64 +109,27 @@ Rectangle {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.margins: 20
-                    spacing: 14
+                    spacing: 12
 
+                    // Release notes bullets, or the Electron fallback line
                     Repeater {
-                        model: [
-                            {
-                                title: qsTr("LiveMorph Desktop"),
-                                body: qsTr("A native LiveMorph desktop built for speed and focus — Stage, Workshop, credits, and settings in one place.")
-                            },
-                            {
-                                title: qsTr("Native media path"),
-                                body: qsTr("Realtime morphing runs over native GStreamer WebRTC — in-app, no browser required.")
-                            },
-                            {
-                                title: qsTr("Passwordless sign-in"),
-                                body: qsTr("Sign in with an email code. Google sign-in appears when your LiveMorph host enables it.")
-                            },
-                            {
-                                title: qsTr("Workshop library"),
-                                body: qsTr("Character catalog, categories, search, and custom prompts — with HD when available.")
-                            },
-                            {
-                                title: qsTr("Capture tools"),
-                                body: qsTr("Record locally and use keyboard shortcuts to stay in flow.")
-                            },
-                            {
-                                title: qsTr("Credits that travel"),
-                                body: qsTr("Purchase credit packs securely — balances live on the LiveMorph service.")
-                            },
-                            {
-                                title: qsTr("OBS & virtual camera"),
-                                body: qsTr("Optional MJPEG output for OBS and virtual-camera workflows.")
-                            }
-                        ]
-                        ColumnLayout {
+                        model: root.notes.length > 0 ? root.notes : [qsTr("This update includes performance improvements and bug fixes.")]
+                        Row {
+                            required property var modelData
                             Layout.fillWidth: true
-                            spacing: 4
-                            Row {
-                                spacing: 8
-                                Rectangle {
-                                    width: 6; height: 6; radius: 3
-                                    color: Colors.accent
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                                Text {
-                                    text: modelData.title
-                                    color: Colors.textPrimary
-                                    font.pixelSize: 13
-                                    font.weight: Font.DemiBold
-                                }
+                            spacing: 8
+                            Rectangle {
+                                width: 3; height: 3; radius: 1.5
+                                color: Colors.accent
+                                anchors.verticalCenter: parent.verticalCenter
                             }
                             Text {
-                                text: modelData.body
+                                text: parent.modelData
                                 color: Colors.textSecondary
                                 font.pixelSize: 12
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
-                                leftPadding: 14
-                                lineHeight: 1.35
+                                lineHeight: 1.4
                             }
                         }
                     }

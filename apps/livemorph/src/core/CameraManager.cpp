@@ -1,11 +1,15 @@
 #include "CameraManager.h"
 #include <QMediaDevices>
+#include <QAudioDevice>
 #include <QCameraDevice>
 #include <QVideoFrame>
 #include <QMediaFormat>
 #include <QFileInfo>
 #include <QDir>
+#include <QDateTime>
 #include <QMetaObject>
+#include <QDebug>
+#include <cmath>
 #include <utility>
 
 CameraManager::CameraManager(QObject *parent)
@@ -14,9 +18,23 @@ CameraManager::CameraManager(QObject *parent)
     m_sink = new QVideoSink(this);
     m_session.setVideoSink(m_sink);
 
+    // Mirror sink: fans the same frames out to secondary views (PiP) without
+    // stealing the single QMediaCaptureSession video output — rebinding that
+    // output between StageFrame and InputPiP made the stage preview go dark
+    // whenever the PiP became visible (last-bind-wins).
+    m_mirrorSink = new QVideoSink(this);
+    connect(m_sink, &QVideoSink::videoFrameChanged, m_mirrorSink,
+            [this](const QVideoFrame &frame) {
+                if (m_mirrorSink && frame.isValid())
+                    m_mirrorSink->setVideoFrame(frame);
+            });
+
     m_frameThrottle.start();
     connect(m_sink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
         if (!frame.isValid()) return;
+        // Live-track stamp for PiP INPUT-LOST watchdogs (any valid frame,
+        // independent of the throttle below)
+        m_lastFrameMs.store(QDateTime::currentMSecsSinceEpoch(), std::memory_order_relaxed);
         // Cap emission rate — camera may deliver 60+ FPS; downstream MJPEG/OBS only needs ~30
         if (m_frameThrottle.isValid() && m_frameThrottle.elapsed() < kMinFrameIntervalMs)
             return;
@@ -71,6 +89,13 @@ QString CameraManager::currentDeviceName() const
     return (idx >= 0 && idx < m_deviceNames.size()) ? m_deviceNames.at(idx) : QString();
 }
 
+QString CameraManager::currentMicName() const
+{
+    const auto input = QMediaDevices::defaultAudioInput();
+    const QString name = input.description();
+    return name.isEmpty() ? QStringLiteral("Default microphone") : name;
+}
+
 void CameraManager::setMirrored(bool v)
 {
     if (m_mirrored == v) return;
@@ -118,7 +143,44 @@ void CameraManager::setupCamera()
     if (chosen.isNull()) return;
 
     m_camera = new QCamera(chosen, this);
+    // Match the Electron capture contract: 1280x720, ~30fps (Electron:
+    // getUserMedia({width:ideal:1280,height:ideal:720,frameRate:{ideal:30,max:30}})).
+    QCameraFormat best;
+    double bestScore = -1e9;
+    const auto formats = chosen.videoFormats();
+    for (const QCameraFormat &f : formats) {
+        const QSize r = f.resolution();
+        const float fps = f.maxFrameRate();
+        const double ar = (r.height() > 0 ? double(r.width()) / r.height() : 0.0);
+        const double score =
+            -std::abs(r.width() * r.height() - 1280.0 * 720.0) / 1000.0
+            - std::abs(ar - 16.0 / 9.0) * 500.0
+            - std::abs(fps - 30.0) * 5.0;
+        if (score > bestScore) {
+            bestScore = score;
+            best = f;
+        }
+    }
+    if (!best.resolution().isEmpty()) {
+        m_camera->setCameraFormat(best);
+        qInfo() << "CameraManager: selected format" << best.resolution() << "fps" << best.maxFrameRate();
+    }
     m_session.setCamera(m_camera);
+}
+
+void CameraManager::bindVideoOutput(QObject *output)
+{
+    if (output)
+        m_session.setVideoOutput(output);
+}
+
+void CameraManager::bindMirrorVideoOutput(QObject *output)
+{
+    // QML VideoOutput.videoSink is writable at runtime (setVideoSink) but
+    // treated as read-only by the AOT QML compiler — imperative property set
+    // from C++ bypasses the static-typing warning while achieving the same bind.
+    if (output)
+        output->setProperty("videoSink", QVariant::fromValue(m_mirrorSink));
 }
 
 void CameraManager::ensureRecorder()
@@ -196,15 +258,17 @@ QString CameraManager::startLocalRecording(const QString &outputPath)
     m_recorder->setMediaFormat(fmt);
     m_recorder->setQuality(QMediaRecorder::HighQuality);
     m_recorder->record();
-    if (m_recorder->recorderState() == QMediaRecorder::RecordingState
-        || m_recorder->error() == QMediaRecorder::NoError) {
-        m_recording = true;
-        emit isRecordingChanged();
-        emit localRecordingStarted(outputPath);
-        return outputPath;
+    // QMediaRecorder::record() is asynchronous — recorderState() will not yet
+    // report RecordingState here, so state checks are meaningless this early.
+    // Accept optimistically when no immediate error is set; real failures
+    // arrive via errorOccurred → localRecordingFailed (RecordingManager
+    // listens and stops the phantom session).
+    if (m_recorder->error() != QMediaRecorder::NoError) {
+        emit localRecordingFailed(m_recorder->errorString());
+        return {};
     }
-    emit localRecordingFailed(m_recorder->errorString());
-    return {};
+    emit localRecordingStarted(outputPath);
+    return outputPath;
 }
 
 void CameraManager::stopLocalRecording()

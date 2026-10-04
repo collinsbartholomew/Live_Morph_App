@@ -1,4 +1,4 @@
-# Environment files with secrets
+# ---- Environment files with secrets (templates below stay tracked) ----
 backend/.env
 backend/.env.local
 backend/.env.production
@@ -7,76 +7,68 @@ apps/livemorph/.env
 apps/livemorph/.env.local
 apps/liveescape/.env
 apps/liveescape/.env.local
+!backend/.env.example
+!backend/.env.production.template
 
-# Build artifacts
+# ---- Secrets / credentials captured at runtime ----
+tools/spike-m0/token.txt
+**/token.txt
+*.pem
+*.key
+
+# ---- Build artifacts (CMake / Cargo / Qt) ----
+build/
+build-*/
+**/build/
+**/build-release/
 backend/target/
-apps/livemorph/build/
-apps/liveescape/build/
-apps/common/gstpeer/build/
-*.so
-*.dylib
-*.dll
-*.a
-*.lib
-
-# Rust
-Cargo.lock
-**/Cargo.lock
-
-# CMake
+**/target/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 *.cmake
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-*.sublime-workspace
-*.sublime-project
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-*.pid
-
-# Test coverage
-coverage/
+compile_commands.json
+*.ninja
+.ninja_deps
+.ninja_log
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.lib
 *.gcno
 *.gcda
 *.gcov
 lcov.info
 
-# Package managers
-node_modules/
-.pnp
-.pnp.js
-yarn.lock
-package-lock.json
-
-# Docker
-.docker/
-
-# Temporary files
-*.tmp
-*.temp
-.tmp/
-temp/
-
-# Qt
+# Qt generated
 *.moc
 moc_*.cpp
 qrc_*.cpp
 ui_*.h
+*.qmltypes
 
-# Python
+# ---- Rust (application — Cargo.lock IS tracked on purpose) ----
+# (no Cargo.lock rule: this is a binary, lockfile belongs in git)
+
+# ---- Node ----
+node_modules/
+.pnp
+.pnp.js
+coverage/
+
+# ---- Spike / test scratch output ----
+tools/spike-m0/chrome.out
+tools/spike-m0/out/
+*.out
+
+# ---- Logs ----
+*.log
+logs/
+*.pid
+
+# ---- Python ----
 __pycache__/
 *.pyc
 *.pyo
@@ -87,18 +79,30 @@ htmlcov/
 .venv/
 venv/
 env/
-pip-log.txt
-pip-delete-this-directory.txt
 
-# Cargo
-**/target/
+# ---- Docker ----
+.docker/
 
-# Backup files
+# ---- Temporary / backups ----
+*.tmp
+*.temp
+.tmp/
+temp/
 *.bak
 *.backup
 *~
 
-# Distribution / packaging
+# ---- IDE / OS ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+.DS_Store
+Thumbs.db
+
+# ---- Distribution / packaging ----
 *.deb
 *.rpm
 *.msi

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import LiveEscape
 
@@ -6,19 +7,23 @@ Item {
     id: root
     anchors.fill: parent
 
-    Component.onCompleted: {
-        App.loadDownloads()
+    // Load on-demand when the screen becomes visible — the eager
+    // Component.onCompleted fetch fired an unauthenticated request at app
+    // boot (Main.qml instantiates this screen before auth).
+    onVisibleChanged: {
+        if (visible && Session.authenticated)
+            App.loadDownloads()
     }
 
     Rectangle { anchors.fill: parent; color: Theme.bg }
 
-    Column {
+    ColumnLayout {
         anchors.fill: parent
         anchors.margins: 24
         spacing: 16
 
         Text {
-            text: "DOWNLOADS"
+            text: qsTr("DOWNLOADS")
             color: Theme.gold
             font.family: Theme.fontUi
             font.pixelSize: 24
@@ -36,7 +41,7 @@ Item {
                 height: 56
                 color: index % 2 ? "#0b0b12" : "#0a0a10"
                 radius: Theme.radius
-                Row {
+                RowLayout {
                     anchors.fill: parent
                     anchors.margins: 12
                     spacing: 12
@@ -55,9 +60,9 @@ Item {
                         font.pixelSize: 11
                     }
                     GoldButton {
-                        text: "GET"
+                        text: qsTr("GET")
                         onClicked: {
-                            if (modelData.url) ApiClient.openUrl(modelData.url)
+                            if (modelData.url) App.openExternal(modelData.url)
                         }
                     }
                 }
@@ -66,16 +71,16 @@ Item {
 
         Text {
             visible: (App.downloadsModel && App.downloadsModel.length === 0)
-            text: "No downloads available."
+            text: qsTr("No downloads available.")
             color: Theme.dim
             font.family: Theme.fontMono
             font.pixelSize: 12
-            anchors.horizontalCenter: parent.horizontalCenter
+            Layout.alignment: Qt.AlignHCenter
         }
 
         GoldButton {
-            text: "CLOSE"
-            anchors.horizontalCenter: parent.horizontalCenter
+            text: qsTr("CLOSE")
+            Layout.alignment: Qt.AlignHCenter
             onClicked: App.closeDownloads()
         }
     }

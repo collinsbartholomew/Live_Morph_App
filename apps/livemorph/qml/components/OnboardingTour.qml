@@ -23,21 +23,64 @@ Item {
 
     readonly property var steps: [
         {
-            title: qsTr("1 · Enable your camera"),
-            body: qsTr("Allow camera access and start the Stage preview. LiveMorph only uses the camera while you are signed in."),
-            key: "stage"
+            // Electron onboarding.welcome
+            title: qsTr("Welcome to LiveMorph"),
+            body: qsTr("This is the Stage. Your swapped video plays here, and everything you need sits around it."),
+            key: "center"
         },
         {
-            title: qsTr("2 · Pick a character"),
-            body: qsTr("Choose a look from the Workshop. The highlighted card is the one that will morph when you go live."),
+            // Electron onboarding.addCharacter (act: become)
+            title: qsTr("Who you become"),
+            body: qsTr("Drop in a photo of any face or character to become it, or pick one of the ready-made characters above."),
             key: "workshop"
         },
         {
-            title: qsTr("3 · Start LiveMorph"),
-            body: qsTr("Press Start on the action bar (or Space). Credits burn while you are live — buy more anytime from the top bar."),
+            // Electron onboarding.hitBeginSwap (act: go live)
+            title: qsTr("One button, live"),
+            body: qsTr("Begin Swap starts the transformation. Your camera drops to a corner and the swapped output takes the Stage."),
             key: "action"
+        },
+        {
+            // Electron onboarding.swapModes (act: go live) — interpolates live rates
+            title: qsTr("Standard or HD"),
+            body: qsTr("Standard is watermark-free at %1 credits/sec. HD adds smooth 30fps at the same %2 credits/sec. Switch here between swaps.")
+                .arg(Session.creditsPerSecond.toFixed(0))
+                .arg(Session.creditsPerSecond.toFixed(0)),
+            key: "action"
+        },
+        {
+            // Electron onboarding.liveEdit (act: go live)
+            title: qsTr("Change it mid-swap"),
+            body: qsTr("Open the prompt bar to adjust your look without stopping, and the background bar to put yourself somewhere else. Both apply to the live swap."),
+            key: "stage"
+        },
+        {
+            // Electron onboarding.privacy (act: become)
+            title: qsTr("Private by default"),
+            body: qsTr("This keeps your real camera off the output between swaps, so viewers only ever see the swapped result."),
+            key: "stage"
+        },
+        {
+            // Electron onboarding.streamOBS (act: on stream)
+            title: qsTr("Straight into your stream"),
+            body: qsTr("The OBS button starts a stream your broadcast app can capture, or drag it straight into an OBS scene. The output also works as a virtual camera in Zoom and Discord."),
+            key: "action"
+        },
+        {
+            // Electron onboarding.credits (act: on stream) — opens the account menu
+            title: qsTr("You pay for frames, not time"),
+            body: qsTr("The meter runs only while swapped video is actually on screen. Warmup and idle cost nothing. Your balance and top-ups live here."),
+            key: "top"
         }
     ]
+
+    // Act chips (Electron onboarding.acts.*)
+    readonly property var acts: [qsTr("Become"), qsTr("Go live"), qsTr("On stream")]
+    function actForStep(i) {
+        if (i === 0 || i === 1 || i === 5) return acts[0] // become
+        if (i >= 2 && i <= 4) return acts[1]              // go live
+        return acts[2]                                      // on stream
+    }
 
     function targetForKey(key) {
         if (key === "stage") return targetStage
@@ -80,7 +123,7 @@ Item {
     function positionCard() {
         // Prefer below hole; if no room, above; clamp to margins
         var margin = 16
-        var cw = Math.min(root.width - 48, 400)
+        var cw = Math.min(root.width - 48, 320)
         var ch = card.implicitHeight
         var cx = hx + (hw - cw) / 2
         cx = Math.max(margin, Math.min(root.width - cw - margin, cx))
@@ -100,6 +143,9 @@ Item {
     onHeightChanged: if (open) Qt.callLater(refreshHole)
 
     // ── Dim overlay with rectangular cutout (4 panels) ───────────────
+    // Electron dim: rgba(4,4,8,0.74)
+    readonly property color dimColor: "#040408bd"
+
     Item {
         anchors.fill: parent
         visible: root.open
@@ -108,31 +154,31 @@ Item {
             x: 0; y: 0
             width: root.width
             height: Math.max(0, root.hy)
-            color: "#000000cc"
+            color: root.dimColor
         }
         Rectangle { // bottom
             x: 0
             y: root.hy + root.hh
             width: root.width
             height: Math.max(0, root.height - (root.hy + root.hh))
-            color: "#000000cc"
+            color: root.dimColor
         }
         Rectangle { // left
             x: 0
             y: root.hy
             width: Math.max(0, root.hx)
             height: root.hh
-            color: "#000000cc"
+            color: root.dimColor
         }
         Rectangle { // right
             x: root.hx + root.hw
             y: root.hy
             width: Math.max(0, root.width - (root.hx + root.hw))
             height: root.hh
-            color: "#000000cc"
+            color: root.dimColor
         }
 
-        // Accent ring around hole
+        // Accent ring around hole (Electron: rgba(139,92,246,.55) 1px + glow)
         Rectangle {
             x: root.hx - 2
             y: root.hy - 2
@@ -140,8 +186,8 @@ Item {
             height: root.hh + 4
             radius: Theme.radiusMd
             color: "transparent"
-            border.color: Colors.accent
-            border.width: 2
+            border.color: "#8b5cf68c"
+            border.width: 1
             opacity: 0.9
         }
 
@@ -151,11 +197,30 @@ Item {
         }
     }
 
+    // Keyboard navigation (Electron): Esc=skip, Enter/→=next, ←=back
+    focus: open
+    Keys.onEscapePressed: {
+        Config.onboardingDone = true
+        root.open = false
+    }
+    Keys.onReturnPressed: advance()
+    Keys.onRightPressed: advance()
+    Keys.onLeftPressed: root.step = Math.max(0, root.step - 1)
+
+    function advance() {
+        if (root.step >= root.steps.length - 1) {
+            Config.onboardingDone = true
+            root.open = false
+        } else {
+            root.step++
+        }
+    }
+
     // Transparent pass-through in hole is intentional (user can see UI)
     // Card
     Rectangle {
         id: card
-        width: 400
+        width: 320
         implicitHeight: cardCol.implicitHeight + 32
         height: implicitHeight
         radius: Theme.radiusLg
@@ -183,16 +248,26 @@ Item {
             spacing: 12
 
             RowLayout {
+                // Electron counter: zero-padded mono "01 / 08"
                 Text {
-                    text: "Step " + (root.step + 1) + " of " + root.steps.length
-                    color: Colors.accent
+                    text: ("0" + (root.step + 1)).slice(-2) + " / " + ("0" + root.steps.length).slice(-2)
+                    color: Colors.textPrimary
+                    opacity: 0.9
                     font.pixelSize: 11
-                    font.family: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                    font.family: Theme.fontMono.family
                     font.letterSpacing: 1.2
-                    Layout.fillWidth: true
                 }
+                Text {
+                    text: root.actForStep(root.step)
+                    color: Colors.textMuted
+                    opacity: 0.4
+                    font.pixelSize: 11
+                    font.family: Theme.fontMono.family
+                    font.letterSpacing: 1.2
+                }
+                Item { Layout.fillWidth: true }
                 GhostButton {
-                    text: "Skip"
+                    text: qsTr("Skip tour")
                     onClicked: {
                         Config.onboardingDone = true
                         root.open = false
@@ -238,13 +313,14 @@ Item {
                 Layout.topMargin: 8
                 Layout.fillWidth: true
                 GhostButton {
-                    text: "Back"
+                    text: qsTr("Back")
                     enabled: root.step > 0
                     onClicked: root.step = Math.max(0, root.step - 1)
                 }
                 Item { Layout.fillWidth: true }
                 PrimaryButton {
-                    text: root.step === root.steps.length - 1 ? "Finish" : "Next"
+                    // Electron final-step label
+                    text: root.step === root.steps.length - 1 ? qsTr("Got it") : qsTr("Next")
                     onClicked: {
                         if (root.step >= root.steps.length - 1) {
                             Config.onboardingDone = true

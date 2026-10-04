@@ -37,7 +37,7 @@ export LIVEESCAPE_API_URL=https://api.yourdomain.com
 ./build/bin/LiveEscape
 ```
 
-Payments open in **CheckoutWebModal** (Qt WebEngine). Fallback button: open system browser.
+Payments open in **PayModal** (native Qt forms + system browser fallback). Crypto payments use **CryptoProofModal**.
 
 ## Payment → Decart → user credits
 

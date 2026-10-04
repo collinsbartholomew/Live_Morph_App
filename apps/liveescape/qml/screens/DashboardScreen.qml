@@ -3,6 +3,7 @@ import QtMultimedia
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 
 Item {
     id: root
@@ -11,6 +12,14 @@ Item {
     property string stageFillMode: "cover"
     property bool panelCollapsed: false
     readonly property int panelWidth: panelCollapsed ? 48 : 640
+    property bool lowCreditDismissed: false
+
+    readonly property bool showLowCreditBar: Session.creditsRemaining < 500
+                                             && Session.creditsRemaining > 0
+                                             && !lowCreditDismissed
+
+    readonly property int topBarHeight: Theme.responsiveTopBarHeight
+    readonly property int controlsBarHeight: Theme.responsiveControlsBarHeight
 
     Rectangle {
         anchors.fill: parent
@@ -46,7 +55,107 @@ Item {
 
         }
 
-        // Low credits urgency — stays visible when the balance is exhausted or negative
+        // Low credit bar (Electron #lowCreditBar) — gold-to-red gradient, 1-500 credits
+        Rectangle {
+            id: lowCreditBar
+
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? 40 : 0
+            visible: root.showLowCreditBar
+            color: "transparent"
+            clip: true
+
+            // Gradient background: gold to red
+            Rectangle {
+                anchors.fill: parent
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: Theme.goldGlow }
+                    GradientStop { position: 0.5; color: "#3a2010" }
+                    GradientStop { position: 1; color: Theme.redDim }
+                }
+            }
+
+            border.color: Theme.goldDim
+            border.width: 1
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 10
+
+                Text {
+                    text: "⚠ LOW CREDITS"
+                    color: Theme.gold
+                    font.family: Theme.fontMono
+                    font.pixelSize: 10
+                    font.bold: true
+                    font.letterSpacing: 1
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Math.floor(Session.creditsRemaining) + " CR remaining"
+                    color: Theme.text
+                    font.family: Theme.fontMono
+                    font.pixelSize: 10
+                }
+
+                Rectangle {
+                    width: buyBtn.implicitWidth + 16
+                    height: 24
+                    radius: 4
+                    color: Theme.gold
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                        id: buyBtn
+                        anchors.centerIn: parent
+                        text: "BUY CREDITS NOW"
+                        color: Theme.bg
+                        font.family: Theme.fontMono
+                        font.pixelSize: 9
+                        font.bold: true
+                        font.letterSpacing: 0.5
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: App.showPlanGate = true
+                    }
+                }
+
+                // Dismiss button
+                Rectangle {
+                    width: 20
+                    height: 20
+                    radius: 10
+                    color: "transparent"
+                    border.color: Theme.dim
+                    border.width: 1
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "✕"
+                        color: Theme.dim
+                        font.pixelSize: 10
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.lowCreditDismissed = true
+                    }
+                }
+            }
+
+            Behavior on Layout.preferredHeight {
+                NumberAnimation { duration: Theme.motionFast }
+            }
+        }
+
+        // Critical credits overlay — red warning at very low balance
         Rectangle {
             id: criticalCredits
 
@@ -83,25 +192,34 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: App.showPlanGate = true
                     }
-
                 }
-
             }
 
             Behavior on Layout.preferredHeight {
-                NumberAnimation {
-                    duration: Theme.motionFast
-                }
-
+                NumberAnimation { duration: Theme.motionFast }
             }
-
         }
 
         // Top bar
         Rectangle {
+            id: topBar
+            objectName: "topBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: 52
+            Layout.preferredHeight: 54
             color: Theme.s1
+
+            // Gold gradient hairline at bottom edge (matches Electron .bar::after)
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: 1
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: "transparent" }
+                    GradientStop { position: 0.5; color: Theme.goldD }
+                    GradientStop { position: 1; color: "transparent" }
+                }
+            }
 
             Rectangle {
                 anchors.bottom: parent.bottom
@@ -117,8 +235,15 @@ Item {
                 spacing: 12
 
                 LogoMark {
-                    gemSize: 22
+                    variant: "bar"
+                    gemSize: 98
+                    gemLetterSize: 12
+                    gemRadius: 4
+                    gemGap: 8
+                    showWordmark: false
                     version: App.appVersion
+                    versionSize: 11
+                    versionLS: 2
                 }
 
                 Item {
@@ -136,6 +261,8 @@ Item {
                 }
 
                 CreditMeter {
+                    id: meterBlock
+                    objectName: "meterBlock"
                     used: Session.creditsUsed
                     remaining: Session.creditsRemaining
                 }
@@ -203,16 +330,19 @@ Item {
                 }
 
                 IconBarButton {
+                    objectName: "tourBtn"
                     label: "▶ TOUR"
                     onClicked: App.startTour()
                 }
 
                 IconBarButton {
+                    objectName: "tutorialsBtn"
                     label: "📚 TUTORIALS"
                     onClicked: App.showTutorials = true
                 }
 
                 IconBarButton {
+                    objectName: "accountBtn"
                     label: "👤 ACCOUNT"
                     onClicked: App.showAccountModal = true
                 }
@@ -237,6 +367,7 @@ Item {
 
                 Rectangle {
                     id: stageFrame
+                    objectName: "stageFrame"
 
                     // Single shared stage surface: in normal mode it lives inside
                     // the stage column; in Theatre/OBS and Fullscreen modes the
@@ -248,7 +379,7 @@ Item {
                     anchors.margins: (Stream.theatreMode || root.stageFullscreen) ? 0 : 10
                     z: (Stream.theatreMode || root.stageFullscreen) ? 180 : 1
                     radius: (Stream.theatreMode || root.stageFullscreen) ? 0 : 12
-                    color: Theme.s1
+                    color: "#000000"
                     border.color: Stream.live ? Theme.teal : Theme.border
                     border.width: 1
                     clip: true
@@ -267,6 +398,70 @@ Item {
                         active: Stream.live || Stream.connecting
                         showLocalPip: !Stream.theatreMode
                         stageFillMode: root.stageFillMode
+                    }
+
+                    // Scanlines overlay (Electron .stage::after: repeating-linear-gradient)
+                    // 3px transparent, 3px rgba(0,0,0,.015) — subtle CRT scanline effect
+                    ScanlinesOverlay {
+                        anchors.fill: parent
+                        z: 3
+                        visible: !Stream.theatreMode && !root.stageFullscreen && Theme.responsiveShowScanlines
+                    }
+
+                    // Out-glow inner vignette (Electron .out-glow: inset box-shadow teal)
+                    Item {
+                        anchors.fill: parent
+                        z: 2
+                        visible: Stream.live
+
+                        // Top vignette
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            height: 80
+                            gradient: Gradient {
+                                orientation: Gradient.Vertical
+                                GradientStop { position: 0; color: Qt.rgba(63/255, 232/255, 184/255, 0.03) }
+                                GradientStop { position: 1; color: "transparent" }
+                            }
+                        }
+                        // Bottom vignette
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            height: 80
+                            gradient: Gradient {
+                                orientation: Gradient.Vertical
+                                GradientStop { position: 0; color: "transparent" }
+                                GradientStop { position: 1; color: Qt.rgba(63/255, 232/255, 184/255, 0.03) }
+                            }
+                        }
+                        // Left vignette
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            anchors.left: parent.left
+                            width: 80
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0; color: Qt.rgba(63/255, 232/255, 184/255, 0.03) }
+                                GradientStop { position: 1; color: "transparent" }
+                            }
+                        }
+                        // Right vignette
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            anchors.right: parent.right
+                            width: 80
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0; color: "transparent" }
+                                GradientStop { position: 1; color: Qt.rgba(63/255, 232/255, 184/255, 0.03) }
+                            }
+                        }
                     }
 
                     // Idle placeholder when not live / not connecting
@@ -298,43 +493,52 @@ Item {
                     }
 
                     // Connecting loader (matches original spin + text)
-                    Column {
+                    Rectangle {
                         anchors.centerIn: parent
-                        spacing: 14
-                        z: 5
+                        width: Math.max(connectingCol.width + 48, 200)
+                        height: connectingCol.height + 36
+                        radius: 12
+                        color: Qt.rgba(4/255, 4/255, 10/255, 0.9)
+                        border.color: Theme.goldDim
+                        border.width: 1
+                        z: 4
                         visible: Stream.connecting
 
-                        Rectangle {
-                            width: 36
-                            height: 36
-                            radius: 18
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            color: "transparent"
-                            border.color: Theme.gold
-                            border.width: 2
+                        Column {
+                            id: connectingCol
+                            anchors.centerIn: parent
+                            spacing: 14
 
-                            RotationAnimation on rotation {
-                                running: Stream.connecting
-                                from: 0
-                                to: 360
-                                duration: 900
-                                loops: Animation.Infinite
+                            Rectangle {
+                                width: 36
+                                height: 36
+                                radius: 18
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                color: "transparent"
+                                border.color: Theme.gold
+                                border.width: 2
+
+                                RotationAnimation on rotation {
+                                    running: Stream.connecting
+                                    from: 0
+                                    to: 360
+                                    duration: 900
+                                    loops: Animation.Infinite
+                                }
                             }
 
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: Stream.loaderText.length ? Stream.loaderText : "CONNECTING TO ENGINE…"
+                                color: Theme.dim
+                                font.family: Theme.fontMono
+                                font.pixelSize: 10
+                                font.letterSpacing: 1
+                            }
                         }
-
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: Stream.loaderText.length ? Stream.loaderText : "CONNECTING TO ENGINE…"
-                            color: Theme.dim
-                            font.family: Theme.fontMono
-                            font.pixelSize: 10
-                            font.letterSpacing: 1
-                        }
-
                     }
 
-                    // AI LIVE / PAUSED badge
+                    // AI LIVE / PAUSED badge (Electron: bg rgba(4,4,10,.82), border rgba(63,232,184,.22), backdrop-filter:blur(6px))
                     Rectangle {
                         visible: Stream.live
                         anchors.top: parent.top
@@ -344,8 +548,9 @@ Item {
                         width: aiLab.implicitWidth + 14
                         height: 22
                         radius: 4
-                        color: "#0d2a22"
-                        border.color: Theme.teal
+                        color: Qt.rgba(4/255, 4/255, 10/255, 0.82)
+                        border.color: Qt.rgba(63/255, 232/255, 184/255, 0.22)
+                        border.width: 1
 
                         Text {
                             id: aiLab
@@ -397,10 +602,14 @@ Item {
                         radius: 4
                         color: "#04040acc"
                         border.color: Theme.border
+                        layer.enabled: true
+                        layer.effect: GaussianBlur {
+                            radius: 6
+                        }
 
                         Text {
                             anchors.centerIn: parent
-                            text: stageFullscreen ? "⛶" : "⛶"
+                            text: stageFullscreen ? "✕" : "⛶"
                             color: Theme.dim
                             font.pixelSize: 14
                         }
@@ -413,6 +622,35 @@ Item {
 
                     }
 
+                    // PiP "YOUR CAM" label (Electron .pip-tag)
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.margins: 10
+                        z: 6
+                        width: pipTagLabel.implicitWidth + 12
+                        height: 18
+                        radius: 3
+                        color: Qt.rgba(4/255, 4/255, 10/255, 0.7)
+                        visible: Stream.live && !Stream.theatreMode && !root.stageFullscreen
+
+                        gradient: Gradient {
+                            orientation: Gradient.Vertical
+                            GradientStop { position: 0; color: Qt.rgba(4/255, 4/255, 10/255, 0.8) }
+                            GradientStop { position: 1; color: Qt.rgba(4/255, 4/255, 10/255, 0.3) }
+                        }
+
+                        Text {
+                            id: pipTagLabel
+                            anchors.centerIn: parent
+                            text: "YOUR CAM"
+                            color: Theme.dim
+                            font.family: Theme.fontMono
+                            font.pixelSize: 7
+                            font.letterSpacing: 1.5
+                        }
+                    }
+
                 }
 
             }
@@ -423,6 +661,19 @@ Item {
                 Layout.fillHeight: true
                 color: Theme.s1
                 border.color: Theme.border
+
+                // Gold gradient hairline at top (Electron .ctrl::before)
+                Rectangle {
+                    anchors.top: parent.top
+                    width: parent.width
+                    height: 1
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: "transparent" }
+                        GradientStop { position: 0.5; color: Theme.goldD }
+                        GradientStop { position: 1; color: "transparent" }
+                    }
+                }
 
                 // Collapsed rail
                 Column {
@@ -476,7 +727,7 @@ Item {
 
                     // COL 1 — Face + connect
                     Rectangle {
-                        Layout.preferredWidth: 200
+                        Layout.preferredWidth: 255
                         Layout.fillHeight: true
                         radius: Theme.radius
                         color: Theme.s2
@@ -491,7 +742,107 @@ Item {
                                 text: "REFERENCE FACE"
                             }
 
+                            // Camera device selector (Electron #cameraSelect)
+                            SectionLabel {
+                                text: "📷 CAMERA"
+                            }
+
+                            ComboBox {
+                                id: cameraSelect
+                                objectName: "cameraSelect"
+                                Layout.fillWidth: true
+                                model: MediaDevices.videoInputs
+                                textRole: "description"
+                                currentIndex: 0
+                                font.family: Theme.fontMono
+                                font.pixelSize: 10
+                                onActivated: {
+                                    var dev = MediaDevices.videoInputs[currentIndex];
+                                    if (dev) {
+                                        camera.deviceId = dev.deviceId;
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    radius: Theme.radius
+                                    color: Theme.s1
+                                    border.color: Theme.border
+                                }
+
+                                contentItem: Text {
+                                    text: cameraSelect.displayText
+                                    color: Theme.text
+                                    font: cameraSelect.font
+                                    verticalAlignment: Text.AlignVCenter
+                                    leftPadding: 8
+                                }
+                            }
+
+                            // Mode toggle (STYLE / FACE SWAP) - Electron .seg
                             Rectangle {
+                                id: modeToggle
+                                objectName: "modeToggle"
+                                Layout.fillWidth: true
+                                height: 30
+                                radius: 7
+                                color: "transparent"
+                                border.color: Theme.border
+                                border.width: 1
+
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 1
+
+                                    Rectangle {
+                                        width: (parent.width - 2) / 2
+                                        height: parent.height
+                                        radius: 6
+                                        color: Stream.mode === "style" ? Theme.gold : "transparent"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: qsTr("STYLE")
+                                            color: Stream.mode === "style" ? Theme.bg : Theme.dim
+                                            font.family: Theme.fontMono
+                                            font.pixelSize: 9
+                                            font.bold: Stream.mode === "style"
+                                            font.letterSpacing: 0.5
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: Stream.mode = "style"
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: (parent.width - 2) / 2
+                                        height: parent.height
+                                        radius: 6
+                                        color: Stream.mode === "face" ? Theme.gold : "transparent"
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: qsTr("FACE SWAP")
+                                            color: Stream.mode === "face" ? Theme.bg : Theme.dim
+                                            font.family: Theme.fontMono
+                                            font.pixelSize: 9
+                                            font.bold: Stream.mode === "face"
+                                            font.letterSpacing: 0.5
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: Stream.mode = "face"
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                id: referenceFaceUpload
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 100
                                 radius: Theme.radius
@@ -499,6 +850,17 @@ Item {
                                 border.color: Stream.referenceFacePath.length ? Theme.gold : Theme.border
                                 border.width: 1
                                 clip: true
+                                visible: Stream.mode === "face"
+
+                                // Hover effect (Electron .upload-zone:hover)
+                                state: uploadMouse.containsMouse ? "hover" : ""
+                                states: [
+                                    State {
+                                        name: "hover"
+                                        when: !Stream.referenceFacePath.length && uploadMouse.containsMouse
+                                        PropertyChanges { target: referenceFaceUpload; border.color: Theme.gold; color: Theme.goldGlow }
+                                    }
+                                ]
 
                                 Image {
                                     anchors.fill: parent
@@ -540,7 +902,9 @@ Item {
                                 }
 
                                 MouseArea {
+                                    id: uploadMouse
                                     anchors.fill: parent
+                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: App.pickReferenceFace()
                                 }
@@ -565,26 +929,118 @@ Item {
 
                             }
 
-                            GoldButton {
+                            // Streaming unavailable banner (Electron #streamingUnavailableBanner)
+                            Rectangle {
+                                visible: !Session.streamingEnabled
                                 Layout.fillWidth: true
-                                text: Stream.live ? "■ STOP" : (Stream.connecting ? "…" : "▶ CONNECT")
-                                bg: Stream.live ? Theme.red : Theme.gold
-                                fg: Stream.live ? Theme.text : Theme.bg
-                                enabled: !Stream.connecting
-                                onClicked: Stream.live ? Stream.disconnectEngine() : Stream.connectEngine()
+                                Layout.preferredHeight: 38
+                                radius: 12
+                                color: Qt.rgba(255/255, 77/255, 109/255, 0.08)
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: qsTr("Streaming is unavailable at the moment. Please try again later.")
+                                    color: Theme.red
+                                    font.family: Theme.fontMono
+                                    font.pixelSize: 12
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
                             }
 
+                            // Connect + Stop buttons (Electron: separate always-visible buttons)
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+
+                                GoldButton {
+                                    Layout.fillWidth: true
+                                    text: Stream.connecting ? "…" : "▶ CONNECT"
+                                    bg: Theme.gold
+                                    fg: Theme.bg
+                                    enabled: !Stream.connecting && !Stream.live
+                                    onClicked: Stream.connectEngine()
+                                }
+
+                                Rectangle {
+                                    Layout.preferredWidth: 60
+                                    Layout.preferredHeight: 30
+                                    radius: Theme.radiusSm
+                                    color: Stream.live ? Theme.red : "transparent"
+                                    border.color: Stream.live ? Theme.red : Theme.border
+                                    border.width: 1
+                                    opacity: Stream.live ? 1 : 0.4
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "■ STOP"
+                                        color: Stream.live ? Theme.text : Theme.dim
+                                        font.family: Theme.fontMono
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Stream.live ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        enabled: Stream.live
+                                        onClicked: Stream.disconnectEngine()
+                                    }
+                                }
+                            }
+
+                            // Pause + Resume buttons (Electron: separate shown as needed)
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 6
                                 visible: Stream.live
 
-                                GhostButton {
+                                Rectangle {
                                     Layout.fillWidth: true
-                                    text: Stream.paused ? "▶ PLAY" : "⏸ PAUSE"
-                                    onClicked: Stream.paused ? Stream.resumeEffect() : Stream.pauseEffect()
+                                    Layout.preferredHeight: 30
+                                    radius: Theme.radiusSm
+                                    color: "transparent"
+                                    border.color: !Stream.paused ? Theme.gold : Theme.border
+                                    border.width: 1
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "⏸ PAUSE"
+                                        color: !Stream.paused ? Theme.gold : Theme.dim
+                                        font.family: Theme.fontMono
+                                        font.pixelSize: 10
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        enabled: !Stream.paused
+                                        onClicked: Stream.pauseEffect()
+                                    }
                                 }
 
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 30
+                                    radius: Theme.radiusSm
+                                    color: "transparent"
+                                    border.color: Stream.paused ? Theme.teal : Theme.border
+                                    border.width: 1
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "▶ RESUME"
+                                        color: Stream.paused ? Theme.teal : Theme.dim
+                                        font.family: Theme.fontMono
+                                        font.pixelSize: 10
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        enabled: Stream.paused
+                                        onClicked: Stream.resumeEffect()
+                                    }
+                                }
                             }
 
                             GhostButton {
@@ -604,20 +1060,29 @@ Item {
                                 Layout.fillHeight: true
                             }
 
-                            Text {
+                            Rectangle {
                                 Layout.fillWidth: true
-                                horizontalAlignment: Text.AlignHCenter
-                                text: "🚨 Report Abuse"
-                                color: Theme.dim
-                                font.family: Theme.fontMono
-                                font.pixelSize: 9
+                                Layout.preferredHeight: 30
+                                radius: Theme.radiusSm
+                                color: abuseMouse.containsMouse ? Theme.redDim : "transparent"
+                                border.color: abuseMouse.containsMouse ? Theme.red : Theme.border
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "🚨 Report Abuse"
+                                    color: abuseMouse.containsMouse ? Theme.red : Theme.dim
+                                    font.family: Theme.fontMono
+                                    font.pixelSize: 9
+                                }
 
                                 MouseArea {
+                                    id: abuseMouse
                                     anchors.fill: parent
+                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: App.showAbuseReport = true
                                 }
-
                             }
 
                         }
@@ -675,7 +1140,7 @@ Item {
                                     color: Theme.text
                                     font.family: Theme.fontMono
                                     font.pixelSize: 11
-                                    placeholderText: "Type what you want to see — background, outfit, style…"
+                                    placeholderText: "Type what you want to see — a background, an outfit, a cap, a style... e.g. 'cozy coffee shop background' or 'red baseball cap'"
                                     text: Stream.prompt
                                     onTextChanged: {
                                         if (activeFocus) {
@@ -732,6 +1197,8 @@ Item {
                             }
 
                             Flow {
+                                id: presetsFlow
+                                objectName: "presetsFlow"
                                 Layout.fillWidth: true
                                 spacing: 6
 
@@ -752,6 +1219,8 @@ Item {
                             }
 
                             Flow {
+                                id: historyContent
+                                objectName: "historyContent"
                                 Layout.fillWidth: true
                                 spacing: 6
 
@@ -779,6 +1248,10 @@ Item {
                             anchors.fill: parent
                             radius: Theme.radius
                             color: "#04040ae0"
+                            layer.enabled: true
+                            layer.effect: GaussianBlur {
+                                radius: 8
+                            }
 
                             // Block clicks so Starter users can't drive locked controls
                             MouseArea {
@@ -830,7 +1303,9 @@ Item {
 
                     // COL 3 — Balance
                     Rectangle {
-                        Layout.preferredWidth: 180
+                        id: balanceCol
+                        objectName: "balanceCol"
+                        Layout.preferredWidth: 255
                         Layout.fillHeight: true
                         radius: Theme.radius
                         color: Theme.s2
@@ -920,7 +1395,7 @@ Item {
                                     Rectangle {
                                         height: parent.height
                                         radius: 2
-                                        color: Theme.gold
+                                        color: Theme.teal
                                         width: Session.creditsTotal > 0 ? parent.width * Math.max(0, Math.min(1, Session.creditsRemaining / Session.creditsTotal)) : parent.width
 
                                         Behavior on width {
@@ -973,6 +1448,7 @@ Item {
 
                             ComboBox {
                                 id: qual
+                                objectName: "qualSelector"
 
                                 Layout.fillWidth: true
                                 model: [{
@@ -1043,7 +1519,7 @@ Item {
                                 text: "🎟️ BUY MORE CREDITS"
                                 bg: Theme.goldGlow
                                 fg: Theme.gold
-                                onClicked: App.showPlanGate = true
+                onClicked: App.showAccountModal = true
                             }
 
                         }
@@ -1066,60 +1542,136 @@ Item {
 
     }
 
-    // Theatre / OBS mode — full-bleed stage. The single shared stageFrame (with
-    // its one DecartWebPeer) is re-parented to fill the window; this overlay is
-    // chrome only (HUD + exit). No second viewport/session is created here.
-    Rectangle {
-        anchors.fill: parent
-        color: "transparent"
-        visible: Stream.theatreMode
-        z: 200
-
-        Text {
-            anchors.centerIn: parent
-            visible: !Stream.live && !Stream.connecting
-            text: "Connect to go live in OBS mode"
-            color: Theme.dim
-            font.family: Theme.fontMono
-            font.pixelSize: 14
-            font.letterSpacing: 2
-            z: 3
-        }
-
+        // Theatre / OBS mode — full-bleed stage
         Rectangle {
-            visible: Stream.live
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.margins: 16
-            z: 3
-            width: theatreAi.implicitWidth + 16
-            height: 24
-            radius: 4
-            color: "#0d2a22"
-            border.color: Theme.teal
+            anchors.fill: parent
+            color: "transparent"
+            visible: Stream.theatreMode
+            z: 200
 
             Text {
-                id: theatreAi
-
                 anchors.centerIn: parent
-                text: "◈ AI OUTPUT — OBS MODE"
-                color: Theme.teal
+                visible: !Stream.live && !Stream.connecting
+                text: "Connect to go live in OBS mode"
+                color: Theme.dim
                 font.family: Theme.fontMono
-                font.pixelSize: 10
-                font.letterSpacing: 1
+                font.pixelSize: 14
+                font.letterSpacing: 2
+                z: 3
             }
 
+            // AI badge top-left
+            Rectangle {
+                visible: Stream.live
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.margins: 16
+                z: 3
+                width: theatreAi.implicitWidth + 16
+                height: 24
+                radius: 4
+                color: "#0d2a22"
+                border.color: Theme.teal
+
+                Text {
+                    id: theatreAi
+                    anchors.centerIn: parent
+                    text: "◈ AI OUTPUT — OBS MODE"
+                    color: Theme.teal
+                    font.family: Theme.fontMono
+                    font.pixelSize: 10
+                    font.letterSpacing: 1
+                }
+            }
+
+            // Exit theatre button (Electron #exitTheatre) — top right pill
+            Rectangle {
+                id: exitTheatre
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: 16
+                z: 4
+                width: exitTheatreLabel.implicitWidth + 24
+                height: 32
+                radius: 16
+                color: Qt.rgba(4/255, 4/255, 10/255, 0.85)
+                border.color: exitTheatreMouse.containsMouse ? Theme.gold : Theme.border
+                border.width: 1
+
+                Text {
+                    id: exitTheatreLabel
+                    anchors.centerIn: parent
+                    text: "✕ EXIT OBS MODE"
+                    color: exitTheatreMouse.containsMouse ? Theme.gold : Theme.dim
+                    font.family: Theme.fontMono
+                    font.pixelSize: 10
+                    font.letterSpacing: 1
+                }
+
+                MouseArea {
+                    id: exitTheatreMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        Stream.exitTheatre();
+                        Mjpeg.stop();
+                    }
+                }
+
+                Behavior on border.color { ColorAnimation { duration: 200 } }
+            }
         }
 
-        GoldButton {
-            anchors.top: parent.top
-            anchors.right: parent.right
-            anchors.margins: 20
-            z: 3
-            text: "✕ EXIT OBS MODE"
-            onClicked: Stream.exitTheatre()
-        }
+    // Reconnecting overlay (Electron setReconnectingOverlay)
+    Rectangle {
+        anchors.fill: parent
+        visible: Stream.reconnecting
+        z: 210
+        color: Qt.rgba(4/255, 4/255, 10/255, 0.85)
 
+        Rectangle {
+            anchors.centerIn: parent
+            width: reconnectPill.implicitWidth + 36
+            height: 42
+            radius: 21
+            color: "transparent"
+            border.color: Theme.gold
+            border.width: 1
+
+            Row {
+                id: reconnectPill
+                anchors.centerIn: parent
+                spacing: 10
+
+                Rectangle {
+                    width: 16
+                    height: 16
+                    radius: 8
+                    color: "transparent"
+                    border.color: Theme.gold
+                    border.width: 2
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    RotationAnimation on rotation {
+                        running: Stream.reconnecting
+                        from: 0
+                        to: 360
+                        duration: 800
+                        loops: Animation.Infinite
+                    }
+                }
+
+                Text {
+                    text: "RECONNECTING…"
+                    color: Theme.gold
+                    font.family: Theme.fontMono
+                    font.pixelSize: 11
+                    font.letterSpacing: 2
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+        }
     }
 
     // Stage fullscreen overlay — chrome only; the shared stageFrame fills the
@@ -1243,4 +1795,47 @@ Item {
 
     }
 
+    // FS Hint — bottom center (Electron #fsHint)
+    Rectangle {
+        id: fsHint
+        visible: opacity > 0
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.margins: 18
+        width: fsHintText.implicitWidth + 36
+        height: fsHintText.implicitHeight + 12
+        radius: 100
+        color: Qt.rgba(4/255, 4/255, 10/255, 0.85)
+        border.color: Theme.border
+        border.width: 1
+        opacity: 0
+
+        Text {
+            id: fsHintText
+            anchors.centerIn: parent
+            text: qsTr("PRESS F OR ESC TO EXIT FULLSCREEN")
+            color: Theme.dim
+            font.family: Theme.fontMono
+            font.pixelSize: 9
+            font.letterSpacing: 1.5
+        }
+
+        Behavior on opacity { NumberAnimation { duration: 400 } }
+
+        // Show when entering fullscreen/theatre, auto-hide after 3s (Electron behavior)
+        onVisibleChanged: {
+            if (visible) {
+                fsHint.opacity = 1;
+                fsHintTimer.restart();
+            }
+        }
+
+        Timer {
+            id: fsHintTimer
+            interval: 3000
+            onTriggered: fsHint.opacity = 0
+        }
+    }
+
 }
+

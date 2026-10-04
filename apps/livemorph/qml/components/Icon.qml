@@ -13,7 +13,9 @@ Item {
     property string name: "circle"
     property int size: 18
     property color color: Colors.textPrimary
-    property real strokeWidth: Theme.iconStroke
+    property real strokeWidth: emphasis ? Theme.iconStrokeEmphasis : Theme.iconStroke
+    property bool emphasis: false // Electron: dismiss/confirm icons use stroke 2.5
+    property bool filled: false   // Electron: filled ? currentColor : none
     width: size
     height: size
 
@@ -84,7 +86,21 @@ Item {
         "mail": "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6",
         "log-out": "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9",
         "home": "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10",
-        "globe": "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M2 12h20 M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+        "globe": "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M2 12h20 M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
+        "file-text": "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M14 2v4a2 2 0 0 0 2 2h4 M10 9H8 M16 13H8 M16 17H8",
+        "wand-sparkles": "M15 4V2 M15 16v-2 M8 9h2 M20 9h2 M17.8 11.8l1.4 1.4 M17.8 6.2l1.4-1.4 M11.8 6.2l-1.4-1.4 M6 22l8-8 M11 13l3 3 M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z",
+        "venetian-mask": "M20 12c0-4.4-3.6-8-8-8s-8 3.6-8 8c0 3 2 5.5 4.5 6.5L8 22h8l-1.5-3.5C18 17.5 20 15 20 12z M12 4c2.2 0 4 1.8 4 4s-1.8 4-4 4-4-1.8-4-4 1.8-4 4-4z",
+        "pencil-line": "M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z M11 5l4 4",
+        "flip-horizontal-2": "M8 3H5a2 2 0 0 0-2 2v3 M21 8V5a2 2 0 0 0-2-2h-3 M3 16v3a2 2 0 0 0 2 2h3 M16 21h3a2 2 0 0 0 2-2v-3 M4 7l4-4 4 4 M16 17l4 4 4-4",
+        "power": "M18.36 6.64a9 9 0 1 1-12.73 0 M12 2v10",
+        "volume-2": "M11 5L6 9H2v6h4l5 4V5z M19.07 4.93a10 10 0 0 1 0 14.14 M15.54 8.46a5 5 0 0 1 0 7.07",
+        "disc": "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+        "scan-line": "M3 7V5a2 2 0 0 1 2-2h2 M17 3h2a2 2 0 0 1 2 2v2 M21 17v2a2 2 0 0 1-2 2h-2 M7 21H5a2 2 0 0 1-2-2v-2 M7 12h10",
+        "square-stack": "M4 16l-4-4 4-4 M20 16l4-4-4-4 M14 8l-4 4 4 4 M8 2l4 4-4 4",
+        "blend-mode": "M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z",
+        "panel-top": "M2 3h20v9H2z M12 12v9 M2 12h20",
+        "git-compare": "M12 3v18 M8 8l-4 4 4 4 M16 8l4 4-4 4",
+        "equal": "M5 9h14 M5 15h14"
     })
 
     Shape {
@@ -98,7 +114,7 @@ Item {
 
         ShapePath {
             strokeColor: root.color
-            fillColor: Colors.transparent
+            fillColor: root.filled ? root.color : Colors.transparent
             strokeWidth: root.strokeWidth
             capStyle: ShapePath.RoundCap
             joinStyle: ShapePath.RoundJoin

@@ -2,3 +2,10 @@ module LiveMorph
 singleton Colors 1.0 theme/Colors.qml
 singleton Theme 1.0 theme/Theme.qml
 singleton Constants 1.0 constants/Constants.qml
+singleton PlatformSettings 1.0 PlatformSettings.qml
+UploadConsentDialog 1.0 components/UploadConsentDialog.qml
+UploadTab 1.0 dashboard/UploadTab.qml
+BackgroundBar 1.0 dashboard/BackgroundBar.qml
+StreamKitPanel 1.0 components/StreamKitPanel.qml
+DownloadsScreen 1.0 screens/DownloadsScreen.qml
+LockScreen 1.0 components/LockScreen.qml

@@ -1,62 +1,60 @@
 import QtQuick
-import QtQuick.Layouts
 import LiveMorph
 
 /**
- * BrandingFooter — LiveMorph legal links and product line.
+ * BrandingFooter (Electron `ce`, ground truth):
+ *   single horizontal row: "Built by" + 14px logo (opacity .5)
+ *   + "TheTools Hub" link (10px muted, hover accent)
+ *   → https://linktr.ee/thetoolshub
+ * The legal links live in the auth terms paragraph above (Electron shows
+ * the terms ONCE — the old footer duplicated them).
  */
 Item {
     id: root
-    implicitHeight: col.implicitHeight
+    implicitHeight: 16
 
-    Column {
-        id: col
+    Row {
         anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 10
-        width: parent.width
+        spacing: 5
 
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 16
-            Repeater {
-                model: [
-                    { label: qsTr("Terms of Service"), url: Constants.urlTerms },
-                    { label: qsTr("Privacy Policy"), url: Constants.urlPrivacy },
-                    { label: qsTr("Acceptable Use"), url: Constants.urlAup }
-                ]
-                Text {
-                    text: modelData.label
-                    color: Colors.accent
-                    opacity: 0.75
-                    font.pixelSize: 11
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onEntered: parent.opacity = 1
-                        onExited: parent.opacity = 0.75
-                        onClicked: Backend.openExternal(modelData.url)
-                    }
-                }
+        Text {
+            text: qsTr("Built by")
+            color: Colors.textMuted
+            font.pixelSize: 10
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
+        // 14px logo mark (opacity .5)
+        Rectangle {
+            width: 14
+            height: 14
+            radius: 2
+            color: Colors.accent
+            opacity: 0.5
+            anchors.verticalCenter: parent.verticalCenter
+            Text {
+                anchors.centerIn: parent
+                text: "T"
+                color: Colors.white
+                font.pixelSize: 9
+                font.bold: true
             }
         }
 
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: qsTr("By continuing you agree to LiveMorph’s Terms, Privacy Policy, and Acceptable Use Policy.")
-            color: Colors.textMuted
+            text: qsTr("TheTools Hub")
+            color: brandMa.containsMouse ? Colors.accent : Colors.textMuted
             font.pixelSize: 10
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-            width: Math.min(parent.width, 420)
-        }
+            anchors.verticalCenter: parent.verticalCenter
+            Behavior on color { ColorAnimation { duration: Theme.motionFast; easing.type: Easing.OutCubic } }
 
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: qsTr("LiveMorph · Live AI character transformation")
-            color: Colors.textMuted
-            font.pixelSize: 10
-            opacity: 0.7
+            MouseArea {
+                id: brandMa
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Backend.openExternal("https://linktr.ee/thetoolshub")
+            }
         }
     }
 }

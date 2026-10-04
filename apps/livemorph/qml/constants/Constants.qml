@@ -41,16 +41,17 @@ QtObject {
     readonly property string defaultSwapMode: "character"
     readonly property string defaultSwapTier: "standard"
 
-    // ── Layout (parity with Theme + original Dashboard JS) ──────────
-    readonly property int titleBarHeight: 36
+    // ── Layout (synced with Theme; Electron: titlebar 40, topbar 44,
+    //    status footer 32 FIXED — no compact variant) ────────────────
+    readonly property int titleBarHeight: 40
     readonly property int topBarHeight: 44
-    readonly property int statusBarHeight: 48
+    readonly property int statusBarHeight: 32
     readonly property int actionBarHeight: 88
-    readonly property int workshopWidth: 320
+    readonly property int workshopWidth: 360
     readonly property int actionLeftWidth: 360
     readonly property int settingsDrawerWidth: 480
     readonly property int buyCreditsDrawerWidth: 500
-    readonly property int notificationsWidth: 320
+    readonly property int notificationsWidth: 360
     readonly property int pipWidth: 180
     readonly property int pipHeight: 120
 
@@ -59,14 +60,19 @@ QtObject {
     readonly property string urlPrivacy: "https://livemorph.com/privacy"
     readonly property string urlAup: "https://livemorph.com/acceptable-use"
     readonly property string urlSupport: "https://livemorph.com/support"
+    readonly property string urlDiscord: "https://discord.gg/livemorph"
 
-    // ── Payment packages ────────────────────────────────────────────
+    // ── Payment packages (Electron names + duration format: floor minutes,
+    //    "1h 23m" style; no "~") ───────────────────────────────────────
     readonly property var creditPackages: [
-        { key: "basic",   name: "Spark",    credits: "900",    per: "~7.5 min",  priceUsd: "$15",  priceNgn: "₦25,000",  popular: false },
-        { key: "starter", name: "Creator",  credits: "4,000",  per: "~33 min",   priceUsd: "$60",  priceNgn: "₦100,000", popular: false },
-        { key: "mid",     name: "Studio",   credits: "10,000", per: "~83 min",   priceUsd: "$150", priceNgn: "₦250,000", popular: true  },
-        { key: "pro",     name: "Stage",    credits: "45,000", per: "~6.2 hrs",  priceUsd: "$600", priceNgn: "₦950,000", popular: false }
+        { key: "basic",   name: "Basic",   credits: "900",    per: "7 min",   priceUsd: "$15",  priceNgn: "₦25,000",  popular: false },
+        { key: "starter", name: "Starter", credits: "4,000",  per: "33 min",  priceUsd: "$60",  priceNgn: "₦100,000", popular: false },
+        { key: "mid",     name: "Mid",     credits: "10,000", per: "1h 23m",  priceUsd: "$150", priceNgn: "₦250,000", popular: true  },
+        { key: "pro",     name: "Pro",     credits: "45,000", per: "6h 15m",  priceUsd: "$600", priceNgn: "₦950,000", popular: false }
     ]
+
+    // Electron: HD is available on the Starter pack and above
+    readonly property var hdPackageKeys: ["starter", "mid", "pro"]
 
     readonly property string tagline: "Live AI character transformation"
     readonly property string productLine: "LiveMorph Desktop"

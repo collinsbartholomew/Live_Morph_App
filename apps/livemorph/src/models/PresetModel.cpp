@@ -1,4 +1,15 @@
 #include "PresetModel.h"
+#include <QUuid>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QFile>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFileInfo>
+#include <algorithm>
 
 PresetModel::PresetModel(QObject *parent) : QAbstractListModel(parent) {}
 
@@ -32,8 +43,17 @@ QHash<int, QByteArray> PresetModel::roleNames() const
     };
 }
 
+static QString presetStorePath()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+           + QStringLiteral("/presets.json");
+}
+
 void PresetModel::load()
 {
+    // Built-in starter prompts (always present) + user-saved customs merged
+    // from disk. The old loader reset to 3 hardcoded rows on every boot —
+    // every "Save preset" was silently lost on restart.
     beginResetModel();
     m_items = {
         { QStringLiteral("p1"), QStringLiteral("Cinematic Portrait"),
@@ -46,21 +66,70 @@ void PresetModel::load()
           QStringLiteral("oil painting, thick brush strokes, classical composition"),
           {}, QStringLiteral("prompt") },
     };
+    QFile f(presetStorePath());
+    if (f.open(QIODevice::ReadOnly)) {
+        const auto doc = QJsonDocument::fromJson(f.readAll());
+        if (doc.isArray()) {
+            const auto arr = doc.array();
+            for (const auto &v : arr) {
+                const auto o = v.toObject();
+                const QString id = o.value(QStringLiteral("id")).toString();
+                if (id.isEmpty() || id.startsWith(QStringLiteral("p"))
+                    || std::any_of(m_items.cbegin(), m_items.cend(),
+                                   [id](const PresetEntry &p) { return p.id == id; }))
+                    continue; // skip built-in duplicates / corrupt ids
+                m_items.append({
+                    id,
+                    o.value(QStringLiteral("name")).toString(),
+                    o.value(QStringLiteral("prompt")).toString(),
+                    o.value(QStringLiteral("thumbnail")).toString(),
+                    o.value(QStringLiteral("mode")).toString(QStringLiteral("prompt")),
+                });
+            }
+        }
+    }
     endResetModel();
     emit countChanged();
     emit loaded();
 }
 
+void PresetModel::persist() const
+{
+    QJsonArray arr;
+    for (const auto &p : m_items) {
+        if (!p.id.startsWith(QStringLiteral("custom-")))
+            continue; // persist user presets only
+        arr.append(QJsonObject{
+            { QStringLiteral("id"), p.id },
+            { QStringLiteral("name"), p.name },
+            { QStringLiteral("prompt"), p.prompt },
+            { QStringLiteral("thumbnail"), p.thumbnail },
+            { QStringLiteral("mode"), p.mode },
+        });
+    }
+    QDir().mkpath(QFileInfo(presetStorePath()).absolutePath());
+    QSaveFile f(presetStorePath());
+    if (f.open(QIODevice::WriteOnly)) {
+        f.write(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+        f.commit();
+    }
+}
+
 void PresetModel::addCustom(const QString &name, const QString &prompt, const QString &mode)
 {
+    // UUID-suffixed id: `custom-%1` of the current size collides after a
+    // removeAt (new preset reuses a live id → duplicate keys in views).
+    const QString id = QStringLiteral("custom-%1")
+                           .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
     beginInsertRows({}, m_items.size(), m_items.size());
     m_items.append({
-        QStringLiteral("custom-%1").arg(m_items.size()),
+        id,
         name.isEmpty() ? QStringLiteral("Custom %1").arg(m_items.size() + 1) : name,
         prompt, {}, mode.isEmpty() ? QStringLiteral("prompt") : mode
     });
     endInsertRows();
     emit countChanged();
+    persist();
 }
 
 void PresetModel::rename(int index, const QString &newName)
@@ -68,6 +137,7 @@ void PresetModel::rename(int index, const QString &newName)
     if (index < 0 || index >= m_items.size() || newName.trimmed().isEmpty()) return;
     m_items[index].name = newName.trimmed();
     emit dataChanged(this->index(index), this->index(index), { NameRole });
+    persist();
 }
 
 void PresetModel::removeAt(int index)
@@ -77,6 +147,7 @@ void PresetModel::removeAt(int index)
     m_items.removeAt(index);
     endRemoveRows();
     emit countChanged();
+    persist();
 }
 
 void PresetModel::move(int from, int to)
@@ -88,6 +159,7 @@ void PresetModel::move(int from, int to)
         return;
     m_items.move(from, to);
     endMoveRows();
+    persist();
 }
 
 QVariantMap PresetModel::get(int index) const

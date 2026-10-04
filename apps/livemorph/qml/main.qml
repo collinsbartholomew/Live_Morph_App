@@ -21,8 +21,10 @@ ApplicationWindow {
     }
 
     function openPreview() {
-        if (!previewWin)
+        if (!previewWin) {
             previewWin = previewComponent.createObject(null);
+            previewWin.destroyed.connect(function() { previewWin = null; });
+        }
 
         previewWin.show();
         previewWin.raise();
@@ -30,8 +32,10 @@ ApplicationWindow {
     }
 
     function openPopout() {
-        if (!popoutWin)
+        if (!popoutWin) {
             popoutWin = popoutComponent.createObject(null);
+            popoutWin.destroyed.connect(function() { popoutWin = null; });
+        }
 
         popoutWin.show();
         popoutWin.raise();
@@ -54,6 +58,31 @@ ApplicationWindow {
     title: "LiveMorph"
     color: Colors.surfaceBase
     flags: Qt.Window | Qt.FramelessWindowHint
+
+    // Global Escape key: close the topmost open overlay (modal / drawer / sheet).
+    Item {
+        id: escapeHandler
+        anchors.fill: parent
+        focus: true
+        Keys.onEscapePressed: function(event) {
+            if (App.showLockScreen) { App.showLockScreen = false; event.accepted = true; }
+            else if (checkoutSheet.visible) { checkoutSheet.close(); event.accepted = true; }
+            else if (shortcutsSheet.visible) { shortcutsSheet.close(); event.accepted = true; }
+            else if (App.showSettings) { App.showSettings = false; event.accepted = true; }
+            else if (App.showBuyCredits) { App.showBuyCredits = false; event.accepted = true; }
+            else if (App.showDownloads) { App.showDownloads = false; event.accepted = true; }
+            else if (App.showWhatsNew) { App.showWhatsNew = false; event.accepted = true; }
+            else if (App.showTour) { App.showTour = false; event.accepted = true; }
+        }
+    }
+
+
+    Connections {
+        target: Backend
+        function onStreamingAvailabilityChanged() {
+            PlatformSettings.streamingUnavailable = Backend.streamingUnavailable
+        }
+    }
     // Force dark chrome — prevents system light overlays on controls
     palette.window: Colors.surfaceBase
     palette.windowText: Colors.textPrimary
@@ -66,6 +95,8 @@ ApplicationWindow {
     palette.mid: Colors.surfaceBorder
     palette.dark: Colors.surfaceBase
     palette.light: Colors.surfaceOverlay
+    palette.toolTipBase: Colors.surfaceElevated
+    palette.toolTipText: Colors.textPrimary
 
     TitleBar {
         id: titleBar
@@ -88,6 +119,8 @@ ApplicationWindow {
     PaymentInFlightBanner {
         id: paymentBanner
 
+        onOpenPanel: App.openBuyCredits()
+
         anchors.top: titleBar.bottom
         anchors.left: parent.left
         anchors.right: parent.right
@@ -98,14 +131,14 @@ ApplicationWindow {
     Rectangle {
         id: offlineBanner
 
-        anchors.top: paymentBanner.visible ? paymentBanner.bottom : titleBar.bottom
+        anchors.top: paymentBanner.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         height: visible ? 32 : 0
         visible: !Backend.reachable
         z: 89
         color: Colors.statusWarningMuted
-        border.color: Colors.statusWarning
+        border.color: "#f59e0b40"
         border.width: 1
 
         Row {
@@ -143,10 +176,71 @@ ApplicationWindow {
 
     }
 
+    // Maintenance gate (Electron AppGate Mf) — anchored BELOW the TitleBar so
+    // the frameless window stays draggable/minimizable during maintenance.
+    Rectangle {
+        id: maintenanceOverlay
+        anchors.top: titleBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        visible: Backend.maintenance
+        z: 120
+        color: Colors.surfaceBase
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 24
+            Image {
+                source: "qrc:/assets/livemorph-icon.png"
+                width: 44
+                height: 44
+                opacity: 0.9
+                fillMode: Image.PreserveAspectFit
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            // Icon disc (Electron: h-14 w-14 rounded-full border surface-border)
+            Rectangle {
+                width: 56
+                height: 56
+                radius: 28
+                color: Colors.surfaceOverlay
+                border.color: Colors.surfaceBorder
+                border.width: 1
+                anchors.horizontalCenter: parent.horizontalCenter
+                Icon {
+                    anchors.centerIn: parent
+                    name: "alert-circle"
+                    size: 24
+                    color: Colors.accent
+                }
+            }
+            Text {
+                text: qsTr("Under maintenance")
+                color: Colors.textPrimary
+                font.pixelSize: 20
+                font.weight: Font.DemiBold
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            Text {
+                text: qsTr("LiveMorph is undergoing scheduled maintenance. Please check back soon.")
+                color: Colors.textSecondary
+                font.pixelSize: 14
+                lineHeight: 1.625
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            PrimaryButton {
+                text: qsTr("Retry")
+                anchors.horizontalCenter: parent.horizontalCenter
+                onClicked: Backend.fetchMaintenance()
+            }
+        }
+    }
+
     Item {
         id: content
 
-        anchors.top: offlineBanner.visible ? offlineBanner.bottom : (paymentBanner.visible ? paymentBanner.bottom : titleBar.bottom)
+        anchors.top: offlineBanner.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -229,7 +323,7 @@ ApplicationWindow {
             if (hasTextFocus())
                 return ;
 
-            if (Session.active)
+            if (Session.isActive)
                 Session.stopSession();
             else
                 App.startSwap();
@@ -295,6 +389,14 @@ ApplicationWindow {
 
     }
 
+    DownloadsScreen {
+        visible: App.showDownloads
+        z: 200
+    }
+
+    LockScreen {
+    }
+
     Connections {
         function onPreviewRequested() {
             openPreview();
@@ -319,6 +421,16 @@ ApplicationWindow {
         }
 
         target: Recording
+    }
+
+    Connections {
+        // Electron stage.characterSwitchFailed: warning toast — the previous
+        // look keeps running; do not tear the session down.
+        target: Session
+        function onCharacterSwitchFailed() {
+            toast.show(qsTr("Couldn't switch character"), "warning",
+                       qsTr("Your previous look is still running, so try picking it again."))
+        }
     }
 
     Connections {
@@ -376,14 +488,6 @@ ApplicationWindow {
 
         function onVirtualCameraStopped(r) {
             toast.show("Virtual camera stopped", "info");
-        }
-
-        function onStreamStarted(r) {
-            toast.show("Stream started", "success");
-        }
-
-        function onStreamStopped(r) {
-            toast.show("Stream stopped", "info");
         }
 
         target: Backend

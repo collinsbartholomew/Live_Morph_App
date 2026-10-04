@@ -68,7 +68,7 @@
 ### E. Recommended next engineering steps
 
 1. Build on a machine with **Qt WebEngine** + packaging scripts (`deploy-linux.sh` / windeployqt).
-2. Run against **Rust API :3001** and verify: OTP, catalog, Start Morph, credit burn, Paystack recheck, F12 record.
+2. Run against **Rust API :3874** and verify: OTP, catalog, Start Morph, credit burn, Paystack recheck, F12 record.
 3. Add **QTest** smoke: Catalog.load, Session credit gate, MorphBridge signals.
 4. Decide product fate of **VCam / Backend stream** (harden vs hide).
 5. If product needs **program feed** of morph in Preview — plan WebEngine grab or shared texture path.

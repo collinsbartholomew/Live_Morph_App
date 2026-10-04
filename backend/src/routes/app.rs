@@ -1,16 +1,16 @@
 use crate::auth::AuthUser;
 use crate::config::Config;
-use actix_web::{get, post, web, HttpMessage, HttpRequest, HttpResponse};
+use crate::db::Db;
+use crate::product::ProductId;
+use actix_web::{post, web, HttpMessage, HttpRequest, HttpResponse};
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(check_updates_post)
-        .service(check_updates_get)
-        .service(support_tickets)
-        .service(version_check);
+    cfg.service(check_updates)
+        .service(support_tickets);
 }
 
 fn update_payload(cfg: &Config) -> serde_json::Value {
@@ -26,6 +26,7 @@ fn update_payload(cfg: &Config) -> serde_json::Value {
     json!({
         "update_available": available,
         "force": force,
+        "forceUpdate": force,
         "current_version": current,
         "latest_version": latest,
         "latest": latest,
@@ -37,16 +38,6 @@ fn update_payload(cfg: &Config) -> serde_json::Value {
     })
 }
 
-#[post("/update/check")]
-async fn check_updates_post(cfg: web::Data<Arc<Config>>) -> HttpResponse {
-    HttpResponse::Ok().json(update_payload(&cfg))
-}
-
-#[get("/update/check")]
-async fn check_updates_get(cfg: web::Data<Arc<Config>>) -> HttpResponse {
-    HttpResponse::Ok().json(update_payload(&cfg))
-}
-
 #[derive(Deserialize)]
 struct VersionBody {
     #[serde(default)]
@@ -55,14 +46,18 @@ struct VersionBody {
     platform: Option<String>,
 }
 
-/// Shared version check (LiveMorph + Live Escape clients).
-#[post("/version/check")]
-async fn version_check(cfg: web::Data<Arc<Config>>, body: web::Json<VersionBody>) -> HttpResponse {
+/// Single unified update/version check (LiveMorph + Live Escape clients).
+#[post("/update/check")]
+async fn check_updates(
+    cfg: web::Data<Arc<Config>>,
+    body: Option<web::Json<VersionBody>>,
+) -> HttpResponse {
     let mut p = update_payload(&cfg);
-    if let Some(obj) = p.as_object_mut() {
-        obj.insert("platform".into(), json!(body.platform));
-        obj.insert("current".into(), json!(body.version));
-        obj.insert("product".into(), json!("shared"));
+    if let Some(body) = body {
+        if let Some(obj) = p.as_object_mut() {
+            obj.insert("platform".into(), json!(body.platform));
+            obj.insert("current".into(), json!(body.version));
+        }
     }
     HttpResponse::Ok().json(p)
 }
@@ -77,18 +72,53 @@ struct TicketBody {
     email: Option<String>,
 }
 
-/// Shared support ticket endpoint (both products).
+/// Shared support ticket endpoint (both products). Tickets are persisted to the
+/// product-scoped `support_tickets` collection for operator follow-up.
 #[post("/support/tickets")]
-async fn support_tickets(req: HttpRequest, body: web::Json<TicketBody>) -> HttpResponse {
+async fn support_tickets(
+    db: web::Data<Db>,
+    req: HttpRequest,
+    body: web::Json<TicketBody>,
+) -> HttpResponse {
+    let product = ProductId::from_request(&req);
     let user = req.extensions().get::<AuthUser>().cloned();
     let email = body
         .email
         .clone()
         .or_else(|| user.as_ref().map(|u| u.email.clone()));
     let user_id = user.as_ref().map(|u| u.user_id.clone());
+    let ticket_id = Uuid::new_v4().to_string();
+    let subject = body.subject.clone().unwrap_or_else(|| "General".into());
+    let message = body.message.clone().unwrap_or_default();
+    let created_at = chrono::Utc::now();
+    let doc = json!({
+        "_id": &ticket_id,
+        "product": product.as_str(),
+        "user_id": user_id,
+        "email": email,
+        "subject": subject,
+        "message": message,
+        "status": "open",
+        "created_at": created_at.to_rfc3339(),
+    });
+    let coll = match product {
+        ProductId::LiveEscape => db
+            .db_le
+            .collection::<mongodb::bson::Document>("support_tickets"),
+        ProductId::LiveMorph => db.db.collection::<mongodb::bson::Document>("support_tickets"),
+    };
+    if let Ok(bson_doc) = mongodb::bson::to_document(&doc) {
+        if let Err(e) = coll.insert_one(bson_doc).await {
+            tracing::warn!(error = %e, "failed to persist support ticket");
+            return HttpResponse::InternalServerError().json(json!({
+                "ok": false,
+                "error": "failed to save ticket",
+            }));
+        }
+    }
     HttpResponse::Ok().json(json!({
         "ok": true,
-        "ticket_id": Uuid::new_v4().to_string(),
+        "ticket_id": ticket_id,
         "subject": body.subject.clone(),
         "message": body.message.clone(),
         "email": email,

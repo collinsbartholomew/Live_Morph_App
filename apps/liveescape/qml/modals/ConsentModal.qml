@@ -1,5 +1,6 @@
 import LiveEscape
 import QtQuick
+import QtQuick.Controls
 
 ModalBase {
     open: App.showConsent
@@ -7,7 +8,7 @@ ModalBase {
     closeOnBackdrop: false
 
     Text {
-        text: "CONSENT"
+        text: qsTr("Before You Continue")
         color: Theme.gold
         font.family: Theme.fontUi
         font.pixelSize: 18
@@ -18,16 +19,53 @@ ModalBase {
     Text {
         width: parent.width
         wrapMode: Text.WordWrap
-        color: Theme.text
+        color: Theme.dim
         font.family: Theme.fontMono
         font.pixelSize: 11
         lineHeight: 1.5
-        text: "Live Escape uses your camera and reference images to generate real-time AI transformations. By continuing you confirm you have the rights to any faces you upload and will not use the product for harmful or illegal purposes."
+        text: qsTr("By using Live Escape, you agree to our Terms of Service and Privacy Policy.")
+    }
+
+    Row {
+        spacing: 4
+
+        Text {
+            text: qsTr("Terms of Service")
+            color: Theme.teal
+            font.family: Theme.fontMono
+            font.pixelSize: 10
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Qt.openUrlExternally("https://liveescape.app/terms.html")
+            }
+        }
+
+        Text {
+            text: qsTr("and")
+            color: Theme.dim
+            font.family: Theme.fontMono
+            font.pixelSize: 10
+        }
+
+        Text {
+            text: qsTr("Privacy Policy")
+            color: Theme.teal
+            font.family: Theme.fontMono
+            font.pixelSize: 10
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: Qt.openUrlExternally("https://liveescape.app/privacy.html")
+            }
+        }
     }
 
     GoldButton {
         width: parent.width
-        text: "I UNDERSTAND — CONTINUE"
+        text: qsTr("I Agree — Continue")
         onClicked: App.acceptConsent()
     }
 

@@ -4,7 +4,7 @@
 
 ```
 Auth OTP + JWT  →  credit gate
-Start Morph     →  WebRtcSignalingClient  WS  →  Rust proxy (:3001)
+Start Morph     →  WebRtcSignalingClient  WS  →  Rust proxy (:3874)
                                                    (holds Decart key + billing)
 Stage WebEngine →  morph.js WebRTC media via MorphBridge
 ```

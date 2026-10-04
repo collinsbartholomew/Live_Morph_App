@@ -20,7 +20,7 @@ void DecartSignalingClient::connectToProxy(const QString &wsBaseUrl,
     m_token = token;
     QUrl url(wsBaseUrl);
     if (url.path().isEmpty() || url.path() == QLatin1String("/"))
-        url.setPath(QStringLiteral("/v1/realtime"));
+        url.setPath(QStringLiteral("/api/v1/realtime"));
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("product"), QStringLiteral("liveescape"));
     q.addQueryItem(QStringLiteral("frontend_id"), QStringLiteral("liveescape"));

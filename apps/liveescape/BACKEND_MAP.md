@@ -4,7 +4,7 @@
 
 | Item | Value |
 |------|--------|
-| Default HTTP | `http://localhost:8881` |
+| Default HTTP | `http://localhost:3874` |
 | Default WS | `ws://localhost:8882` |
 | Override | env `LIVEESCAPE_API_URL` |
 | Boot | `GET /settings/api-endpoint` → may replace base URL |
@@ -80,7 +80,7 @@ Reconnect: 2500ms.
 ## Feature matrix (backend tiers)
 
 - `starter`: face only
-- `creator`: + background_change, voice_changer, creator_program, referral_earnings
+- `creator`: + background_change, creator_program, referral_earnings
 - `pro` (+premium/elite packs): + live_setup_call, priority_support
 
 Device ID pattern: `SS-XXXX-XXXX-XXXX` (MachineIdProvider) ✓
@@ -127,6 +127,3 @@ In development, `/credits/purchase` provisions instantly; hosted gateways return
 | Override credits | `POST /credits/add` body `{admin_secret, user_email, set_total}` |
 
 `ADMIN_SECRET` env must match. Invalid secret → 403.
-
-
-Client-side feature gate `voice_changer` on Creator+ plans. Toggle + presets; live prompt hint via Decart signaling.

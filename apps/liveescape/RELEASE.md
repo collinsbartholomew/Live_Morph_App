@@ -17,7 +17,7 @@ cargo run --release
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-export LIVEESCAPE_API_URL=http://127.0.0.1:8881
+export LIVEESCAPE_API_URL=http://127.0.0.1:3874
 ./build/bin/LiveEscape   # path may vary by generator
 ```
 

@@ -26,6 +26,11 @@ class AppController : public QObject
     Q_PROPERTY(bool showSettings READ showSettings WRITE setShowSettings NOTIFY showSettingsChanged)
     Q_PROPERTY(bool showBuyCredits READ showBuyCredits WRITE setShowBuyCredits NOTIFY showBuyCreditsChanged)
     Q_PROPERTY(bool showTour READ showTour WRITE setShowTour NOTIFY showTourChanged)
+    Q_PROPERTY(bool showDownloads READ showDownloads WRITE setShowDownloads NOTIFY showDownloadsChanged)
+    Q_PROPERTY(bool showLockScreen READ showLockScreen WRITE setShowLockScreen NOTIFY showLockScreenChanged)
+    Q_PROPERTY(QString lockTitle READ lockTitle NOTIFY lockScreenChanged)
+    Q_PROPERTY(QString lockMessage READ lockMessage NOTIFY lockScreenChanged)
+    Q_PROPERTY(bool lockDismissable READ lockDismissable NOTIFY lockScreenChanged)
 
 public:
     explicit AppController(AuthManager *auth,
@@ -53,6 +58,7 @@ public:
     void setSwapTier(const QString &tier);
 
     bool hdAvailable() const { return m_hdAvailable; }
+    void setHdAvailable(bool available);
     bool showWhatsNew() const { return m_showWhatsNew; }
     void setShowWhatsNew(bool v);
     bool showSettings() const { return m_showSettings; }
@@ -61,6 +67,13 @@ public:
     void setShowBuyCredits(bool v);
     bool showTour() const { return m_showTour; }
     void setShowTour(bool v);
+    bool showDownloads() const { return m_showDownloads; }
+    void setShowDownloads(bool v);
+    bool showLockScreen() const { return m_showLockScreen; }
+    void setShowLockScreen(bool v);
+    QString lockTitle() const { return m_lockTitle; }
+    QString lockMessage() const { return m_lockMessage; }
+    bool lockDismissable() const { return m_lockDismissable; }
 
 public slots:
     void navigateTo(const QString &page);
@@ -69,6 +82,10 @@ public slots:
     void openHelp();
     void openPreview();
     void openPopout();
+    void openDownloads();
+    void closeDownloads();
+    void showLock(const QString &title, const QString &message, bool dismissable = false);
+    void dismissLockScreen();
     void notify(const QString &message, const QString &type = QStringLiteral("info"));
     void showOsNotification(const QString &title, const QString &body);
     void handleDeepLink(const QString &url);
@@ -88,6 +105,9 @@ signals:
     void showSettingsChanged();
     void showBuyCreditsChanged();
     void showTourChanged();
+    void showDownloadsChanged();
+    void showLockScreenChanged();
+    void lockScreenChanged();
     void errorOccurred(const QString &title, const QString &message);
     void notification(const QString &message, const QString &type); // info|success|warning|error
     void deepLinkReceived(const QString &url);
@@ -114,4 +134,13 @@ private:
     bool m_showSettings = false;
     bool m_showBuyCredits = false;
     bool m_showTour = false;
+    bool m_showDownloads = false;
+    bool m_showLockScreen = false;
+    QString m_lockTitle;
+    QString m_lockMessage;
+    bool m_lockDismissable = false;
+
+private:
+    void updateHdAvailability();
+    class QSystemTrayIcon *m_tray = nullptr; // ONE persistent tray icon
 };

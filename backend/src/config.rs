@@ -49,6 +49,8 @@ pub struct Config {
     pub platform_margin_ratio: f64,
     #[serde(default = "default_signup_bonus")]
     pub signup_bonus_credits: f64,
+    #[serde(default)]
+    pub referral_credits: Option<f64>,
     #[serde(default = "default_min_start")]
     pub min_credits_to_start: f64,
     #[serde(default = "default_hd_mult")]
@@ -133,6 +135,9 @@ pub struct Config {
     pub usd_ngn_rate: f64,
     #[serde(default)]
     pub flutterwave_secret_key: Option<String>,
+    /// Public key handed to the client for hosted/inline Flutterwave checkout.
+    #[serde(default)]
+    pub flutterwave_public_key: Option<String>,
 
     // SMTP (OTP delivery)
     #[serde(default)]
@@ -321,6 +326,7 @@ mod tests {
                 decart_usd_per_second: 0.02,
                 platform_margin_ratio: 0.35,
                 signup_bonus_credits: 100.0,
+                referral_credits: None,
                 min_credits_to_start: 5.0,
                 hd_credit_multiplier: 1.5,
                 decart_api_key: "your-key".into(),
@@ -350,6 +356,7 @@ mod tests {
                 admin_secret: None,
                 usd_ngn_rate: 1600.0,
                 flutterwave_secret_key: None,
+                flutterwave_public_key: None,
                 smtp_host: None,
                 smtp_port: 587,
                 smtp_username: None,

@@ -1,8 +1,7 @@
 //! Platform bootstrap — one route family, product-id dispatch.
 //!
-//! Paths (same handler):
+//! Path (unified /api/v1 namespace):
 //!   GET /api/v1/bootstrap
-//!   GET /bootstrap
 //!
 //! Identity: X-Frontend-Id / X-Client-Product / ?product= / path heuristic
 //!   → ProductId::LiveMorph  → bootstrap_for_livemorph()
@@ -16,11 +15,6 @@ use std::sync::Arc;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
 	// Mounted under /api/v1 → GET /api/v1/bootstrap
-	cfg.route("/bootstrap", web::get().to(bootstrap_handler));
-}
-
-pub fn configure_root(cfg: &mut web::ServiceConfig) {
-	// Mounted at "" → GET /bootstrap (same handler, LE clients)
 	cfg.route("/bootstrap", web::get().to(bootstrap_handler));
 }
 
@@ -59,15 +53,11 @@ fn shared_endpoints(cfg: &Config) -> Value {
 		"api_base": base,
 		"health": format!("{}/api/v1/health", base),
 		"bootstrap": format!("{}/api/v1/bootstrap", base),
-		"bootstrap_alt": format!("{}/bootstrap", base),
-		"balance_ws": format!("{}/ws", wso),
-		"balance_ws_alt": format!("{}/api/v1/ws", wso),
+		"balance_ws": format!("{}/api/v1/ws", wso),
 		"realtime_ws": format!("{}/api/v1/realtime", wso),
-		"realtime_ws_alt": format!("{}/v1/realtime", wso),
 		"paystack_callback": format!("{}/api/v1/payments/callback/paystack", base),
-		"pay_callback_alt": format!("{}/pay/callback", base),
 		"support_tickets": format!("{}/api/v1/support/tickets", base),
-		"version_check": format!("{}/api/v1/version/check", base),
+		"version_check": format!("{}/api/v1/update/check", base),
 		"auth_refresh": format!("{}/api/v1/auth/refresh", base),
 	})
 }
@@ -99,6 +89,7 @@ fn shared_payments(cfg: &Config) -> Value {
 		"paystack_public_key": cfg.paystack_public_key,
 		"nowpayments": cfg.nowpayments_api_key.as_ref().map(|s| !s.is_empty()).unwrap_or(false),
 		"flutterwave": cfg.flutterwave_secret_key.as_ref().map(|s| !s.is_empty()).unwrap_or(false),
+		"flutterwave_public_key": cfg.flutterwave_public_key,
 		"currency": cfg.paystack_currency,
 		"usd_ngn_rate": cfg.usd_ngn_rate,
 	})
@@ -190,21 +181,67 @@ fn bootstrap_for_liveescape(cfg: &Config) -> Value {
 		let mut ep = shared_endpoints(cfg);
 		let base = public_base(cfg);
 		if let Some(m) = ep.as_object_mut() {
-			m.insert("plans".into(), json!(format!("{}/settings/plans", base)));
+			m.insert("plans".into(), json!(format!("{}/api/v1/settings/plans", base)));
 			m.insert(
 				"keys_validate".into(),
-				json!(format!("{}/keys/validate", base)),
+				json!(format!("{}/api/v1/keys/validate", base)),
 			);
-			m.insert("credits".into(), json!(format!("{}/credits", base)));
+			m.insert("keys_lookup".into(), json!(format!("{}/api/v1/keys/lookup", base)));
+			m.insert(
+				"credits".into(),
+				json!(format!("{}/api/v1/credits/balance", base)),
+			);
 			m.insert(
 				"streaming_start".into(),
-				json!(format!("{}/streaming/session-start", base)),
+				json!(format!("{}/api/v1/streaming/session-start", base)),
 			);
-			m.insert("auth_signup".into(), json!(format!("{}/auth/signup", base)));
-			m.insert("auth_login".into(), json!(format!("{}/auth/login", base)));
+			m.insert(
+				"streaming_end".into(),
+				json!(format!("{}/api/v1/streaming/end", base)),
+			);
+			m.insert(
+				"background_presets".into(),
+				json!(format!("{}/api/v1/streaming/background-presets", base)),
+			);
+			m.insert(
+				"auth_signup".into(),
+				json!(format!("{}/api/v1/auth/register", base)),
+			);
+			m.insert(
+				"auth_login".into(),
+				json!(format!("{}/api/v1/auth/login", base)),
+			);
+			m.insert(
+				"password_reset_request".into(),
+				json!(format!("{}/api/v1/auth/password-reset-request", base)),
+			);
 			m.insert(
 				"feature_flags".into(),
-				json!(format!("{}/public/feature-flags", base)),
+				json!(format!("{}/api/v1/public/feature-flags", base)),
+			);
+			m.insert(
+				"starter_pack_status".into(),
+				json!(format!("{}/api/v1/starter-pack/status", base)),
+			);
+			m.insert(
+				"downloads_list".into(),
+				json!(format!("{}/api/v1/downloads/list", base)),
+			);
+			m.insert(
+				"engine_key".into(),
+				json!(format!("{}/api/v1/settings/engine-key", base)),
+			);
+			m.insert(
+				"payment_gateway".into(),
+				json!(format!("{}/api/v1/settings/payment-gateway", base)),
+			);
+			m.insert(
+				"crypto_settings".into(),
+				json!(format!("{}/api/v1/settings/crypto", base)),
+			);
+			m.insert(
+				"streaming_availability".into(),
+				json!(format!("{}/api/v1/settings/streaming-availability", base)),
 			);
 		}
 		ep

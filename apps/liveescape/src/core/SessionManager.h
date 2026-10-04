@@ -14,8 +14,10 @@ class SessionManager : public QObject
     Q_PROPERTY(QString licenseStatus READ licenseStatus NOTIFY sessionChanged)
     Q_PROPERTY(QString plan READ plan NOTIFY sessionChanged)
     Q_PROPERTY(QString accessKey READ accessKey NOTIFY sessionChanged)
+    Q_PROPERTY(QString licenseExpiry READ licenseExpiry NOTIFY sessionChanged)
     Q_PROPERTY(QString email READ email NOTIFY sessionChanged)
     Q_PROPERTY(QString displayName READ displayName NOTIFY sessionChanged)
+    Q_PROPERTY(QString phone READ phone NOTIFY sessionChanged)
     Q_PROPERTY(QString userId READ userId NOTIFY sessionChanged)
     Q_PROPERTY(QString sessionToken READ sessionToken NOTIFY sessionChanged)
     Q_PROPERTY(QString refreshToken READ refreshToken NOTIFY sessionChanged)
@@ -42,8 +44,11 @@ public:
     }
     QString plan() const { return m_plan; }
     QString accessKey() const { return m_accessKey; }
+    QString licenseExpiry() const { return m_licenseExpiry; }
+    Q_INVOKABLE bool licenseExpired() const;
     QString email() const { return m_email; }
     QString displayName() const { return m_displayName; }
+    QString phone() const { return m_phone; }
     QString userId() const { return m_userId; }
     QString sessionToken() const { return m_sessionToken; }
     QString refreshToken() const { return m_refreshToken; }
@@ -65,6 +70,10 @@ public:
     Q_INVOKABLE bool hasFeature(const QString &featureName) const;
     Q_INVOKABLE void setUser(const QString &email, const QString &name, const QString &userId = {},
                              const QString &sessionToken = {});
+    // Updates only the display name (profile edit) without touching tokens.
+    Q_INVOKABLE void setDisplayName(const QString &name);
+    // Updates only the phone number (profile edit).
+    Q_INVOKABLE void setPhone(const QString &phone);
     void setRefreshToken(const QString &token);
     Q_INVOKABLE void setAccess(const QVariantMap &access);
     Q_INVOKABLE void setCredits(qint64 total, double used, double remaining, const QString &plan = {});
@@ -75,10 +84,20 @@ public:
     void setReferralEarned(double v);
     Q_INVOKABLE void setStreamingEnabled(bool enabled);
     Q_INVOKABLE void clearSession();
+    // Clears only the license entitlement (access key / plan / expiry) while
+    // keeping the signed-in user — used on account switches and when the
+    // server rejects a previously stored key at boot.
+    Q_INVOKABLE void clearLicenseState();
     Q_INVOKABLE void logout();
     Q_INVOKABLE void burnCreditsLocal(double seconds);
     Q_INVOKABLE void loadFromDisk();
     Q_INVOKABLE void saveToDisk();
+    // 30s-throttled save for high-frequency paths (WS balance pushes, local
+    // burn ticks). saveToDisk() stretches 3 SecureStore keys over 4096
+    // SHA-256 rounds on the UI thread — calling it per balance_update (~1/s
+    // while generating) stalled frames. Rare state changes keep the direct
+    // save.
+    void throttledSave();
 
 signals:
     void sessionChanged();
@@ -92,18 +111,20 @@ private:
     QSettings m_settings;
     QString m_email;
     QString m_displayName;
+    QString m_phone;
     QString m_userId;
     QString m_sessionToken;
     QString m_refreshToken;
     QString m_accessKey;
     QString m_deviceId;
     QString m_plan = QStringLiteral("starter");
+    QString m_licenseExpiry;
     QString m_referralCode;
     double m_referralEarned = 0;
     qint64 m_creditsTotal = 0;
     double m_creditsUsed = 0;
     double m_creditsRemaining = 0;
-    double m_burnRate = 0.5;
+    double m_burnRate = 2.0;
     bool m_connected = false;
     bool m_consent = false;
     bool m_streamingEnabled = true;

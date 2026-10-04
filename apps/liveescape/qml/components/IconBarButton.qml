@@ -10,21 +10,22 @@ Rectangle {
 
     implicitWidth: txt.implicitWidth + 20
     implicitHeight: 30
-    radius: Theme.radius
-    color: root.active ? (danger ? "#3a1018" : Theme.goldGlow)
-         : (ma.containsMouse ? Theme.s2 : "transparent")
-    border.color: root.active ? (danger ? Theme.red : Theme.gold)
-                 : (ma.containsMouse ? Theme.border : "transparent")
+    radius: Theme.radiusFull
+    color: "transparent"
+    border.color: ma.containsMouse ? Theme.goldD : Theme.border
     border.width: 1
+    Behavior on border.color { ColorAnimation { duration: Theme.motionFast } }
 
     Text {
         id: txt
         anchors.centerIn: parent
         text: root.label
-        color: root.danger ? Theme.red : (root.active ? Theme.gold : Theme.text)
+        color: root.danger ? (ma.containsMouse ? Theme.red : Theme.dim)
+             : (ma.containsMouse ? Theme.gold : Theme.dim)
         font.family: Theme.fontMono
-        font.pixelSize: 10
+        font.pixelSize: 9
         font.letterSpacing: 1
+        Behavior on color { ColorAnimation { duration: Theme.motionFast } }
     }
     MouseArea {
         id: ma

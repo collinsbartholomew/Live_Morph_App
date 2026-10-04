@@ -120,7 +120,7 @@ pub async fn exchange_code(cfg: &Arc<Config>, code: &str) -> AppResult<GoogleTok
         .await
         .map_err(|e| AppError::Internal(format!("google token body: {e}")))?;
     if !status.is_success() {
-        tracing::error!(status = %status, body = %text, "Google token exchange failed");
+        tracing::error!(status = %status, "Google token exchange failed");
         return Err(AppError::BadRequest("Google authentication failed".into()));
     }
     serde_json::from_str(&text).map_err(|e| AppError::Internal(format!("google token parse: {e}")))
@@ -140,7 +140,7 @@ pub async fn fetch_userinfo(access_token: &str) -> AppResult<GoogleUserInfo> {
         .await
         .map_err(|e| AppError::Internal(format!("google userinfo body: {e}")))?;
     if !status.is_success() {
-        tracing::error!(status = %status, body = %text, "Google userinfo fetch failed");
+        tracing::error!(status = %status, "Google userinfo fetch failed");
         return Err(AppError::BadRequest(
             "failed to fetch Google user profile".into(),
         ));

@@ -2,11 +2,40 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use actix_web::HttpRequest;
+
 type RateMap = HashMap<(String, String), Vec<Instant>>;
 
 /// Maximum number of distinct (ip, action) buckets retained per sweep.
 /// Bounds memory so a flood of unique IPs cannot grow the map unboundedly.
 const MAX_BUCKETS: usize = 65_536;
+
+/// Resolve the client IP for rate-limit keying.
+///
+/// Behind a reverse proxy, `req.peer_addr()` is the PROXY's address — every
+/// client would share one (ip, action) bucket, causing mass lockout. Trust
+/// X-Forwarded-For (first hop) / X-Real-IP when present; fall back to the
+/// direct peer address.
+pub fn client_ip(req: &HttpRequest) -> String {
+    if let Some(v) = req.headers().get("x-forwarded-for").and_then(|h| h.to_str().ok()) {
+        // First entry is the originating client (proxy appends downstream hops).
+        if let Some(first) = v.split(',').next() {
+            let ip = first.trim();
+            if !ip.is_empty() {
+                return ip.to_string();
+            }
+        }
+    }
+    if let Some(v) = req.headers().get("x-real-ip").and_then(|h| h.to_str().ok()) {
+        let ip = v.trim();
+        if !ip.is_empty() {
+            return ip.to_string();
+        }
+    }
+    req.peer_addr()
+        .map(|a| a.ip().to_string())
+        .unwrap_or_else(|| "unknown".into())
+}
 
 /// In-memory sliding-window rate limiter keyed by (ip, action).
 ///

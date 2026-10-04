@@ -1,33 +1,54 @@
 import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
 import QtMultimedia
 import LiveMorph
 
-/**
- * Stage surface: local camera when idle; MorphStage (GStreamer WebRTC) when session active.
- * Signaling: Session → WebRtcSignalingClient → Rust proxy (auth + credits + Decart).
- */
 Rectangle {
     id: root
+    // Electron stage box: rounded(4) — brackets/glow carry the live state,
+    // not the frame border.
     color: "#050508"
-    radius: Theme.radiusMd
+    radius: Theme.radiusSm
     clip: true
-    border.color: Session.isActive ? Colors.accent40 : Colors.surfaceBorder
-    border.width: Session.isActive ? 1.5 : 1
+    border.color: Colors.surfaceBorder
+    border.width: 1
 
-    readonly property int overlayTopPad: 12
-    readonly property int overlayBottomPad: 12
-
-    // Soft glow when live
-    Rectangle {
+    // Double-click the stage → popout (Electron hint parity)
+    signal popoutRequested()
+    MouseArea {
         anchors.fill: parent
-        anchors.margins: -2
-        radius: parent.radius + 2
-        color: "transparent"
-        border.color: Colors.accent
-        border.width: 2
-        opacity: Session.isActive ? 0.35 : 0
-        Behavior on opacity { NumberAnimation { duration: 220 } }
-        z: -1
+        acceptedButtons: Qt.LeftButton
+        propagateComposedEvents: true
+        z: 0.5
+        onDoubleClicked: root.popoutRequested()
+        onClicked: function(mouse) { mouse.accepted = false }
+        onPressed: function(mouse) { mouse.accepted = false }
+    }
+
+    // Bottom ellipse glow (Electron): idle transparent → warming accent/20 →
+    // live accent/30 with a 6.5s pulse; error uses red.
+    Rectangle {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        width: parent.width * 0.5
+        height: 56
+        radius: height / 2
+        color: Session.connectionStatus === "error" ? Colors.statusError : Colors.accent
+        opacity: !Session.isActive ? 0
+            : Session.connectionStatus === "connecting" || Session.connectionStatus === "reconnecting" ? 0.20
+            : 0.30
+        // stage-glow-pulse: 6.5s ease-in-out .72↔1
+        SequentialAnimation on opacity {
+            running: root.visible && Session.isActive
+                     && Session.connectionStatus !== "connecting"
+                     && Qt.application.state === Qt.ApplicationActive
+            loops: Animation.Infinite
+            NumberAnimation { to: 0.72 * (Session.connectionStatus === "error" ? 0.8 : 1.0); duration: 3250; easing.type: Easing.InOutQuad }
+            NumberAnimation { to: Session.connectionStatus === "error" ? 0.25 : 0.30; duration: 3250; easing.type: Easing.InOutQuad }
+        }
+        Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+        z: 0
     }
 
     // GStreamer WebRTC morph surface
@@ -44,181 +65,390 @@ Rectangle {
         id: videoOut
         anchors.fill: parent
         fillMode: VideoOutput.PreserveAspectCrop
-        visible: Camera.isActive && !Session.isActive
+        visible: CameraCtrl.isActive && !Session.isActive
         transform: Scale {
             origin.x: videoOut.width / 2
-            xScale: Camera.mirrored ? -1 : 1
+            xScale: CameraCtrl.mirrored ? -1 : 1
         }
-    }
-    Binding {
-        target: videoOut
-        property: "videoSink"
-        value: Camera.videoSink
-        when: Camera.videoSink !== null && !Session.isActive
+        onVisibleChanged: if (visible) CameraCtrl.bindVideoOutput(videoOut)
+        Component.onCompleted: if (visible) CameraCtrl.bindVideoOutput(videoOut)
     }
 
-    // Idle empty state + CTA
-    Column {
-        anchors.centerIn: parent
-        spacing: 14
-        visible: !Camera.isActive && !Session.isActive
-        z: 4
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: qsTr("Camera is off")
-            color: Colors.textPrimary
-            font.pixelSize: 16
-            font.weight: Font.DemiBold
-        }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(280, parent.parent.width - 48)
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-            text: qsTr("Enable the camera to preview, then pick a character and go live.")
-            color: Colors.textMuted
-            font.pixelSize: 12
-        }
-        PrimaryButton {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: qsTr("Start camera")
-            onClicked: Camera.start()
-        }
-    }
-
-    // Session phase stepper + live chrome
+    // ── Stage label pill (Electron: always top-left) ────────────────
     Rectangle {
-        anchors.left: parent.left
-        anchors.right: parent.right
         anchors.top: parent.top
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        anchors.topMargin: 12
-        height: 36
-        radius: Theme.radiusMd
-        color: Colors.surfaceGlassStrong
+        anchors.left: parent.left
+        anchors.margins: 12
+        height: 22
+        width: stageLabel.implicitWidth + 16
+        radius: Theme.radiusSm
+        color: "#08080cb3"
         border.color: Colors.surfaceBorder
         border.width: 1
-        visible: Session.isActive || Session.connectionStatus === "connecting"
         z: 5
+        Text {
+            id: stageLabel
+            anchors.centerIn: parent
+            text: qsTr("STAGE")
+            color: Colors.textMuted
+            font.family: Theme.fontMono.family
+            font.pixelSize: 9
+            font.letterSpacing: 1.5
+        }
+    }
+
+    // Idle empty state (Electron: "Ready to stream" + BEGIN SWAP chip)
+    Column {
+        anchors.centerIn: parent
+        spacing: 12
+        visible: !CameraCtrl.isActive && !Session.isActive
+        z: 4
+        width: Math.min(320, parent.width - 48)
+
+        // 64px icon box with breathing radial glow (Electron)
+        Item {
+            width: 64
+            height: 64
+            anchors.horizontalCenter: parent.horizontalCenter
+            Rectangle {
+                anchors.fill: parent
+                radius: Theme.radiusSm
+                color: "#101019cc"
+                border.color: Colors.accent15
+                border.width: 1
+            }
+            Rectangle {
+                anchors.centerIn: parent
+                width: 104; height: 104
+                radius: 52
+                color: Colors.accent
+                opacity: 0.10
+                // breathe: 3s opacity 1↔0.5
+                SequentialAnimation on opacity {
+                    running: root.visible && Qt.application.state === Qt.ApplicationActive
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 0.05; duration: 1500; easing.type: Easing.InOutQuad }
+                    NumberAnimation { to: 0.10; duration: 1500; easing.type: Easing.InOutQuad }
+                }
+            }
+            Icon {
+                anchors.centerIn: parent
+                name: "venetian-mask"
+                size: 28
+                color: Colors.accentHover
+            }
+        }
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: qsTr("Ready to stream")
+            color: Colors.textPrimary
+            font.pixelSize: 14
+            font.weight: Font.Medium
+        }
 
         Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 6
+            Text {
+                text: qsTr("Press")
+                color: Colors.textMuted
+                font.pixelSize: 12
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Rectangle {
+                height: 22
+                width: beginChip.implicitWidth + 12
+                radius: Theme.radiusSm
+                color: Colors.accent10
+                border.color: Colors.accent30
+                border.width: 1
+                anchors.verticalCenter: parent.verticalCenter
+                Text {
+                    id: beginChip
+                    anchors.centerIn: parent
+                    text: qsTr("BEGIN SWAP")
+                    color: Colors.accentHover
+                    font.pixelSize: 10
+                    font.letterSpacing: 1.2
+                }
+            }
+            Text {
+                text: qsTr("to transform")
+                color: Colors.textMuted
+                font.pixelSize: 12
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+    }
+
+    // ── Corner brackets (Electron: ALWAYS visible, state-colored) ────
+    // idle: white/15 · warming: accent/45 · live: accent · error: error/70
+    Repeater {
+        model: 4
+        Item {
+            readonly property int pos: index  // 0=TL 1=TR 2=BL 3=BR
+            readonly property color bracketColor: Session.connectionStatus === "error" ? "#ef4444b3"
+                : Session.isActive
+                  ? (Session.connectionStatus === "connecting" || Session.connectionStatus === "reconnecting"
+                     ? "#8b5cf673" : Colors.accent)
+                : "#ffffff26"
+            z: 5
+            x: (pos % 2 === 0) ? 6 : parent.width - 20
+            y: (pos < 2) ? 6 : parent.height - 20
+            width: 14
+            height: 14
+
+            Rectangle {
+                width: 1.5; height: parent.height; radius: 1
+                color: bracketColor
+                x: (pos % 2 === 0) ? 0 : parent.width - width
+                Behavior on color { ColorAnimation { duration: 300; easing.type: Easing.OutCubic } }
+            }
+            Rectangle {
+                width: parent.width; height: 1.5; radius: 1
+                color: bracketColor
+                y: (pos < 2) ? 0 : parent.height - height
+                Behavior on color { ColorAnimation { duration: 300; easing.type: Easing.OutCubic } }
+            }
+        }
+    }
+
+    // ── Warmup / connecting overlay ──────────────────────────────────
+    Item {
+        anchors.fill: parent
+        visible: Session.isActive && Session.connectionStatus === "connecting"
+        z: 6
+
+        Rectangle { anchors.fill: parent; color: Colors.surfaceBase; opacity: 0.75 }
+
+        Column {
             anchors.centerIn: parent
-            spacing: 8
-            Repeater {
-                model: [
-                    { id: "connect", label: qsTr("Connect") },
-                    { id: "live", label: qsTr("Live") },
-                    { id: "morph", label: qsTr("Morph") }
-                ]
-                delegate: Row {
-                    spacing: 8
-                    required property var modelData
-                    required property int index
-                    readonly property bool done: {
-                        var s = Session.connectionStatus
-                        if (modelData.id === "connect")
-                            return Session.isActive || s === "connected" || s === "live" || s === "generating"
-                        if (modelData.id === "live")
-                            return s === "connected" || s === "live" || s === "generating"
-                        if (modelData.id === "morph")
-                            return s === "generating" || s === "live"
-                        return false
+            spacing: 12
+
+            Spinner {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 32; height: 32
+                running: true
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("Connecting to morph engine\u2026")
+                color: Colors.textPrimary
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+            }
+        }
+    }
+
+    // ── Cooldown overlay ─────────────────────────────────────────────
+    Item {
+        anchors.fill: parent
+        visible: Session.cooldownActive
+        z: 6
+
+        Rectangle { anchors.fill: parent; color: Colors.surfaceBase; opacity: 0.7 }
+
+        Text {
+            anchors.centerIn: parent
+            text: qsTr("Cooldown: %1s").arg(Session.cooldownRemainingSec)
+            color: Colors.textPrimary
+            font.pixelSize: 18
+            font.weight: Font.Bold
+        }
+    }
+
+    // ── Error overlay (Electron: stage.error) ────────────────────────
+    property bool errorDismissed: false
+    Connections {
+        target: Session
+        function onConnectionStatusChanged() {
+            if (Session.connectionStatus === "error")
+                root.errorDismissed = false
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: Session.connectionStatus === "error" && !root.errorDismissed
+        z: 8
+
+        Rectangle { anchors.fill: parent; color: Colors.surfaceBase; opacity: 0.85 }
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 12
+            width: Math.min(320, parent.width - 48)
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "⚠"
+                color: Colors.statusError
+                font.pixelSize: 28
+            }
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: Session.statusText.length ? Session.statusText : qsTr("Something went wrong")
+                color: Colors.textPrimary
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+            }
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                visible: /network|connection|timeout|signaling/i.test(Session.statusText)
+                text: qsTr("A VPN, firewall, or work/school wifi may be blocking it. Try another network. Or switch to the Standard engine in Settings, which works on most networks.")
+                color: Colors.textMuted
+                font.pixelSize: 11
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("No credits charged")
+                color: Colors.textMuted
+                font.pixelSize: 10
+                font.family: Theme.fontMono.family
+            }
+
+            RowLayout {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 8
+
+                PrimaryButton {
+                    text: Session.cooldownActive
+                          ? qsTr("Try again in %1s").arg(Session.cooldownRemainingSec)
+                          : qsTr("Try again")
+                    enabled: !Session.cooldownActive
+                    onClicked: {
+                        root.errorDismissed = true
+                        App.toggleSwap()
                     }
-                    readonly property bool current: {
-                        var s = Session.connectionStatus
-                        if (modelData.id === "connect")
-                            return s === "connecting" || s === "idle"
-                        if (modelData.id === "live")
-                            return s === "connected"
-                        if (modelData.id === "morph")
-                            return s === "generating" || s === "live"
-                        return false
-                    }
-                    Rectangle {
-                        width: 8; height: 8; radius: 4
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: parent.done || parent.current ? Colors.accent : Colors.textMuted
-                        opacity: parent.current ? 1 : (parent.done ? 0.85 : 0.35)
-                    }
-                    Text {
-                        text: modelData.label
-                        color: parent.done || parent.current ? Colors.textPrimary : Colors.textMuted
-                        font.pixelSize: 11
-                        font.weight: parent.current ? Font.DemiBold : Font.Normal
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    Text {
-                        visible: index < 2
-                        text: "→"
-                        color: Colors.textMuted
-                        font.pixelSize: 11
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
+                }
+                GhostButton {
+                    text: qsTr("Dismiss")
+                    onClicked: root.errorDismissed = true
                 }
             }
         }
     }
 
-    // Character + elapsed when live
+    // ── Inline camera controls (Electron: camera picker + mirror in stage) ──
     Rectangle {
-        anchors.left: parent.left
+        id: cameraControls
+        visible: CameraCtrl.isActive && !Session.isActive
         anchors.bottom: parent.bottom
-        anchors.leftMargin: 12
-        anchors.bottomMargin: root.overlayBottomPad
-        height: 32
-        radius: Theme.radiusFull
-        color: Colors.surfaceGlassStrong
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: 8
+        height: 36
+        radius: Theme.radiusSm
+        color: Qt.rgba(8/255, 8/255, 12/255, 0.85)
         border.color: Colors.surfaceBorder
         border.width: 1
-        visible: Session.isActive
-        z: 5
-        width: liveLbl.implicitWidth + 20
-        Text {
-            id: liveLbl
-            anchors.centerIn: parent
-            text: {
-                var name = Session.activeCharacterName || qsTr("Live")
-                var sec = Math.floor(Session.elapsedSec || 0)
-                var m = Math.floor(sec / 60)
-                var s = sec % 60
-                var ts = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s
-                return name + " · " + ts
+        z: 7
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            spacing: 10
+
+            // Camera icon
+            Icon {
+                name: "camera"
+                size: Theme.iconSm
+                color: Colors.textMuted
+                anchors.verticalCenter: parent.verticalCenter
             }
-            color: Colors.textPrimary
-            font.pixelSize: 11
-            font.weight: Font.Medium
+
+            // Camera device selector
+            ComboBox {
+                id: camSelect
+                Layout.preferredWidth: 180
+                Layout.fillHeight: true
+                model: CameraCtrl.availableDevices
+                currentIndex: {
+                    var id = CameraCtrl.currentDeviceId;
+                    for (var i = 0; i < model.length; i++) {
+                        if (model[i].id === id) return i;
+                    }
+                    return 0;
+                }
+                onActivated: {
+                    var dev = CameraCtrl.availableDevices[currentIndex];
+                    if (dev) CameraCtrl.currentDeviceId = dev.id;
+                }
+
+                font.family: Theme.fontMono.family
+                font.pixelSize: 10
+
+                background: Rectangle {
+                    color: Colors.surfaceOverlay
+                    border.color: camSelect.activeFocus ? Colors.accent : Colors.surfaceBorder
+                    border.width: 1
+                    radius: Theme.radiusSm
+                }
+
+                contentItem: Text {
+                    text: camSelect.displayText
+                    color: Colors.textPrimary
+                    font: camSelect.font
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 6
+                    elide: Text.ElideRight
+                }
+            }
+
+            // Mirror toggle
+            Rectangle {
+                height: 28
+                width: mirrorRow.implicitWidth + 12
+                radius: Theme.radiusFull
+                color: Config.mirrorCamera ? Colors.accent20 : Colors.surfaceOverlay
+                border.color: Config.mirrorCamera ? Colors.accent : Colors.surfaceBorder
+                border.width: 1
+
+                Row {
+                    id: mirrorRow
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    Icon {
+                        name: "refresh-ccw"
+                        size: 12
+                        color: Config.mirrorCamera ? Colors.accent : Colors.textMuted
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Text {
+                        text: "Mirror"
+                        color: Config.mirrorCamera ? Colors.accent : Colors.textSecondary
+                        font.pixelSize: 10
+                        font.family: Theme.fontMono.family
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: Config.mirrorCamera = !Config.mirrorCamera
+                }
+            }
+
+            Item { Layout.fillWidth: true }
+
+            // Engine label
+            Text {
+                text: Session.engineLabel
+                color: Colors.textMuted
+                font.pixelSize: 9
+                font.family: Theme.fontMono.family
+                font.letterSpacing: 1
+                anchors.verticalCenter: parent.verticalCenter
+            }
         }
     }
-
-    // REC badge
-    Rectangle {
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.rightMargin: 12
-        anchors.topMargin: root.overlayTopPad
-        height: 28
-        width: recLbl.implicitWidth + 16
-        radius: Theme.radiusFull
-        color: Colors.statusErrorMuted
-        border.color: Colors.statusError
-        border.width: 1
-        visible: Recording.isRecording
-        z: 6
-        Text {
-            id: recLbl
-            anchors.centerIn: parent
-            text: {
-                var sec = Math.floor((Recording.elapsedMs || 0) / 1000)
-                var m = Math.floor(sec / 60)
-                var s = sec % 60
-                return "● REC " + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s
-            }
-            color: Colors.statusError
-            font.pixelSize: 11
-            font.weight: Font.Bold
-            font.family: Theme.fontMono.family
-        }
-    }
-
 }

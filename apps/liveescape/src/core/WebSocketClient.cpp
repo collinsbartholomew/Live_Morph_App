@@ -18,6 +18,14 @@ WebSocketClient::WebSocketClient(QObject *parent)
         if (m_socket) {
             if (m_socket->state() != QAbstractSocket::UnconnectedState)
                 m_socket->close();
+            // Always ask the provider for the CURRENT token — the one captured
+            // at the original connect is stale after the 900s access TTL and
+            // would 401 every subsequent handshake.
+            if (m_tokenProvider) {
+                const QString fresh = m_tokenProvider();
+                if (!fresh.isEmpty())
+                    m_bearerToken = fresh;
+            }
             QNetworkRequest req{QUrl(m_url)};
             if (!m_bearerToken.isEmpty())
                 req.setRawHeader("Authorization", QByteArray("Bearer ") + m_bearerToken.toUtf8());
@@ -68,6 +76,11 @@ WebSocketClient::~WebSocketClient()
 #endif
 }
 
+void WebSocketClient::setTokenProvider(const std::function<QString()> &provider)
+{
+    m_tokenProvider = provider;
+}
+
 void WebSocketClient::connectToServer(const QString &wsBaseUrl, const QString &userId,
                                       const QString &accessKey, const QString &bearerToken)
 {
@@ -75,7 +88,7 @@ void WebSocketClient::connectToServer(const QString &wsBaseUrl, const QString &u
     if (bearerToken.isEmpty() && (userId.isEmpty() || accessKey.isEmpty()))
         return;
 
-    QUrl url(wsBaseUrl + QStringLiteral("/ws"));
+    QUrl url(wsBaseUrl + QStringLiteral("/api/v1/ws"));
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("product"), QStringLiteral("liveescape"));
     q.addQueryItem(QStringLiteral("frontend_id"), QStringLiteral("liveescape"));
@@ -88,7 +101,15 @@ void WebSocketClient::connectToServer(const QString &wsBaseUrl, const QString &u
     }
     url.setQuery(q);
     m_url = url.toString(); // URL without JWT
-    m_bearerToken = bearerToken;
+    // Prefer the provider's CURRENT token over the snapshot passed in —
+    // callers may hand us a stale one from before a silent JWT refresh.
+    QString token = bearerToken;
+    if (m_tokenProvider) {
+        const QString fresh = m_tokenProvider();
+        if (!fresh.isEmpty())
+            token = fresh;
+    }
+    m_bearerToken = token;
     m_intentionalClose = false;
     m_reconnectAttempt = 0;
 
@@ -96,8 +117,8 @@ void WebSocketClient::connectToServer(const QString &wsBaseUrl, const QString &u
     if (m_socket->state() == QAbstractSocket::ConnectedState)
         m_socket->close();
     QNetworkRequest req{url};
-    if (!bearerToken.isEmpty())
-        req.setRawHeader("Authorization", QByteArray("Bearer ") + bearerToken.toUtf8());
+    if (!token.isEmpty())
+        req.setRawHeader("Authorization", QByteArray("Bearer ") + token.toUtf8());
     m_socket->open(req);
 #else
     emit connectionError(QStringLiteral("Qt WebSockets module not available at build time"));
@@ -178,6 +199,10 @@ void WebSocketClient::onTextMessage(const QString &message)
         emit forceLogout();
     } else if (type == QLatin1String("dashboard_notification")) {
         emit dashboardNotification(data.isEmpty() ? obj.toVariantMap() : data.toVariantMap());
+    } else if (type == QLatin1String("config_update") || type == QLatin1String("hello")) {
+        const QString rev = obj.value(QStringLiteral("config_revision")).toString();
+        if (!rev.isEmpty())
+            emit configUpdate(rev);
     }
 }
 

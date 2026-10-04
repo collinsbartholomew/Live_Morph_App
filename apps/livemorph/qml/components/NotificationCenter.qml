@@ -85,22 +85,23 @@ Rectangle {
         for (var k = 0; k < arr.length; k++) viewModel.append(arr[k])
     }
 
-    width: Theme.notificationsWidth
-    height: Math.min(600, parent ? parent.height - 80 : 600)
+    // Electron: w-80 (320px) dropdown, SOLID #17171f (panel-popover), radius 6
+    width: 320
+    height: Math.min(parent ? parent.height - 80 : 600, headerCol.implicitHeight + 360 + 48)
     anchors.top: parent.top
-    anchors.topMargin: 8
+    anchors.topMargin: 4
     anchors.right: parent.right
-    anchors.rightMargin: 12
-    color: Colors.surfaceGlassStrong
+    anchors.rightMargin: 8
+    color: Colors.surfaceOverlay
     border.color: Colors.surfaceBorder
     border.width: 1
-    radius: Theme.radiusXl
-    visible: open
+    radius: Theme.radiusMd
+    visible: open || opacity > 0.001 // keep the close transition alive
     z: 130
     clip: true
     // Entrance gated on open (closed removes node -> no idle cost)
     opacity: open ? 1 : 0
-    scale: open ? 1 : 0.96
+    scale: open ? 1 : 0.98
     transformOrigin: Item.TopRight
     Component.onCompleted: rebuild()
     onFilterChanged: rebuild()
@@ -108,6 +109,23 @@ Rectangle {
         if (root.open) {
             rebuild();
         }
+    }
+
+    // panel-popover shadow: 0 1px 4px .3 + 0 12px 24px -8px .5
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -1
+        radius: parent.radius + 1
+        color: "#0000004d"
+        z: -1
+    }
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -8
+        anchors.topMargin: -2
+        radius: parent.radius + 8
+        color: "#00000080"
+        z: -1
     }
 
     // Soft top highlight
@@ -121,14 +139,14 @@ Rectangle {
     }
 
     ColumnLayout {
+        id: headerCol
         anchors.fill: parent
         spacing: 0
 
-        // Header
+        // Header (Electron: 12px semibold title + markAllRead accent link + clear icon)
         Rectangle {
             Layout.fillWidth: true
-            height: 58
-            color: "transparent"
+            height: 44
 
             RowLayout {
                 anchors.fill: parent
@@ -136,55 +154,53 @@ Rectangle {
                 anchors.rightMargin: 10
                 spacing: 8
 
-                ColumnLayout {
-                    spacing: 2
+                Text {
+                    text: qsTr("Notifications")
+                    color: Colors.textPrimary
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
                     Layout.fillWidth: true
-
-                    Text {
-                        text: qsTr("Notifications")
-                        color: Colors.textPrimary
-                        font.pixelSize: 15
-                        font.weight: Font.DemiBold
-                    }
-
-                    Text {
-                        text: root.unreadCount > 0 ? qsTr("%1 unread").arg(root.unreadCount) : qsTr("You're all caught up")
-                        color: Colors.textMuted
-                        font.pixelSize: 11
-                    }
-
                 }
 
-                GhostButton {
+                Text {
                     text: qsTr("Mark all read")
+                    color: marMa.containsMouse ? Colors.accent : Colors.textMuted
+                    font.pixelSize: 10
                     visible: Notifier.count > 0 && root.unreadCount > 0
-                    onClicked: Notifier.markAllRead()
+                    MouseArea {
+                        id: marMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Notifier.markAllRead()
+                    }
+                    Behavior on color { ColorAnimation { duration: Theme.motionFast; easing.type: Easing.OutCubic } }
                 }
 
                 Rectangle {
-                    width: 28
-                    height: 28
-                    radius: 14
-                    color: closeMa.containsMouse ? Colors.white06 : "transparent"
+                    width: 20
+                    height: 20
+                    color: clearMa.containsMouse ? Colors.errorSoftBg : "transparent"
 
                     Icon {
                         anchors.centerIn: parent
                         name: "x"
-                        size: 16
-                        color: Colors.textSecondary
+                        size: 12
+                        emphasis: true
+                        color: clearMa.containsMouse ? Colors.statusError : Colors.textMuted
                     }
 
                     MouseArea {
-                        id: closeMa
-
+                        id: clearMa
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.open = false
+                        onClicked: {
+                            Notifier.clear()
+                            root.open = false
+                        }
                     }
-
                 }
-
             }
 
             Rectangle {
@@ -192,7 +208,7 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 height: 1
-                color: Colors.divider
+                color: Colors.surfaceBorderSubtle
             }
 
         }
@@ -238,7 +254,7 @@ Rectangle {
                 Rectangle {
                     width: 56
                     height: 56
-                    radius: 28
+                    radius: Theme.radiusFull
                     color: Colors.accent10
                     anchors.horizontalCenter: parent.horizontalCenter
                     border.color: Colors.accent20
@@ -329,17 +345,30 @@ Rectangle {
 
                 }
 
-                // Notification item
+                // Notification item (Electron: BORDERLESS row, bottom hairline,
+                // 3% unread tint, read/unread title states, hover-reveal X)
                 Rectangle {
+                    property bool isHovered: notifItemMa.containsMouse
+
                     visible: kind === "item"
                     anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    anchors.bottomMargin: 2
-                    radius: Theme.radiusMd
-                    color: unread ? Colors.accent10 : Colors.surfaceOverlay
-                    border.color: unread ? Colors.accent20 : Colors.divider
-                    border.width: 1
+                    anchors.bottomMargin: 0
+                    radius: 0
+                    color: isHovered ? "#17171f66"          // surface-overlay/40
+                         : unread ? Colors.accent06          // 3% unread tint
+                         : "transparent"
+                    border.width: 0
+                    Behavior on color { ColorAnimation { duration: Theme.motionFast } }
+
+                    // Bottom hairline separator (surface-border-subtle/60)
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: 1
+                        color: "#18182499"
+                        visible: kind === "item"
+                    }
 
                     RowLayout {
                         id: cardCol
@@ -347,20 +376,24 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        anchors.margins: 12
-                        spacing: 12
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 12
+                        spacing: 10
 
+                        // 24px icon circle @12% (Electron); read items dim to 45%
                         Rectangle {
-                            width: 28
-                            height: 28
-                            radius: 14
-                            color: Qt.rgba(root.severityColor(severity).r, root.severityColor(severity).g, root.severityColor(severity).b, 0.16)
+                            width: 24
+                            height: 24
+                            radius: 12
+                            color: Qt.rgba(root.severityColor(severity).r, root.severityColor(severity).g, root.severityColor(severity).b, 0.12)
+                            opacity: unread ? 1.0 : 0.45
                             Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: 10
 
                             Icon {
                                 anchors.centerIn: parent
                                 name: root.severityIcon(severity)
-                                size: 14
+                                size: 12
                                 color: root.severityColor(severity)
                             }
 
@@ -368,54 +401,79 @@ Rectangle {
 
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 3
+                            spacing: 2
+                            Layout.topMargin: 10
+                            Layout.bottomMargin: 10
 
-                            RowLayout {
+                            // Read/unread title states (Electron: unread =
+                            // semibold primary, read = text-secondary)
+                            Text {
+                                text: title
+                                color: unread ? Colors.textPrimary : Colors.textSecondary
+                                font.pixelSize: 12
+                                font.weight: unread ? Font.DemiBold : Font.Medium
                                 Layout.fillWidth: true
-
-                                Text {
-                                    text: title
-                                    color: Colors.textPrimary
-                                    font.pixelSize: 13
-                                    font.weight: Font.DemiBold
-                                    Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                }
-
-                                Text {
-                                    text: timeText
-                                    color: Colors.textMuted
-                                    font.pixelSize: 10
-                                }
-
+                                elide: Text.ElideRight
                             }
 
                             Text {
                                 visible: body.length > 0
                                 text: body
-                                color: Colors.textSecondary
-                                font.pixelSize: 12
+                                color: Colors.textMuted
+                                font.pixelSize: 11
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
+                                maximumLineCount: 2
                                 lineHeight: 1.35
+                            }
+
+                            // 9px mono uppercase timestamp below the body
+                            Text {
+                                text: timeText.toUpperCase()
+                                color: Colors.textMuted
+                                opacity: 0.7
+                                font.family: Theme.fontMono.family
+                                font.pixelSize: 9
+                                font.letterSpacing: 1.2
                             }
 
                         }
 
+                        // Per-item dismiss (Electron: hover-revealed X, error hover).
+                        // OPACITY toggle — `visible` drops the item from the
+                        // layout, re-eliding titles on every hover pass.
                         Rectangle {
-                            visible: unread
-                            width: 8
-                            height: 8
-                            radius: 4
-                            color: Colors.accent
+                            visible: true
+                            opacity: isHovered ? 1 : 0
+                            width: 20
+                            height: 20
+                            color: itemDismissMa.containsMouse ? Colors.errorSoftBg : "transparent"
                             Layout.alignment: Qt.AlignTop
-                            Layout.topMargin: 6
+                            Layout.topMargin: 8
+
+                            Icon {
+                                anchors.centerIn: parent
+                                name: "x"
+                                size: 10
+                                emphasis: true
+                                color: itemDismissMa.containsMouse ? Colors.statusError : Colors.textMuted
+                            }
+
+                            MouseArea {
+                                id: itemDismissMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Notifier.dismiss(nid)
+                            }
                         }
 
                     }
 
                     MouseArea {
+                        id: notifItemMa
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: Notifier.markRead(nid)
                     }
@@ -426,27 +484,11 @@ Rectangle {
 
         }
 
-        // Footer
+        // Footer (Electron: "Clear all" is in the header; hide this strip)
         Rectangle {
             Layout.fillWidth: true
-            height: 44
-            color: "transparent"
-            visible: Notifier.count > 0
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                height: 1
-                color: Colors.divider
-            }
-
-            GhostButton {
-                anchors.centerIn: parent
-                text: qsTr("Clear all")
-                onClicked: Notifier.clear()
-            }
-
+            height: 0
+            visible: false
         }
 
     }

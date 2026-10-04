@@ -43,5 +43,5 @@
 ## Runtime requirements
 
 1. Qt **WebEngine** in the kit for live morph video  
-2. Rust backend on configured `apiBaseUrl` (default `127.0.0.1:3001`)  
+2. Rust backend on configured `apiBaseUrl` (default `127.0.0.1:3874`)  
 3. Valid auth JWT for signaling and payments  

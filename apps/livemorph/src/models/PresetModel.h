@@ -35,6 +35,7 @@ public:
 
 public slots:
     void load();
+    void persist() const;
     void addCustom(const QString &name, const QString &prompt, const QString &mode = QStringLiteral("prompt"));
     void rename(int index, const QString &newName);
     void removeAt(int index);

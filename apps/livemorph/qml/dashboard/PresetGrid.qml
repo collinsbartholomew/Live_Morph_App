@@ -73,6 +73,20 @@ Item {
                 Layout.fillWidth: true
             }
             GhostButton {
+                id: azBtn
+                text: "A→Z"
+                onClicked: {
+                    Catalog.sortAlphabetically()
+                    App.notify("Sorted alphabetically", "info")
+                }
+                Tooltip {
+                    anchors.top: parent.bottom
+                    anchors.topMargin: 4
+                    text: qsTr("Sort characters A→Z")
+                    shown: azBtn.hovered
+                }
+            }
+            GhostButton {
                 text: "Show hidden"
                 onClicked: {
                     Catalog.unhideAll()
@@ -135,8 +149,12 @@ Item {
             id: grid
             Layout.fillWidth: true
             Layout.fillHeight: true
-            cellWidth: Math.floor((width - 4) / 2)
-            cellHeight: cellWidth + 40
+            // Electron: grid grid-cols-3 gap-2.5, aspect-[4/5] PORTRAIT cards
+            // Electron: grid-cols-3 gap-2.5 (10px) — the aspect math must use
+            // the CARD width (cellWidth − 2×5 margin), not the cell width, or
+            // the portrait 4:5 ratio drifts.
+            cellWidth: Math.floor((width - 10) / 3)
+            cellHeight: Math.floor((cellWidth - 10) * 5 / 4) + 10
             clip: true
             model: Catalog
 
@@ -148,56 +166,18 @@ Item {
                 Rectangle {
                     id: card
                     anchors.fill: parent
-                    anchors.margins: 4
+                    anchors.margins: 5
                     radius: Theme.radiusSm
-                    color: isSelected ? Colors.accent15 : Colors.surfaceOverlay
+                    color: Colors.surfaceOverlay
                     border.color: isSelected ? Colors.accent : Colors.surfaceBorder
-                    border.width: isSelected ? 2 : 1
+                    border.width: 1
                     clip: true
-                    scale: 1.0
-                    Behavior on scale { NumberAnimation { duration: Theme.motionFast } }
                     Behavior on border.color { ColorAnimation { duration: Theme.motionFast } }
-                    Behavior on color { ColorAnimation { duration: Theme.motionFast } }
-                    // Selected glow
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: -1
-                        radius: parent.radius + 1
-                        color: "transparent"
-                        border.color: Colors.accent
-                        border.width: 1
-                        opacity: isSelected ? 0.45 : 0
-                        z: 3
-                    }
 
-                    Rectangle {
-                        visible: isSelected
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.margins: 8
-                        z: 4
-                        height: 20
-                        width: activeLbl.implicitWidth + 12
-                        radius: Theme.radiusFull
-                        color: Colors.accent
-                        Text {
-                            id: activeLbl
-                            anchors.centerIn: parent
-                            text: qsTr("Active")
-                            color: Colors.white
-                            font.pixelSize: 10
-                            font.weight: Font.DemiBold
-                        }
-                    }
-
-                    Rectangle {
+                    // Full-bleed portrait image (Electron: object-cover, 4:5)
+                    Item {
                         id: thumbArea
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        height: parent.width - 8
-                        color: "#0a0a10"
-                        radius: Theme.radiusSm
+                        anchors.fill: parent
                         clip: true
 
                         Image {
@@ -207,6 +187,11 @@ Item {
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                             visible: status === Image.Ready
+                            // Electron image hover: opacity 80→100 + scale 1.02 (500ms)
+                            opacity: cardMa.containsMouse || isSelected ? 1.0 : 0.8
+                            scale: cardMa.containsMouse && !isSelected ? 1.02 : 1.0
+                            Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
+                            Behavior on scale { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
                         }
                         Text {
                             anchors.centerIn: parent
@@ -216,50 +201,66 @@ Item {
                             font.weight: Font.Bold
                             visible: !thumb.visible
                         }
+
+                        // Bottom gradient name bar (Electron: from-black/85)
                         Rectangle {
-                            visible: isPremium
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: 26
+                            gradient: Gradient {
+                                orientation: Qt.Vertical
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 1.0; color: "#d9000000" }
+                            }
+                            Text {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 5
+                                anchors.leftMargin: 6
+                                anchors.rightMargin: 6
+                                text: name || ""
+                                color: "#e6ffffff"
+                                font.pixelSize: 10
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                        }
+
+                        // Selected: 16px accent check badge top-right (check-pop)
+                        Rectangle {
+                            visible: isSelected
                             anchors.top: parent.top
                             anchors.right: parent.right
                             anchors.margins: 6
-                            width: 20; height: 20; radius: 10
+                            width: 16; height: 16; radius: 8
                             color: Colors.accent
-                            Text {
+                            z: 3
+                            Icon {
                                 anchors.centerIn: parent
-                                text: "★"
-                                color: Colors.surfaceBase
-                                font.pixelSize: 11
-                                font.weight: Font.Bold
+                                name: "check"
+                                size: 10
+                                emphasis: true
+                                color: Colors.white
+                            }
+                            // check-pop: scale .6 → 1.18 → 1 (.22s spring)
+                            scale: isSelected ? 1.0 : 0.6
+                            SequentialAnimation on scale {
+                                running: isSelected
+                                NumberAnimation { to: 1.18; duration: 140; easing.type: Easing.OutCubic }
+                                NumberAnimation { to: 1.0; duration: 80; easing.type: Easing.OutCubic }
                             }
                         }
-                        Rectangle {
-                            visible: isSelected
-                            anchors.bottom: parent.bottom
-                            anchors.right: parent.right
-                            anchors.margins: 6
-                            width: 22; height: 22; radius: 11
-                            color: Colors.accent
-                            Text {
-                                anchors.centerIn: parent
-                                text: "✓"
-                                color: Colors.surfaceBase
-                                font.pixelSize: 12
-                                font.weight: Font.Bold
-                            }
-                        }
-                    }
 
-                    Text {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: thumbArea.bottom
-                        anchors.margins: 8
-                        anchors.topMargin: 6
-                        text: name || ""
-                        color: Colors.textPrimary
-                        font.pixelSize: 12
-                        font.weight: Font.Medium
-                        elide: Text.ElideRight
-                        horizontalAlignment: Text.AlignHCenter
+                        // Kind dot (Electron: 4px corner dot — accent for starters)
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.bottom: parent.bottom
+                            anchors.margins: 6
+                            width: 4; height: 4; radius: 2
+                            color: isStarter ? Colors.accent : "#2dd4bf"
+                        }
                     }
 
                     MouseArea {
@@ -268,23 +269,17 @@ Item {
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onEntered: {
-                            if (!isSelected) card.border.color = Colors.accent40
-                            card.scale = 1.02
-                        }
-                        onExited: {
-                            card.border.color = isSelected ? Colors.accent : Colors.surfaceBorder
-                            card.scale = 1.0
-                        }
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.RightButton) {
                                 ctxMenu.characterId = characterId
                                 ctxMenu.characterName = name
                                 ctxMenu.isStarter = isStarter
                                 ctxMenu.popup()
+                            } else if (Session.activeCharacterId === characterId) {
+                                // Electron: clicking the SELECTED card deselects
+                                Session.setActiveCharacter("", "", "", "")
                             } else {
                                 Session.setActiveCharacter(characterId, name, thumbnail || "", description || "")
-                                App.notify("Selected " + name, "success")
                             }
                         }
                         onPressAndHold: {
@@ -322,12 +317,59 @@ Item {
             }
         }
         MenuItem {
+            text: "Delete…"
+            enabled: !ctxMenu.isStarter
+            onTriggered: {
+                deleteDialog.targetId = ctxMenu.characterId
+                deleteDialog.targetName = ctxMenu.characterName
+                deleteDialog.open()
+            }
+        }
+        MenuItem {
             text: "Hide starter"
             enabled: ctxMenu.isStarter
             onTriggered: {
                 Catalog.hideStarter(ctxMenu.characterId)
                 App.notify("Hidden " + ctxMenu.characterName, "info")
             }
+        }
+    }
+
+    Dialog {
+        id: deleteDialog
+        property string targetId: ""
+        property string targetName: ""
+        title: "Delete character"
+        modal: true
+        anchors.centerIn: parent
+        width: 340
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            color: Colors.surfaceRaised
+            border.color: Colors.surfaceBorder
+            radius: Theme.radiusMd
+        }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                text: "Are you sure you want to delete \"" + deleteDialog.targetName + "\"?"
+                color: Colors.textPrimary
+                font.pixelSize: 13
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            Text {
+                text: "This action cannot be undone. You will need to re-upload the reference image if you want to use this character again."
+                color: Colors.textMuted
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+        }
+        standardButtons: Dialog.Yes | Dialog.No
+        onAccepted: {
+            Catalog.deleteCharacter(deleteDialog.targetId)
+            App.notify("Deleted " + deleteDialog.targetName, "info")
         }
     }
 

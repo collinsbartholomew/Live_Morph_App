@@ -78,6 +78,10 @@ public slots:
     void exchangeOAuthTicket(const QString &ticket);
     /// Register: POST /auth/register
     void signUp(const QString &email, const QString &password, const QString &displayName = {});
+    /// Password reset: POST /auth/password-reset-request
+    void requestPasswordReset(const QString &email);
+    /// Password reset: POST /auth/password-reset
+    void completePasswordReset(const QString &token, const QString &email, const QString &password);
     void signOut();
     void logoutAllDevices();
     void deleteAccount();
@@ -97,6 +101,7 @@ signals:
     void authenticatedChanged();
     void isLoadingChanged();
     void errorMessageChanged();
+    void dataExported(const QString &path);
     void profileChanged();
     void tokensChanged();
     void otpSentChanged();
@@ -107,6 +112,8 @@ signals:
     void signedOut();
     void forceDisconnected(const QString &reason);
     void otpRequested(const QString &email);
+    void passwordResetRequested();
+    void passwordResetComplete();
     void googleOAuthStarted(const QString &authorizationUrl);
     void googleAvailableChanged();
 
@@ -132,8 +139,12 @@ private:
     QTimer m_rateLimitTimer;
     QTimer m_googlePollTimer;
     QMetaObject::Connection m_googlePollConnection;
+    int m_googlePollAttempts = 0;
 
     bool m_authenticated = false;
+    /// Fence for in-flight requests: signOut() bumps this epoch; late replies
+    /// captured the old epoch and bail instead of resurrecting auth state.
+    quint64 m_authEpoch = 0;
     bool m_googleAvailable = false;
     bool m_refreshInFlight = false;
     bool m_loading = false;

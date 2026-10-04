@@ -9,8 +9,9 @@ Rectangle {
     border.color: Colors.surfaceBorder
     border.width: 0
 
+    // Right edge border (workshop is on the LEFT now)
     Rectangle {
-        anchors.left: parent.left
+        anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: 1
@@ -18,195 +19,114 @@ Rectangle {
     }
 
     property string workshopMode: "presets"
+    // Collapse API removed (Electron: fixed 360px, always visible)
     property bool collapsed: false
-    signal toggleCollapsed()
-
-    // Collapsed icon rail
-    Column {
-        anchors.fill: parent
-        anchors.margins: 8
-        spacing: 12
-        visible: root.collapsed
-        width: parent.width
-
-        Rectangle {
-            width: 32
-            height: 32
-            radius: Theme.radiusSm
-            anchors.horizontalCenter: parent.horizontalCenter
-            color: expandMa.containsMouse ? Colors.surfaceElevated : Colors.surfaceOverlay
-            border.color: Colors.surfaceBorder
-            border.width: 1
-            Text {
-                anchors.centerIn: parent
-                text: "«"
-                color: Colors.textPrimary
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
-            }
-            MouseArea {
-                id: expandMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.toggleCollapsed()
-            }
-            Tooltip {
-                anchors.left: parent.right
-                anchors.leftMargin: 8
-                anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("Expand workshop")
-                shown: expandMa.containsMouse
-            }
-        }
-
-        Rectangle {
-            width: 32
-            height: 32
-            radius: Theme.radiusSm
-            anchors.horizontalCenter: parent.horizontalCenter
-            color: Colors.accent15
-            border.color: Colors.accent30
-            border.width: 1
-            Text {
-                anchors.centerIn: parent
-                text: Session.activeCharacterName.length
-                      ? Session.activeCharacterName.charAt(0).toUpperCase()
-                      : "◇"
-                color: Colors.accent
-                font.pixelSize: 13
-                font.weight: Font.Bold
-            }
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.toggleCollapsed()
-            }
-        }
-
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            rotation: -90
-            transformOrigin: Item.Center
-            text: qsTr("Workshop")
-            color: Colors.textMuted
-            font.pixelSize: 10
-            font.weight: Font.Medium
-        }
-    }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
-        spacing: 10
-        visible: !root.collapsed
+        spacing: 0
 
+        // Header (Electron: single h2 "Characters")
         RowLayout {
             Layout.fillWidth: true
+            Layout.leftMargin: 16
+            Layout.rightMargin: 12
+            Layout.topMargin: 14
+            Layout.bottomMargin: 10
             Text {
-                text: qsTr("Workshop")
+                text: qsTr("Characters")
                 color: Colors.textPrimary
                 font.pixelSize: 14
                 font.weight: Font.DemiBold
                 Layout.fillWidth: true
-                MouseArea {
-                    id: workshopTitleMa
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.NoButton
-                }
-                Tooltip {
-                    anchors.top: parent.bottom
-                    anchors.topMargin: 4
-                    text: qsTr("Character catalog & presets")
-                    shown: workshopTitleMa.containsMouse
-                }
             }
             Text {
-                text: Catalog.count + " chars"
+                text: qsTr("%1 saved").arg(Catalog.count)
                 color: Colors.textMuted
                 font.pixelSize: 10
-                font.family: "monospace"
+                font.family: Theme.fontMono.family
             }
-            Rectangle {
-                width: 28
-                height: 28
-                radius: Theme.radiusSm
-                color: collapseMa.containsMouse ? Colors.surfaceElevated : "transparent"
-                border.color: collapseMa.containsMouse ? Colors.surfaceBorder : "transparent"
-                border.width: 1
-                Text {
-                    anchors.centerIn: parent
-                    text: "»"
-                    color: Colors.textSecondary
-                    font.pixelSize: 13
-                }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            height: 1
+            color: Colors.surfaceBorderSubtle
+        }
+
+        // Identity lock (Qt functional extra — Electron keeps this in state only)
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 16
+            Layout.rightMargin: 12
+            Layout.topMargin: 8
+            spacing: 6
+            Switch {
+                checked: Session.identityLockEnabled
+                onToggled: Session.identityLockEnabled = checked
+            }
+            Text {
+                text: qsTr("Lock my face")
+                color: Colors.textSecondary
+                font.pixelSize: 11
+                Layout.alignment: Qt.AlignVCenter
+            }
+            Item { Layout.fillWidth: true }
+            Text {
+                visible: Catalog.count >= 2
+                text: qsTr("Sort A\u2192Z")
+                color: sortMa.containsMouse ? Colors.accent : Colors.textMuted
+                font.family: Theme.fontMono.family
+                font.pixelSize: 10
+                Layout.alignment: Qt.AlignVCenter
                 MouseArea {
-                    id: collapseMa
+                    id: sortMa
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleCollapsed()
-                }
-                Tooltip {
-                    anchors.top: parent.bottom
-                    anchors.topMargin: 4
-                    text: qsTr("Collapse workshop")
-                    shown: collapseMa.containsMouse
+                    onClicked: Catalog.sortAlphabetically()
                 }
             }
         }
 
-        // Identity lock + scene toggles
+        // Mode tabs (Qt functional extra: Presets/Upload/Customize)
         RowLayout {
             Layout.fillWidth: true
-            spacing: 12
-            Row {
-                spacing: 6
-                Switch {
-                    checked: Session.identityLockEnabled
-                    onToggled: Session.identityLockEnabled = checked
-                }
-                Text {
-                    text: "ID lock"
-                    color: Colors.textSecondary
-                    font.pixelSize: 11
-                    anchors.verticalCenter: parent.verticalCenter
-                }
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            Layout.topMargin: 8
+            SegmentedControl {
+                Layout.fillWidth: true
+                model: [
+                    { label: qsTr("Presets"), value: "presets" },
+                    { label: qsTr("Upload"), value: "upload" },
+                    { label: qsTr("Customize"), value: "customize" }
+                ]
+                currentValue: root.workshopMode
+                onActivated: (v) => root.workshopMode = v
             }
-            Row {
-                spacing: 6
-                Switch {
-                    checked: App.swapMode === "scene"
-                    onToggled: App.swapMode = checked ? "scene" : "character"
-                }
-                Text {
-                    text: "Scene mode"
-                    color: Colors.textSecondary
-                    font.pixelSize: 11
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-            }
-        }
-
-        SegmentedControl {
-            Layout.fillWidth: true
-            model: [
-                { label: "Presets", value: "presets" },
-                { label: "Customize", value: "customize" }
-            ]
-            currentValue: root.workshopMode
-            onActivated: (v) => root.workshopMode = v
         }
 
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: root.workshopMode === "presets" ? 0 : 1
+            currentIndex: root.workshopMode === "presets" ? 0 : root.workshopMode === "upload" ? 1 : 2
 
             PresetGrid {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+            }
+
+            UploadTab {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                onImageSelected: function(path) {
+                    // Apply uploaded image as active character reference
+                    Session.setActiveCharacter("", "Upload", path, "")
+                    App.notify("Reference image loaded", "success")
+                }
             }
 
             CustomizeForm {

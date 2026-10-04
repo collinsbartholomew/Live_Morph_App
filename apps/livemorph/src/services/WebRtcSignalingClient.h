@@ -43,8 +43,8 @@ public:
     double generationSeconds() const { return m_generationSeconds; }
 
 public slots:
-    /// token = JWT access token from AuthManager; model e.g. "lucy-2.1"
-    void connectToProxy(const QString &wsBaseUrl, const QString &token, const QString &model);
+    /// token = JWT access token from AuthManager; model e.g. "lucy-2.1"; tier e.g. "standard" or "hd"
+    void connectToProxy(const QString &wsBaseUrl, const QString &token, const QString &model, const QString &tier = {});
     void disconnectFromProxy();
     void setAutoReconnect(bool enabled);
 
@@ -57,7 +57,7 @@ public slots:
 signals:
     void connectedChanged();
     void sessionIdChanged();
-    void errorOccurred(const QString &message);
+    void errorOccurred(const QString &message, const QString &code);
     void generatingChanged();
     void generationSecondsChanged();
 
@@ -69,6 +69,7 @@ signals:
     void generationStarted();
     void generationTick(double seconds);
     void generationEnded(double seconds, const QString &reason);
+    void queuePositionChanged(int position, int queueSize);
 
 private slots:
     void onConnected();
@@ -85,7 +86,8 @@ private:
     QString m_wsBase;
     QString m_token;
     QString m_model;
-    bool m_autoReconnect = true;
+    QString m_tier;
+    bool m_autoReconnect = false;
     bool m_userDisconnect = false;
     int m_reconnectAttempt = 0;
     bool m_connected = false;

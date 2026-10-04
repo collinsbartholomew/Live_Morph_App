@@ -51,9 +51,16 @@ pub struct PaymentOrder {
     /// Access key generated for an activation order (surfaced to the client).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access_key: Option<String>,
+    /// Device fingerprint sent by the client for abuse detection / multi-device.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
     pub created_at: bson::DateTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paid_at: Option<bson::DateTime>,
+    /// When a settle worker claimed the order for provisioning (crash-recovery
+    /// staleness is measured from this, never from paid_at).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_at: Option<bson::DateTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provisioned_at: Option<bson::DateTime>,
 }

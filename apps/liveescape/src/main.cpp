@@ -2,11 +2,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
-#include <QDesktopServices>
-#include <QMessageBox>
-#include <QAbstractButton>
-#include <QPushButton>
-#include <QUrl>
+#include <QFontDatabase>
 
 #include "core/MachineIdProvider.h"
 #include "core/ApiClient.h"
@@ -16,6 +12,7 @@
 #include "core/StreamController.h"
 #include "core/WebSocketClient.h"
 #include "core/DecartSignalingClient.h"
+#include "I18nManager.h"
 #include <QtQml>
 
 int main(int argc, char *argv[])
@@ -26,9 +23,17 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationDomain(QStringLiteral("liveescapeapp.com"));
     QCoreApplication::setApplicationVersion(QStringLiteral("1.8.0"));
 
+    // Bundled fonts — match the Electron theme (Inter + JetBrains Mono).
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Inter-Variable.ttf"));
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Rajdhani-Regular.ttf"));
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Rajdhani-Medium.ttf"));
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Rajdhani-SemiBold.ttf"));
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Rajdhani-Bold.ttf"));
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/JetBrainsMono-Variable.ttf"));
+
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    // Optional override: LIVEESCAPE_API_URL=http://localhost:8881
+    // Optional override: LIVEESCAPE_API_URL=http://localhost:3874
     ApiClient api;
     if (const QByteArray env = qgetenv("LIVEESCAPE_API_URL"); !env.isEmpty())
         api.setBaseUrl(QString::fromUtf8(env));
@@ -39,28 +44,15 @@ int main(int argc, char *argv[])
     DecartSignalingClient decart;
     StreamController stream(&session, &api, &decart);
     WebSocketClient ws;
-    AppController controller(&api, &session, &machineId, &updater, &stream, &ws);
-
-    QObject::connect(&updater, &UpdateChecker::forceUpdateRequired,
-                     &app, [&](const QString &latest, const QString &dlUrl) {
-        QDesktopServices::openUrl(QUrl(dlUrl));
-        QMessageBox box;
-        box.setIcon(QMessageBox::Warning);
-        box.setWindowTitle(QStringLiteral("Update Required"));
-        box.setText(QStringLiteral("Update Required"));
-        box.setInformativeText(
-            QStringLiteral("v%1 is no longer supported.\nv%2 is required.\n\n"
-                           "The download page has been opened in your browser.")
-                .arg(QCoreApplication::applicationVersion(),
-                     latest.isEmpty() ? QStringLiteral("latest") : latest));
-        box.addButton(QStringLiteral("Download Update"), QMessageBox::AcceptRole);
-        QAbstractButton *quitBtn =
-            box.addButton(QStringLiteral("Quit"), QMessageBox::RejectRole);
-        box.exec();
-        QCoreApplication::quit();
-    });
-
     QQmlApplicationEngine engine;
+    I18nManager i18n(&engine, QStringLiteral("LiveEscape"),
+                      QStringLiteral(":/i18n/liveescape_en.ts"));
+    AppController controller(&api, &session, &machineId, &updater, &stream, &ws);
+    controller.setI18nManager(&i18n);
+
+    // Force-update handling is owned by the QML ForceUpdateModal via
+    // AppController (modal + download/quit buttons). No native dialog here.
+
     auto *ctx = engine.rootContext();
     ctx->setContextProperty(QStringLiteral("App"), &controller);
     ctx->setContextProperty(QStringLiteral("Session"), &session);
@@ -71,13 +63,30 @@ int main(int argc, char *argv[])
     ctx->setContextProperty(QStringLiteral("Mjpeg"), &stream);
     ctx->setContextProperty(QStringLiteral("Ws"), &ws);
     ctx->setContextProperty(QStringLiteral("Decart"), &decart);
+    ctx->setContextProperty(QStringLiteral("I18n"), &i18n);
 
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,
-        &app, []() { QCoreApplication::exit(-1); },
+        &app, [](const QUrl &url) {
+            qCritical().noquote() << "QML object creation failed for:" << url;
+            QCoreApplication::exit(-1);
+        },
         Qt::QueuedConnection);
+
+    QObject::connect(
+        &engine, &QQmlApplicationEngine::warnings,
+        &app, [](const QList<QQmlError> &warnings) {
+            for (const auto &w : warnings)
+                qWarning().noquote() << "QML warning:" << w.toString();
+        });
 
     engine.loadFromModule("LiveEscape", "Main");
     controller.boot();
+    // Handle `liveescape://` deep links passed on the command line
+    // (registered as URL protocol handler by the packaging scripts).
+    for (const QString &arg : app.arguments()) {
+        if (arg.startsWith(QLatin1String("liveescape://")))
+            controller.handleDeepLink(arg);
+    }
     return app.exec();
 }

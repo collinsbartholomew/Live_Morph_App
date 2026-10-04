@@ -23,6 +23,10 @@ Item {
     readonly property int durationMs: 4500
     property int _seq: 0
     property int _lastMirrorTs: 0
+    // Toast action callbacks live in a JS side-map (keyed by toastId), not in
+    // the ListModel: storing functions/nulls in model roles triggers
+    // "Adding an object with a null member does not create a role for it".
+    property var _cbs: ({})
 
     function mirror(title, sev, body) {
         var now = Date.now();
@@ -62,19 +66,27 @@ Item {
             }
         }
         var id = ++root._seq;
+        if (f)
+            root._cbs[id] = f;
         toastModel.insert(0, {
             "toastId": id,
             "message": m,
             "type": k,
             "detail": d,
             "actionLabel": a,
-            "cb": f,
             "remaining": root.durationMs,
             "total": root.durationMs,
             "hovered": false,
             "exiting": false
         });
         root._trim();
+    }
+
+    function invokeCb(id) {
+        var f = root._cbs[id];
+        delete root._cbs[id];
+        if (typeof f === "function")
+            f();
     }
 
     // Weighted eviction: info rows go first, so a burst never kills errors/warnings.
@@ -90,6 +102,7 @@ Item {
             if (drop < 0)
                 drop = toastModel.count - 1;
 
+            delete root._cbs[toastModel.get(drop).toastId];
             toastModel.remove(drop, 1);
         }
     }
@@ -97,26 +110,36 @@ Item {
     function removeById(id) {
         for (var i = 0; i < toastModel.count; i++) {
             if (toastModel.get(i).toastId === id) {
+                delete root._cbs[id];
                 toastModel.remove(i, 1);
                 return ;
             }
         }
+        delete root._cbs[id];
     }
 
     function removeAt(i) {
-        if (i >= 0 && i < toastModel.count)
+        if (i >= 0 && i < toastModel.count) {
+            delete root._cbs[toastModel.get(i).toastId];
             toastModel.remove(i, 1);
+        }
 
     }
 
     function dismiss() {
         toastModel.clear();
+        root._cbs = {};
     }
 
-    anchors.left: parent.left
+    // Electron: toasts live BOTTOM-RIGHT (320px) — the old top-center stack
+    // was an invention. Functional extras kept: stacking ≤3, auto-dismiss,
+    // hover-pause, progress bar.
     anchors.right: parent.right
-    anchors.top: parent.top
-    anchors.topMargin: 52
+    anchors.bottom: parent.bottom
+    anchors.rightMargin: 24
+    // StatusBar (32) + ActionBar (88) = 120px chrome + 16px gap
+    anchors.bottomMargin: 136
+    width: 320
     height: col.implicitHeight
     z: 900
 
@@ -127,8 +150,7 @@ Item {
     Column {
         id: col
 
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.min(parent.width - 32, 420)
+        width: parent.width
         spacing: 10
 
         Repeater {
@@ -151,18 +173,9 @@ Item {
 
                     return Colors.statusInfo;
                 }
-                readonly property color typeBg: {
-                    if (model.type === "error")
-                        return Colors.toastErrorBg;
-
-                    if (model.type === "success")
-                        return Colors.toastSuccessBg;
-
-                    if (model.type === "warning")
-                        return Colors.toastWarningBg;
-
-                    return Colors.toastInfoBg;
-                }
+                // Electron toast card: bg-surface-raised/95 + TYPE-TINTED
+                // HEADER STRIP — not per-type card fills.
+                readonly property color typeStripBg: Qt.rgba(wrap.typeColor.r, wrap.typeColor.g, wrap.typeColor.b, 0.08)
                 readonly property string typeIcon: {
                     if (model.type === "error")
                         return "x-circle";
@@ -186,21 +199,61 @@ Item {
                     id: card
 
                     width: parent.width
-                    implicitHeight: inner.implicitHeight + 4
-                    radius: Theme.radiusLg
-                    color: wrap.typeBg
+                    implicitHeight: inner.implicitHeight + 32 // + header strip
+                    radius: Theme.radiusMd
+                    color: "#101019f2" // surface-raised/95
                     border.width: 1
-                    border.color: Qt.rgba(wrap.typeColor.r, wrap.typeColor.g, wrap.typeColor.b, 0.35)
+                    border.color: Colors.surfaceBorder
+                    // shadow-modal
+                    Rectangle { anchors.fill: parent; anchors.margins: -2; radius: parent.radius + 2; color: "#00000059"; z: -1 }
+                    Rectangle { anchors.fill: parent; anchors.margins: -10; anchors.topMargin: -4; radius: parent.radius + 10; color: "#0000008c"; opacity: 0.9; z: -1 }
 
-                    // Left accent strip
+                    // Header strip (Electron): type-tinted band with icon +
+                    // uppercase mono label, hairline bottom border
                     Rectangle {
-                        width: 3
+                        id: headerStrip
                         anchors.left: parent.left
+                        anchors.right: parent.right
                         anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        anchors.margins: 1
-                        radius: 2
-                        color: wrap.typeColor
+                        height: 30
+                        radius: Theme.radiusMd
+                        color: wrap.typeStripBg
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: 1
+                            color: Qt.rgba(wrap.typeColor.r, wrap.typeColor.g, wrap.typeColor.b, 0.15)
+                        }
+                        Row {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 8
+                            Icon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                name: wrap.typeIcon
+                                size: 14
+                                color: wrap.typeColor
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: model.type.toUpperCase()
+                                color: wrap.typeColor
+                                font.family: Theme.fontMono.family
+                                font.pixelSize: 10
+                                font.capitalization: Font.AllUppercase
+                                font.letterSpacing: 1.2
+                            }
+                        }
+                        // Bottom-left square corners for the strip
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.bottom: parent.bottom
+                            width: parent.radius
+                            height: parent.radius
+                            color: parent.color
+                        }
                     }
 
                     ColumnLayout {
@@ -209,29 +262,15 @@ Item {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        anchors.margins: 14
-                        anchors.leftMargin: 16
+                        anchors.topMargin: 30 // below the header strip
+                        anchors.margins: 12
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
                         spacing: 6
 
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 12
-
-                            Rectangle {
-                                width: 28
-                                height: 28
-                                radius: 14
-                                color: Qt.rgba(wrap.typeColor.r, wrap.typeColor.g, wrap.typeColor.b, 0.18)
-                                Layout.alignment: Qt.AlignTop
-
-                                Icon {
-                                    anchors.centerIn: parent
-                                    name: wrap.typeIcon
-                                    size: 16
-                                    color: wrap.typeColor
-                                }
-
-                            }
+                            spacing: 10
 
                             ColumnLayout {
                                 Layout.fillWidth: true
@@ -240,7 +279,7 @@ Item {
                                 Text {
                                     text: model.message
                                     color: Colors.textPrimary
-                                    font.pixelSize: 13
+                                    font.pixelSize: 12
                                     font.weight: Font.DemiBold
                                     wrapMode: Text.WordWrap
                                     Layout.fillWidth: true
@@ -249,42 +288,42 @@ Item {
                                 Text {
                                     visible: model.detail && model.detail.length > 0
                                     text: model.detail || ""
-                                    color: Colors.textSecondary
-                                    font.pixelSize: 12
+                                    color: Colors.textMuted
+                                    font.pixelSize: 11
+                                    font.family: Theme.fontMono.family
                                     wrapMode: Text.WordWrap
                                     Layout.fillWidth: true
                                 }
 
                             }
 
-                            // Action chip
+                            // Action chip (Electron: uppercase mono accent chip)
                             Rectangle {
                                 visible: model.actionLabel && model.actionLabel.length > 0
-                                radius: Theme.radiusFull
-                                color: Colors.accent15
+                                radius: Theme.radiusSm
+                                color: Colors.accent10
                                 border.color: Colors.accent30
                                 border.width: 1
                                 implicitWidth: actLbl.implicitWidth + 16
-                                implicitHeight: 28
-                                Layout.alignment: Qt.AlignTop
+                                implicitHeight: 24
+                                Layout.alignment: Qt.AlignVCenter
 
                                 Text {
                                     id: actLbl
 
                                     anchors.centerIn: parent
-                                    text: model.actionLabel || ""
+                                    text: (model.actionLabel || "").toUpperCase()
                                     color: Colors.accentHover
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
+                                    font.family: Theme.fontMono.family
+                                    font.pixelSize: 10
+                                    font.letterSpacing: 0.8
                                 }
 
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        if (model.cb)
-                                            model.cb();
-
+                                        root.invokeCb(model.toastId);
                                         root.removeById(model.toastId);
                                     }
                                 }
@@ -363,18 +402,21 @@ Item {
 
                 // Exit animation completion -> remove the row
                 Timer {
-                    interval: 200
+                    interval: 260
                     running: model.exiting
                     onTriggered: root.removeById(model.toastId)
                 }
 
+                // Electron slide-in-bottom (.26s cubic-bezier(.16,1,.3,1)):
+                // opacity + 12px rise together
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: Theme.motionNormal
+                        duration: 260
                         easing.type: Easing.OutCubic
                     }
 
                 }
+                transform: Translate { y: wrap.shown && !wrap.model.exiting ? 0 : 12 }
 
             }
 

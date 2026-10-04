@@ -30,6 +30,15 @@ async fn main() -> anyhow::Result<()> {
         e
     })?;
 
+    // rustls (used by tokio-tungstenite / reqwest / lettre) has NO default
+    // crypto provider when multiple backends are enabled — install the
+    // process default once at startup, otherwise the realtime proxy panics
+    // the first time it dials the upstream (wss://api3.decart.ai).
+    rustls::crypto::CryptoProvider::install_default(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    )
+    .expect("failed to install rustls CryptoProvider");
+
     fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_target(true)
@@ -148,6 +157,49 @@ async fn main() -> anyhow::Result<()> {
     let bind = cfg.bind_addr();
     let max_body = cfg.max_body_bytes;
 
+    // ── Session reaper: mark stale morph sessions as ended ───────────
+    {
+        let db = db.clone();
+        actix_web::rt::spawn(async move {
+            use chrono::{Duration, Utc};
+            use mongodb::bson::doc;
+            loop {
+                actix_web::rt::time::sleep(std::time::Duration::from_secs(60)).await;
+                let cutoff = Utc::now() - Duration::minutes(10);
+                let stale_filter = doc! {
+                    "status": { "$in": ["connecting", "generating"] },
+                    "started_at": { "$lt": cutoff },
+                };
+                // Mark morph sessions
+                if let Ok(r) = db.db.collection::<mongodb::bson::Document>("morph_sessions")
+                    .update_many(stale_filter.clone(), doc! {
+                        "$set": {
+                            "status": "ended",
+                            "end_reason": "reaper_timeout",
+                            "ended_at": Utc::now(),
+                        }
+                    }).await {
+                    if r.modified_count > 0 {
+                        tracing::warn!(count = r.modified_count, "reaper: marked stale morph sessions as ended");
+                    }
+                }
+                // Mark LiveEscape sessions
+                if let Ok(r) = db.sessions_le()
+                    .update_many(stale_filter, doc! {
+                        "$set": {
+                            "status": "ended",
+                            "end_reason": "reaper_timeout",
+                            "ended_at": Utc::now(),
+                        }
+                    }).await {
+                    if r.modified_count > 0 {
+                        tracing::warn!(count = r.modified_count, "reaper: marked stale LE sessions as ended");
+                    }
+                }
+            }
+        });
+    }
+
     tracing::info!(
         %bind,
         env = %cfg.rust_env,
@@ -158,6 +210,9 @@ async fn main() -> anyhow::Result<()> {
     HttpServer::new(move || {
         let cors = build_cors(&cfg);
 
+        // Single unified `/api/v1` namespace. Frontend/product identity is carried
+        // exclusively by the X-Frontend-Id / X-Client-Product headers (+ WS query).
+        // No product-named scopes, no root-level aliases — one backend movement per route.
         let api_v1 = web::scope("/api/v1")
             .configure(routes::health::configure)
             .configure(routes::bootstrap::configure)
@@ -178,22 +233,9 @@ async fn main() -> anyhow::Result<()> {
             .configure(routes::referral::configure)
             .configure(routes::creator::configure)
             .configure(routes::activation::configure)
-            .configure(routes::public::configure);
-
-        // ── Root-scope services (no prefix) ─────────────────────────────────
-        // All root-level routes must live in a SINGLE scope to avoid Actix
-        // returning 404 on the first empty-prefix scope that doesn't have the route.
-        let root = web::scope("")
-            .configure(routes::realtime::configure_aliases)
-            .configure(routes::payments::configure_webhook_aliases)
-            .configure(routes::bootstrap::configure_root)
-            .configure(routes::keys::configure)
-            .configure(routes::settings::configure)
-            .configure(routes::streaming::configure)
-            .configure(routes::referral::configure)
-            .configure(routes::creator::configure)
-            .configure(routes::activation::configure)
-            .configure(routes::public::configure);
+            .configure(routes::public::configure)
+            .configure(routes::user_characters::configure)
+            .configure(routes::downloads::configure);
 
         App::new()
             .app_data(web::Data::new(cfg.clone()))
@@ -222,7 +264,6 @@ async fn main() -> anyhow::Result<()> {
                 config: cfg.clone(),
             })
             .service(api_v1)
-            .service(root)
     })
     .bind(&bind)?
     .run()

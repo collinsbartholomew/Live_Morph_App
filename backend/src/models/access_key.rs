@@ -19,10 +19,13 @@ pub struct AccessKey {
     pub created_at: bson::DateTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub activated_at: Option<bson::DateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<bson::DateTime>,
 }
 
 impl AccessKey {
     pub fn new(plan: &str, credits: f64) -> Self {
+        let now = chrono::Utc::now();
         Self {
             id: Uuid::new_v4().to_string(),
             key: gen_key(),
@@ -31,26 +34,31 @@ impl AccessKey {
             plan: plan.into(),
             credits_granted: credits,
             active: true,
-            created_at: bson::DateTime::from_chrono(chrono::Utc::now()),
+            created_at: bson::DateTime::from_chrono(now),
             activated_at: None,
+            // Annual license: 365 days from issuance.
+            expires_at: Some(bson::DateTime::from_chrono(
+                now + chrono::Duration::days(365),
+            )),
         }
     }
 }
 
-fn gen_key() -> String {
+pub fn random_key_part() -> String {
     use rand::RngExt;
     let mut rng = rand::rng();
-    let mut part = |n: usize| {
-        (0..n)
-            .map(|_| {
-                let c: u8 = rng.random_range(0..36);
-                if c < 10 {
-                    (b'0' + c) as char
-                } else {
-                    (b'A' + (c - 10)) as char
-                }
-            })
-            .collect::<String>()
-    };
-    format!("SS-{}-{}-{}", part(4), part(4), part(4))
+    (0..4)
+        .map(|_| {
+            let c: u8 = rng.random_range(0..36);
+            if c < 10 {
+                (b'0' + c) as char
+            } else {
+                (b'A' + (c - 10)) as char
+            }
+        })
+        .collect::<String>()
+}
+
+fn gen_key() -> String {
+    format!("SS-{}-{}-{}", random_key_part(), random_key_part(), random_key_part())
 }

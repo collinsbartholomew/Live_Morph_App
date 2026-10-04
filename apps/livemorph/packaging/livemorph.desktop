@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LiveMorph
+GenericName=AI Face Morph
+Comment=Realtime AI character swap desktop app
+Exec=Livemorph %F
+Icon=livemorph
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=ai;morph;face;swap;stream;
+StartupWMClass=Livemorph

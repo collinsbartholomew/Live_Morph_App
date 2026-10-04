@@ -6,6 +6,7 @@ use crate::config::Config;
 use crate::db::{new_id, Db};
 use crate::error::{AppError, AppResult};
 use crate::models::{CreditLedgerEntry, OtpChallenge, User};
+use crate::product::ProductId;
 use crate::services::google_oauth;
 use actix_web::{get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use chrono::{Duration, Utc};
@@ -20,6 +21,8 @@ pub fn configure_public(cfg: &mut web::ServiceConfig) {
         .service(verify_otp_login)
         .service(register_password)
         .service(login_password)
+        .service(password_reset_request)
+        .service(password_reset_complete)
         .service(refresh)
         .service(oauth_google_start)
         .service(oauth_google_callback)
@@ -51,10 +54,22 @@ pub struct VerifyBody {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct PasswordRegister {
     pub email: String,
     pub password: String,
+    #[serde(default)]
     pub display_name: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub phone: Option<String>,
+    #[serde(default)]
+    pub referral_code: Option<String>,
+    #[serde(default)]
+    pub ref_code: Option<String>,
+    #[serde(default)]
+    pub accepted_terms: Option<bool>,
     #[serde(default)]
     pub device_id: Option<String>,
 }
@@ -72,6 +87,146 @@ pub struct RefreshBody {
     pub refresh_token: String,
 }
 
+#[derive(Deserialize)]
+pub struct ResetRequestBody {
+    pub email: String,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+pub struct ResetCompleteBody {
+    pub token: String,
+    pub password: String,
+    #[serde(default)]
+    pub email: Option<String>,
+}
+
+#[post("/auth/password-reset-request")]
+async fn password_reset_request(
+    db: web::Data<Db>,
+    cfg: web::Data<Arc<Config>>,
+    req: HttpRequest,
+    body: web::Json<ResetRequestBody>,
+) -> AppResult<HttpResponse> {
+    let product = ProductId::from_request(&req);
+    let ip = crate::auth::client_ip(&req);
+    if !crate::auth::check_rate_limit(
+        &ip,
+        "password-reset",
+        cfg.auth_max_attempts,
+        cfg.auth_lockout_secs.max(1) as u64,
+    ) {
+        return Err(AppError::RateLimited(format!(
+            "too many password reset attempts — try again in {} seconds",
+            cfg.auth_lockout_secs.max(1)
+        )));
+    }
+    validate_email(&body.email)?;
+    let email = body.email.trim().to_lowercase();
+    // Don't leak account existence.
+    let exists = user_store(&db, product)
+        .find_one(doc! { "email": &email })
+        .await?
+        .is_some();
+    if !exists {
+        return Ok(HttpResponse::Ok().json(json!({
+            "ok": true,
+            "message": "If your email is registered, a reset link has been sent."
+        })));
+    }
+    let token = uuid::Uuid::new_v4().to_string().replace('-', "");
+    let th = hash_token(&token);
+    let coll = reset_token_store(&db, product);
+    coll.insert_one(doc! {
+        "_id": new_id(),
+        "email": &email,
+        "product": product.as_str(),
+        "token_hash": &th,
+        "consumed": false,
+        "expires_at": Utc::now() + Duration::minutes(30),
+    })
+    .await?;
+    // Never log the raw reset token (bearer credential). Gate logging like OTP codes.
+    if cfg.log_otp_codes {
+        tracing::info!(%email, "password reset token issued (log_otp_codes enabled)");
+    }
+    match crate::services::mail::send_password_reset_email(&cfg, &email, &token).await {
+        Ok(()) => {}
+        Err(e) => {
+            tracing::warn!(error = %e, "password reset email delivery failed");
+        }
+    }
+    Ok(HttpResponse::Ok().json(json!({
+        "ok": true,
+        "message": "If your email is registered, a reset link has been sent."
+    })))
+}
+
+#[post("/auth/password-reset")]
+async fn password_reset_complete(
+    db: web::Data<Db>,
+    req: HttpRequest,
+    body: web::Json<ResetCompleteBody>,
+) -> AppResult<HttpResponse> {
+    let product = ProductId::from_request(&req);
+    // Throttle token-grinding: lenient (30/min) since the token is a 122-bit
+    // UUID, but the control must exist (audit: unlimited attempts absent).
+    let ip = crate::auth::client_ip(&req);
+    if !crate::auth::check_rate_limit(&ip, "password-reset-complete", 30, 60) {
+        return Err(AppError::RateLimited(
+            "too many attempts — try again in 60 seconds".into(),
+        ));
+    }
+    let token = body.token.trim().to_string();
+    if token.len() < 16 {
+        return Err(AppError::BadRequest("Reset token is missing.".into()));
+    }
+    if body.password.len() < 8 || body.password.len() > 128 {
+        return Err(AppError::BadRequest(
+            "Password must be at least 8 characters.".into(),
+        ));
+    }
+    let th = hash_token(&token);
+    let coll = reset_token_store(&db, product);
+    // CAS consume: atomically flip consumed=false → true so two concurrent
+    // resets can never both read the token as unconsumed.
+    let consumed = coll
+        .find_one_and_update(
+            doc! {
+                "token_hash": &th,
+                "product": product.as_str(),
+                "consumed": false,
+                "expires_at": { "$gt": Utc::now() },
+            },
+            doc! { "$set": { "consumed": true, "consumed_at": Utc::now() } },
+        )
+        .await?
+        .ok_or_else(|| AppError::BadRequest("Reset token is invalid or expired.".into()))?;
+    let email = consumed.get_str("email").unwrap_or("").to_string();
+
+    let users = user_store(&db, product);
+    let user = users
+        .find_one(doc! { "email": &email })
+        .await?
+        .ok_or_else(|| AppError::NotFound("user".into()))?;
+    let new_hash = hash_password(&body.password)?;
+    users
+        .update_one(
+            doc! { "_id": &user.id },
+            doc! { "$set": { "password_hash": new_hash, "updated_at": Utc::now() } },
+        )
+        .await?;
+    // Revoke all existing sessions on password change.
+    refresh_store(&db, product)
+        .delete_many(doc! { "user_id": &user.id })
+        .await?;
+    audit(&db, &user.id, "password_reset", None).await;
+    Ok(HttpResponse::Ok().json(json!({
+        "ok": true,
+        "message": "Password reset successfully. Please sign in."
+    })))
+}
+
 #[derive(Serialize)]
 struct AuthResponse {
     access_token: String,
@@ -80,20 +235,75 @@ struct AuthResponse {
     user: crate::models::UserPublic,
 }
 
+fn user_store(db: &Db, product: ProductId) -> mongodb::Collection<User> {
+    match product {
+        ProductId::LiveEscape => db.users_le(),
+        ProductId::LiveMorph => db.users(),
+    }
+}
+
+fn ledger_store(db: &Db, product: ProductId) -> mongodb::Collection<CreditLedgerEntry> {
+    match product {
+        ProductId::LiveEscape => db.ledger_le(),
+        ProductId::LiveMorph => db.ledger(),
+    }
+}
+
+fn refresh_store(db: &Db, product: ProductId) -> mongodb::Collection<bson::Document> {
+    match product {
+        ProductId::LiveEscape => db.refresh_tokens_le(),
+        ProductId::LiveMorph => db.refresh_tokens(),
+    }
+}
+fn otp_store(db: &Db, product: ProductId) -> mongodb::Collection<OtpChallenge> {
+    match product {
+        ProductId::LiveEscape => db.otps_le(),
+        ProductId::LiveMorph => db.otps(),
+    }
+}
+fn reset_token_store(db: &Db, product: ProductId) -> mongodb::Collection<bson::Document> {
+    match product {
+        ProductId::LiveEscape => db.password_reset_tokens_le(),
+        ProductId::LiveMorph => db.password_reset_tokens(),
+    }
+}
+
+async fn store_refresh_for(
+    db: &Db,
+    user_id: &str,
+    token: &str,
+    product: ProductId,
+) -> AppResult<()> {
+    let th = hash_token(token);
+    refresh_store(db, product)
+        .insert_one(doc! {
+            "user_id": user_id,
+            "token_hash": th,
+            "created_at": chrono::Utc::now(),
+        })
+        .await?;
+    Ok(())
+}
+
 #[post("/auth/otp/request")]
 async fn request_otp(
     db: web::Data<Db>,
     cfg: web::Data<Arc<Config>>,
+    req: HttpRequest,
     body: web::Json<EmailBody>,
 ) -> AppResult<HttpResponse> {
     validate_email(&body.email)?;
     let email = body.email.trim().to_lowercase();
+    let product = ProductId::from_request(&req);
 
     // Rate limit: count recent challenges
     let since = Utc::now() - Duration::seconds(cfg.auth_lockout_secs);
-    let recent = db
-        .otps()
-        .count_documents(doc! { "email": &email, "created_at": { "$gte": since } })
+    let recent = otp_store(&db, product)
+        .count_documents(doc! {
+            "email": &email,
+            "product": product.as_str(),
+            "created_at": { "$gte": since }
+        })
         .await?;
     if recent >= cfg.auth_max_attempts as u64 {
         return Err(AppError::RateLimited(format!(
@@ -103,10 +313,9 @@ async fn request_otp(
     }
 
     // Invalidate any previous unconsumed challenges so only the latest code works
-    let _ = db
-        .otps()
+    let _ = otp_store(&db, product)
         .update_many(
-            doc! { "email": &email, "consumed": false },
+            doc! { "email": &email, "product": product.as_str(), "consumed": false },
             doc! { "$set": { "consumed": true } },
         )
         .await;
@@ -115,6 +324,7 @@ async fn request_otp(
     let challenge = OtpChallenge {
         id: new_id(),
         email: email.clone(),
+        product: product.as_str().into(),
         code_hash: hash_otp(&code),
         attempts: 0,
         max_attempts: cfg.auth_max_attempts,
@@ -122,7 +332,7 @@ async fn request_otp(
         created_at: bson::DateTime::from_chrono(Utc::now()),
         consumed: false,
     };
-    db.otps().insert_one(&challenge).await?;
+    otp_store(&db, product).insert_one(&challenge).await?;
 
     // Production: send email via your SMTP. For local/dev we log the code
     // only when LOG_OTP_CODES=true (default true in .env) to avoid leaking
@@ -156,8 +366,10 @@ async fn request_otp(
 async fn verify_otp_login(
     db: web::Data<Db>,
     cfg: web::Data<Arc<Config>>,
+    req: HttpRequest,
     body: web::Json<VerifyBody>,
 ) -> AppResult<HttpResponse> {
+    let product = ProductId::from_request(&req);
     validate_email(&body.email)?;
     let email = body.email.trim().to_lowercase();
     let code = body.code.trim().to_string();
@@ -168,11 +380,11 @@ async fn verify_otp_login(
         )));
     }
 
-    // Prefer the newest unconsumed, unexpired challenge
-    let challenge = db
-        .otps()
+    // Prefer the newest unconsumed, unexpired challenge for THIS product
+    let challenge = otp_store(&db, product)
         .find_one(doc! {
             "email": &email,
+            "product": product.as_str(),
             "consumed": false,
             "expires_at": { "$gt": Utc::now() }
         })
@@ -183,8 +395,7 @@ async fn verify_otp_login(
 
     if !verify_otp(&code, &challenge.code_hash) {
         // Atomic: only increment if under max_attempts (closes TOCTOU window)
-        let bumped = db
-            .otps()
+        let bumped = otp_store(&db, product)
             .update_one(
                 doc! {
                     "_id": &challenge.id,
@@ -203,8 +414,7 @@ async fn verify_otp_login(
     }
 
     // Atomic consume — reject if already used (parallel verify race)
-    let consumed = db
-        .otps()
+    let consumed = otp_store(&db, product)
         .update_one(
             doc! { "_id": &challenge.id, "consumed": false },
             doc! { "$set": { "consumed": true } },
@@ -216,7 +426,7 @@ async fn verify_otp_login(
         ));
     }
 
-    let mut user = upsert_user_by_email(&db, &cfg, &email, None).await?;
+    let mut user = upsert_user_by_email(&db, &cfg, &email, None, product).await?;
     if !user.is_active {
         return Err(AppError::Forbidden("account deactivated".into()));
     }
@@ -225,8 +435,7 @@ async fn verify_otp_login(
         let did = did.trim();
         if !did.is_empty() && user.device_id.as_deref() != Some(did) {
             user.device_id = Some(did.to_string());
-            let _ = db
-                .users()
+            let _ = user_store(&db, product)
                 .update_one(
                     doc! { "_id": &user.id },
                     doc! { "$set": { "device_id": did, "last_login_at": Utc::now() } },
@@ -235,7 +444,7 @@ async fn verify_otp_login(
         }
     }
     let tokens = issue_pair(&cfg, &user.id, &user.email)?;
-    store_refresh(&db, &user.id, &tokens.refresh_token).await?;
+    store_refresh_for(&db, &user.id, &tokens.refresh_token, product).await?;
 
     Ok(HttpResponse::Ok().json(AuthResponse {
         access_token: tokens.access_token,
@@ -249,24 +458,49 @@ async fn verify_otp_login(
 async fn register_password(
     db: web::Data<Db>,
     cfg: web::Data<Arc<Config>>,
+    req: HttpRequest,
     body: web::Json<PasswordRegister>,
 ) -> AppResult<HttpResponse> {
+    let product = ProductId::from_request(&req);
+    let ip = crate::auth::client_ip(&req);
+    if !crate::auth::check_rate_limit(
+        &ip,
+        "register",
+        cfg.auth_max_attempts,
+        cfg.auth_lockout_secs.max(1) as u64,
+    ) {
+        return Err(AppError::RateLimited(format!(
+            "too many registration attempts — try again in {} seconds",
+            cfg.auth_lockout_secs.max(1)
+        )));
+    }
     validate_email(&body.email)?;
     if body.password.len() < 8 || body.password.len() > 128 {
         return Err(AppError::BadRequest(
             "password must be 8–128 characters".into(),
         ));
     }
+    if let Some(true) = body.accepted_terms {
+        // ok
+    } else if let Some(false) = body.accepted_terms {
+        return Err(AppError::BadRequest(
+            "You must accept the Terms & Conditions to continue.".into(),
+        ));
+    }
     let email = body.email.trim().to_lowercase();
-    if db
-        .users()
+    if user_store(&db, product)
         .find_one(doc! { "email": &email })
         .await?
         .is_some()
     {
         return Err(AppError::Conflict("email already registered".into()));
     }
-    let mut user = User::new(email, body.display_name.clone(), cfg.signup_bonus_credits);
+    let mut user = User::new(
+        email,
+        body.display_name.clone().or_else(|| body.name.clone()),
+        cfg.signup_bonus_credits,
+    );
+    user.product = product.as_str().into();
     user.password_hash = Some(hash_password(&body.password)?);
     if let Some(ref did) = body.device_id {
         let did = did.trim();
@@ -274,7 +508,13 @@ async fn register_password(
             user.device_id = Some(did.to_string());
         }
     }
-    db.users().insert_one(&user).await?;
+    if let Some(ref code) = body.referral_code.clone().or(body.ref_code.clone()) {
+        let code = code.trim().to_uppercase();
+        if !code.is_empty() {
+            user.referred_by = Some(code);
+        }
+    }
+    user_store(&db, product).insert_one(&user).await?;
     if cfg.signup_bonus_credits > 0.0 {
         let entry = crate::models::CreditLedgerEntry {
             id: crate::db::new_id(),
@@ -286,10 +526,10 @@ async fn register_password(
             note: Some("welcome bonus".into()),
             created_at: bson::DateTime::from_chrono(chrono::Utc::now()),
         };
-        db.ledger().insert_one(&entry).await?;
+        ledger_store(&db, product).insert_one(&entry).await?;
     }
     let tokens = issue_pair(&cfg, &user.id, &user.email)?;
-    store_refresh(&db, &user.id, &tokens.refresh_token).await?;
+    store_refresh_for(&db, &user.id, &tokens.refresh_token, product).await?;
     Ok(HttpResponse::Created().json(AuthResponse {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
@@ -305,19 +545,22 @@ async fn login_password(
     req: HttpRequest,
     body: web::Json<PasswordLogin>,
 ) -> AppResult<HttpResponse> {
-    let ip = req
-        .peer_addr()
-        .map(|a| a.ip().to_string())
-        .unwrap_or_else(|| "unknown".into());
-    if !crate::auth::check_rate_limit(&ip, "login", 5, 60) {
-        return Err(AppError::RateLimited(
-            "too many login attempts — try again in 60 seconds".into(),
-        ));
+    let product = ProductId::from_request(&req);
+    let ip = crate::auth::client_ip(&req);
+    if !crate::auth::check_rate_limit(
+        &ip,
+        "login",
+        cfg.auth_max_attempts,
+        cfg.auth_lockout_secs.max(1) as u64,
+    ) {
+        return Err(AppError::RateLimited(format!(
+            "too many login attempts — try again in {} seconds",
+            cfg.auth_lockout_secs.max(1)
+        )));
     }
     validate_email(&body.email)?;
     let email = body.email.trim().to_lowercase();
-    let user = db
-        .users()
+    let user = user_store(&db, product)
         .find_one(doc! { "email": &email })
         .await?
         .ok_or_else(|| AppError::Unauthorized("invalid credentials".into()))?;
@@ -338,14 +581,13 @@ async fn login_password(
             set_doc.insert("device_id", did);
         }
     }
-    db.users()
+    user_store(&db, product)
         .update_one(doc! { "_id": &user.id }, doc! { "$set": set_doc })
         .await?;
     let tokens = issue_pair(&cfg, &user.id, &user.email)?;
-    store_refresh(&db, &user.id, &tokens.refresh_token).await?;
+    store_refresh_for(&db, &user.id, &tokens.refresh_token, product).await?;
     // Refresh public view after device bind
-    let user = db
-        .users()
+    let user = user_store(&db, product)
         .find_one(doc! { "_id": &user.id })
         .await?
         .unwrap_or(user);
@@ -443,18 +685,27 @@ async fn refresh(
     }))
 }
 
-#[post("/auth/me")]
+#[get("/auth/me")]
 async fn me(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpResponse> {
     let auth = req
         .extensions()
         .get::<AuthUser>()
         .cloned()
         .ok_or_else(|| AppError::Unauthorized("not authenticated".into()))?;
-    let user = db
-        .users()
-        .find_one(doc! { "_id": &auth.user_id })
-        .await?
-        .ok_or_else(|| AppError::NotFound("user".into()))?;
+    let product = ProductId::from_request(&req);
+    let user = match product {
+        ProductId::LiveEscape => {
+            db.users_le()
+                .find_one(doc! { "_id": &auth.user_id })
+                .await?
+        }
+        _ => {
+            db.users()
+                .find_one(doc! { "_id": &auth.user_id })
+                .await?
+        }
+    };
+    let user = user.ok_or_else(|| AppError::NotFound("user".into()))?;
     Ok(HttpResponse::Ok().json(user.public_view()))
 }
 
@@ -464,14 +715,23 @@ async fn logout(
     req: HttpRequest,
     body: web::Json<RefreshBody>,
 ) -> AppResult<HttpResponse> {
-    let _ = req;
+    let _ = &req;
     if body.refresh_token.trim().len() < 16 {
         return Err(AppError::BadRequest("invalid refresh token".into()));
     }
     let th = hash_token(&body.refresh_token);
-    db.refresh_tokens()
+    // Try both token stores — the token may belong to either product
+    let deleted_lm = db.refresh_tokens()
         .delete_one(doc! { "token_hash": &th })
-        .await?;
+        .await?
+        .deleted_count > 0;
+    let deleted_le = db.refresh_tokens_le()
+        .delete_one(doc! { "token_hash": &th })
+        .await?
+        .deleted_count > 0;
+    if !deleted_lm && !deleted_le {
+        // Token not found in either store — still return OK (idempotent)
+    }
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 
@@ -485,21 +745,14 @@ async fn logout_all(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpRespon
     db.refresh_tokens()
         .delete_many(doc! { "user_id": &auth.user_id })
         .await?;
-    // Also clear LE refresh tokens if the user exists in the LE collection (same email)
-    if let Ok(Some(lm_user)) = db.users().find_one(doc! { "_id": &auth.user_id }).await {
-        let _ = db
-            .users_le()
-            .update_one(
-                doc! { "email": &lm_user.email },
-                doc! { "$unset": { "le_refresh_token": "" } },
-            )
-            .await;
-    }
+    db.refresh_tokens_le()
+        .delete_many(doc! { "user_id": &auth.user_id })
+        .await?;
     audit(&db, &auth.user_id, "logout_all", None).await;
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 
-/// GDPR-style data export
+/// GDPR-style data export (product aware)
 #[post("/auth/export")]
 async fn export_data(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpResponse> {
     let auth = req
@@ -507,13 +760,15 @@ async fn export_data(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpRespo
         .get::<AuthUser>()
         .cloned()
         .ok_or_else(|| AppError::Unauthorized("not authenticated".into()))?;
-    let user = db
-        .users()
+    let product = ProductId::from_request(&req);
+    let user = user_store(&db, product)
         .find_one(doc! { "_id": &auth.user_id })
         .await?
         .ok_or_else(|| AppError::NotFound("user".into()))?;
     use futures_util::TryStreamExt;
-    let mut ledger_cur = db.ledger().find(doc! { "user_id": &auth.user_id }).await?;
+    let mut ledger_cur = ledger_store(&db, product)
+        .find(doc! { "user_id": &auth.user_id })
+        .await?;
     let mut ledger = Vec::new();
     let mut ledger_truncated = false;
     while let Some(e) = ledger_cur.try_next().await? {
@@ -529,23 +784,25 @@ async fn export_data(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpRespo
             "created_at": e.created_at,
         }));
     }
-    let mut sess_cur = db
-        .sessions()
-        .find(doc! { "user_id": &auth.user_id })
-        .await?;
     let mut sessions = Vec::new();
     let mut sessions_truncated = false;
+    let sess_coll = match product {
+        ProductId::LiveEscape => {
+            db.sessions_le()
+        }
+        ProductId::LiveMorph => db.db.collection::<mongodb::bson::Document>("morph_sessions"),
+    };
+    let mut sess_cur = sess_coll.find(doc! { "user_id": &auth.user_id }).await?;
     while let Some(s) = sess_cur.try_next().await? {
         if sessions.len() >= 200 {
             sessions_truncated = true;
             break;
         }
         sessions.push(serde_json::json!({
-            "id": s.id,
-            "status": s.status,
-            "started_at": s.started_at,
-            "ended_at": s.ended_at,
-            "generation_seconds": s.generation_seconds,
+            "id": s.get_str("_id").unwrap_or(""),
+            "status": s.get_str("status").unwrap_or(""),
+            "started_at": s.get("started_at"),
+            "ended_at": s.get("ended_at"),
         }));
     }
     audit(&db, &auth.user_id, "data_export", None).await;
@@ -567,14 +824,13 @@ async fn delete_account(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpRe
         .get::<AuthUser>()
         .cloned()
         .ok_or_else(|| AppError::Unauthorized("not authenticated".into()))?;
-    // Get user email before anonymizing so we can clean up LE tokens
-    let user_email = db
-        .users()
+    let product = ProductId::from_request(&req);
+    let user_email = user_store(&db, product)
         .find_one(doc! { "_id": &auth.user_id })
         .await?
         .map(|u| u.email.clone());
     let anon = format!("deleted+{}@invalid.local", auth.user_id);
-    db.users()
+    user_store(&db, product)
         .update_one(
             doc! { "_id": &auth.user_id },
             doc! { "$set": {
@@ -591,13 +847,19 @@ async fn delete_account(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpRe
     db.refresh_tokens()
         .delete_many(doc! { "user_id": &auth.user_id })
         .await?;
-    // Also deactivate LE account if present (same email)
+    db.refresh_tokens_le()
+        .delete_many(doc! { "user_id": &auth.user_id })
+        .await?;
+    // Also deactivate the sibling-product account (same email) if present
     if let Some(ref email) = user_email {
-        let _ = db
-            .users_le()
+        let sibling = match product {
+            ProductId::LiveEscape => db.users(),
+            ProductId::LiveMorph => db.users_le(),
+        };
+        let _ = sibling
             .update_one(
                 doc! { "email": email },
-                doc! { "$set": { "is_active": false }, "$unset": { "le_refresh_token": "" } },
+                doc! { "$set": { "is_active": false } },
             )
             .await;
     }
@@ -612,6 +874,9 @@ async fn clear_session(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpRes
         db.refresh_tokens()
             .delete_many(doc! { "user_id": &auth.user_id })
             .await?;
+        db.refresh_tokens_le()
+            .delete_many(doc! { "user_id": &auth.user_id })
+            .await?;
     }
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
@@ -621,9 +886,13 @@ async fn upsert_user_by_email(
     cfg: &Config,
     email: &str,
     display_name: Option<String>,
+    product: ProductId,
 ) -> AppResult<User> {
-    if let Some(u) = db.users().find_one(doc! { "email": email }).await? {
-        db.users()
+    if let Some(u) = user_store(db, product)
+        .find_one(doc! { "email": email })
+        .await?
+    {
+        user_store(db, product)
             .update_one(
                 doc! { "_id": &u.id },
                 doc! { "$set": { "last_login_at": Utc::now() } },
@@ -631,8 +900,9 @@ async fn upsert_user_by_email(
             .await?;
         return Ok(u);
     }
-    let user = User::new(email.to_string(), display_name, cfg.signup_bonus_credits);
-    db.users().insert_one(&user).await?;
+    let mut user = User::new(email.to_string(), display_name, cfg.signup_bonus_credits);
+    user.product = product.as_str().into();
+    user_store(db, product).insert_one(&user).await?;
     if cfg.signup_bonus_credits > 0.0 {
         let entry = crate::models::CreditLedgerEntry {
             id: crate::db::new_id(),
@@ -644,7 +914,7 @@ async fn upsert_user_by_email(
             note: Some("welcome bonus".into()),
             created_at: bson::DateTime::from_chrono(chrono::Utc::now()),
         };
-        db.ledger().insert_one(&entry).await?;
+        ledger_store(db, product).insert_one(&entry).await?;
     }
     Ok(user)
 }
@@ -687,6 +957,7 @@ async fn audit(db: &crate::db::Db, user_id: &str, action: &str, meta: Option<ser
 async fn oauth_google_start(
     db: web::Data<Db>,
     cfg: web::Data<Arc<Config>>,
+    _req: HttpRequest,
 ) -> AppResult<HttpResponse> {
     if !google_oauth::is_configured(&cfg) {
         return Err(AppError::BadRequest(

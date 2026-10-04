@@ -24,6 +24,7 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
     WebSockets
     Concurrent
     Svg
+    Test
 )
 
 find_package(Qt6 6.5 COMPONENTS LinguistTools QUIET)
@@ -31,6 +32,8 @@ find_package(Qt6 6.5 COMPONENTS LinguistTools QUIET)
 qt_standard_project_setup(REQUIRES 6.5)
 
 add_subdirectory(../common/gstpeer ${CMAKE_BINARY_DIR}/_gstpeer)
+add_subdirectory(../common/streamserver ${CMAKE_BINARY_DIR}/_streamserver)
+add_subdirectory(../common/i18n ${CMAKE_BINARY_DIR}/_i18n)
 
 set(SOURCES
     src/main.cpp
@@ -41,10 +44,9 @@ set(SOURCES
     src/core/SessionManager.cpp
     src/core/CameraManager.cpp
     src/core/RecordingManager.cpp
-    src/core/StreamServer.cpp
+    src/core/MorphRecorder.cpp
     src/core/VirtualCameraHelper.cpp
     src/core/ConfigManager.cpp
-    src/core/I18nManager.cpp
     src/core/Notifier.cpp
     src/models/CharacterCatalogModel.cpp
     src/models/PresetModel.cpp
@@ -60,10 +62,9 @@ set(HEADERS
     src/core/SessionManager.h
     src/core/CameraManager.h
     src/core/RecordingManager.h
-    src/core/StreamServer.h
+    src/core/MorphRecorder.h
     src/core/VirtualCameraHelper.h
     src/core/ConfigManager.h
-    src/core/I18nManager.h
     src/core/Notifier.h
     src/models/CharacterCatalogModel.h
     src/models/PresetModel.h
@@ -81,6 +82,7 @@ set_source_files_properties(
     qml/theme/Colors.qml
     qml/theme/Theme.qml
     qml/constants/Constants.qml
+    qml/PlatformSettings.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -104,6 +106,7 @@ qt_add_qml_module(LiveMorph
         qml/components/Switch.qml
         qml/components/ConfirmDialog.qml
         qml/components/IconButton.qml
+        qml/components/FocusRing.qml
         qml/components/NotificationCenter.qml
         qml/components/HelpDrawer.qml
         qml/components/SettingsDrawer.qml
@@ -116,6 +119,9 @@ qt_add_qml_module(LiveMorph
         qml/components/ShortcutsSheet.qml
         qml/components/BrandingFooter.qml
         qml/components/Icon.qml
+        qml/components/UploadConsentDialog.qml
+        qml/components/StreamKitPanel.qml
+        qml/PlatformSettings.qml
         qml/pages/AuthScreen.qml
         qml/pages/Dashboard.qml
         qml/pages/Settings.qml
@@ -131,9 +137,12 @@ qt_add_qml_module(LiveMorph
         qml/dashboard/WorkshopPanel.qml
         qml/dashboard/PresetGrid.qml
         qml/dashboard/CustomizeForm.qml
-        qml/dashboard/StageControls.qml
+
         qml/dashboard/PromptCommitBar.qml
-        qml/dashboard/WorkingWithChip.qml
+        qml/dashboard/UploadTab.qml
+        qml/dashboard/BackgroundBar.qml
+        qml/screens/DownloadsScreen.qml
+        qml/components/LockScreen.qml
     RESOURCES
         resources/resources.qrc
 )
@@ -153,7 +162,22 @@ target_link_libraries(LiveMorph PRIVATE
     Qt6::Concurrent
     Qt6::Svg
     GstRtcPeer
+    StreamServer
+    CommonI18n
 )
+
+# Smoke tests — run with `make test` or `ctest`
+# Only self-contained, dependency-free components (catalog + presets models) are
+# exercised; full app integration requires the backend + GStreamer pipeline.
+if(BUILD_TESTING)
+    add_executable(LiveMorph_smoke_test tests/smoke.cpp
+        src/models/CharacterCatalogModel.cpp src/models/PresetModel.cpp)
+    target_link_libraries(LiveMorph_smoke_test PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Test)
+    target_include_directories(LiveMorph_smoke_test PRIVATE src)
+    add_test(NAME lm_smoke COMMAND LiveMorph_smoke_test)
+    set_tests_properties(lm_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
 
 # Install
 install(TARGETS LiveMorph
@@ -163,53 +187,31 @@ install(TARGETS LiveMorph
 
 
 
-# ── Qt6 Linguist / translator plugin (wide language reach) ─────────────
-# Generates .qm at build time and embeds via resources when possible.
+# ── i18n: English-only .ts for lupdate scanning + embedded catalog ─────
 set(LIVEMORPH_TS_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_en.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_es.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_fr.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_de.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_pt.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_zh.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_ja.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_ko.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_ru.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_ar.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_it.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_hi.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_id.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_nl.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_tr.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_pl.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_vi.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_th.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_uk.ts
-    ${CMAKE_CURRENT_SOURCE_DIR}/i18n/livemorph_sv.ts
 )
 
 if(TARGET Qt6::lrelease OR Qt6LinguistTools_FOUND)
-    # Modern CMake API: updates .ts from sources + builds .qm
     qt_add_translations(LiveMorph
         TS_FILES ${LIVEMORPH_TS_FILES}
         RESOURCE_PREFIX "/i18n"
-        LUPDATE_OPTIONS -compress -nounfinished
+        LUPDATE_OPTIONS -compress
     )
-    message(STATUS "Qt LinguistTools: qt_add_translations enabled (${CMAKE_CURRENT_SOURCE_DIR}/i18n)")
+    message(STATUS "Qt LinguistTools: qt_add_translations enabled (English catalog only)")
 else()
-    message(WARNING "Qt LinguistTools not found — ship prebuilt i18n/*.qm or install qt6-tools")
+    message(WARNING "Qt LinguistTools not found — online translation will still work")
 endif()
+
+# Embed English .ts as resource for runtime string catalog parsing
+qt_add_resources(LiveMorph "i18n_catalog"
+    PREFIX "/i18n"
+    FILES i18n/livemorph_en.ts
+    BASE "i18n"
+)
 
 # ── Install + packaging ──────────────────────────────────────────────
 include(GNUInstallDirs)
-
-# QML/resources are embedded via qt_add_qml_module / qt_add_resources
-
-# Optional: install i18n .qm next to binary for runtime discovery
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/i18n/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/livemorph/i18n
-    FILES_MATCHING PATTERN "*.qm"
-)
 
 # CPack — produce platform archives; run windeployqt/macdeployqt after install
 set(CPACK_PACKAGE_NAME "LiveMorph")

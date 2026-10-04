@@ -8,7 +8,41 @@
 
 #include <QJsonObject>
 #include <QUrl>
+#include <QFile>
+#include <QFileInfo>
 #include <QtGlobal>
+#include <QDebug>
+#include <QRandomGenerator>
+
+namespace {
+QString imageToBase64DataUrl(const QString &pathOrUrl)
+{
+    QString filePath = pathOrUrl;
+    if (pathOrUrl.startsWith(QLatin1String("qrc:")))
+        filePath = QStringLiteral(":") + pathOrUrl.mid(4);
+    else if (pathOrUrl.startsWith(QLatin1String("file://")))
+        filePath = QUrl(pathOrUrl).toLocalFile();
+
+    QFile f(filePath);
+    if (!f.open(QIODevice::ReadOnly))
+        return QString();
+    const QByteArray raw = f.readAll();
+    if (raw.isEmpty())
+        return QString();
+
+    const QString lower = filePath.toLower();
+    QString mime = QStringLiteral("image/webp");
+    if (lower.endsWith(QLatin1String(".png")))
+        mime = QStringLiteral("image/png");
+    else if (lower.endsWith(QLatin1String(".jpg")) || lower.endsWith(QLatin1String(".jpeg")))
+        mime = QStringLiteral("image/jpeg");
+    else if (lower.endsWith(QLatin1String(".webp")))
+        mime = QStringLiteral("image/webp");
+
+    return QStringLiteral("data:") + mime + QStringLiteral(";base64,")
+           + QString::fromLatin1(raw.toBase64());
+}
+} // namespace
 
 SessionManager::SessionManager(AuthManager *auth, ConfigManager *config, BackendClient *backend,
                                WebRtcSignalingClient *signaling,
@@ -36,7 +70,59 @@ SessionManager::SessionManager(AuthManager *auth, ConfigManager *config, Backend
         }
     });
 
+    // Auto-reconnect: Electron ladder — 5 attempts, 1000ms × 2^(n-1) + 0–30%
+    // jitter, capped at 10s. Interval is computed per attempt in
+    // scheduleReconnect(); the fixed 3s re-arm on ANY close fed back into
+    // itself and killed in-flight handshakes on slow networks.
+    m_reconnectTimer.setSingleShot(true);
+    connect(&m_reconnectTimer, &QTimer::timeout, this, [this]() {
+        if (m_wantReconnect && m_reconnectAttempts <= kMaxReconnectAttempts && m_active) {
+            setStatus(Status::Connecting, tr("Reconnecting… attempt %1/%2").arg(m_reconnectAttempts).arg(kMaxReconnectAttempts));
+            if (m_signaling && m_auth) {
+                QString model = m_config ? m_config->defaultModel() : QStringLiteral("lucy-2.1");
+                if (m_hd && (model.isEmpty() || model == QLatin1String("lucy-2.1")))
+                    model = QStringLiteral("lucy-2.5");
+                // Self-issued connect: the close of any previous socket must
+                // not re-arm this timer mid-handshake.
+                m_connectingProactively = true;
+                m_reconnectTimer.stop();
+                m_signaling->connectToProxy(wsBaseUrl(), m_auth->accessToken(), model, m_tier);
+            }
+        }
+    });
+
+    // First-connect timeout: a proxy that never completes the WS handshake
+    // used to leave the session "active" forever, draining nothing but hope.
+    m_connectWatchdog.setSingleShot(true);
+    connect(&m_connectWatchdog, &QTimer::timeout, this, [this]() {
+        if (m_active && !m_signalingConnected) {
+            qWarning() << "SessionManager: connect timeout — scheduling reconnect";
+            scheduleReconnect();
+        }
+    });
+
     wireSignaling();
+}
+
+// Electron parity: exponential backoff 1000×2^(n-1) + 0–30% jitter (cap 10s),
+// 5 attempts max, then the session fails.
+void SessionManager::scheduleReconnect()
+{
+    if (!m_active || !m_wantReconnect)
+        return;
+    if (m_reconnectAttempts >= kMaxReconnectAttempts) {
+        m_wantReconnect = false;
+        ++m_consecutiveSwapFailures;
+        setStatus(Status::Error, tr("Reconnection failed"));
+        emit error(tr("Reconnection failed after %1 attempts").arg(kMaxReconnectAttempts));
+        stopSession();
+        return;
+    }
+    ++m_reconnectAttempts;
+    const int base = qMin(10000, 1000 << (m_reconnectAttempts - 1));
+    const int jitter = QRandomGenerator::global()->bounded(qMax(1, int(base * 0.3)));
+    qInfo() << "SessionManager: reconnect attempt" << m_reconnectAttempts << "in" << base + jitter << "ms";
+    m_reconnectTimer.start(base + jitter);
 }
 
 void SessionManager::wireSignaling()
@@ -48,11 +134,29 @@ void SessionManager::wireSignaling()
         m_signalingConnected = m_signaling->isConnected();
         emit signalingConnectedChanged();
         if (m_signalingConnected && m_active) {
+            qInfo() << "SessionManager: signaling connected, creating peer";
             setStatus(Status::Connected, tr("Signaling live · %1").arg(engineLabel()));
-            // Create native GStreamer peer and let it create the SDP offer
+            // Reconnected successfully — reset state
+            m_reconnectAttempts = 0;
+            m_wantReconnect = true; // stay armed for future drops
+            m_connectingProactively = false;
+            m_reconnectTimer.stop();
+            m_connectWatchdog.stop();
+            // Recreate the peer: createNativePeer() early-returns when a peer
+            // exists, and a surviving peer carries the DEAD negotiation
+            // (offerCreated blocks renegotiation) → media dead while the UI
+            // shows "connected". Tear down and build fresh for the new session.
+            destroyNativePeer();
             createNativePeer();
             // Apply character / prompt to live session
             pushActiveTargetsToProvider();
+        } else if (!m_signalingConnected && m_active && m_wantReconnect) {
+            // Unexpected drop — unless WE closed the socket to reconnect
+            // (the close of an in-flight handshake must not re-arm us).
+            if (m_connectingProactively)
+                return;
+            qWarning() << "SessionManager: signaling disconnected unexpectedly";
+            scheduleReconnect();
         }
     });
 
@@ -65,6 +169,17 @@ void SessionManager::wireSignaling()
         if (m_peer)
             m_peer->setRemoteAnswer(sdp);
         emit remoteAnswerReceived(sdp);
+    });
+
+    // Electron stage.characterSwitchFailed: a rejected live character update
+    // keeps the previous look running — warn, don't tear down.
+    connect(m_signaling, &WebRtcSignalingClient::setImageAck, this,
+            [this](bool ok, const QString &err) {
+        if (!ok && m_active) {
+            if (!err.isEmpty())
+                qWarning() << "SessionManager: set_image rejected:" << err;
+            emit characterSwitchFailed();
+        }
     });
 
     connect(m_signaling, &WebRtcSignalingClient::iceCandidateReceived, this, [this](const QJsonObject &c) {
@@ -80,14 +195,22 @@ void SessionManager::wireSignaling()
         emit remoteIceRestartRequested();
     });
 
-    connect(m_signaling, &WebRtcSignalingClient::errorOccurred, this, [this](const QString &msg) {
-        if (msg.contains(QStringLiteral("insufficient_credits"), Qt::CaseInsensitive)
-            || msg.contains(QStringLiteral("platform_budget"), Qt::CaseInsensitive)) {
+    connect(m_signaling, &WebRtcSignalingClient::errorOccurred, this,
+            [this](const QString &msg, const QString &code) {
+        // Structured code match first (proxy sends "code"), prose fallback for
+        // proxies that only stringify the error.
+        const bool insufficient = code == QLatin1String("insufficient_credits")
+            || code == QLatin1String("credits_exhausted")
+            || code == QLatin1String("platform_budget")
+            || msg.contains(QStringLiteral("insufficient_credits"), Qt::CaseInsensitive)
+            || msg.contains(QStringLiteral("platform_budget"), Qt::CaseInsensitive);
+        if (insufficient) {
+            const bool budget = code == QLatin1String("platform_budget")
+                || msg.contains(QStringLiteral("platform_budget"), Qt::CaseInsensitive);
             setStatus(Status::InsufficientCredits, tr("Out of credits"));
             stopSession();
-            emit error(msg.contains(QStringLiteral("platform_budget"), Qt::CaseInsensitive)
-                           ? tr("Service capacity exhausted — try again later")
-                           : tr("Insufficient credits — session ended"));
+            emit error(budget ? tr("Service capacity exhausted — try again later")
+                              : tr("Insufficient credits — session ended"));
             return;
         }
         // Transient reconnect notices — do not tear down the session
@@ -97,6 +220,20 @@ void SessionManager::wireSignaling()
         }
         setStatus(Status::Error, msg);
         emit error(msg);
+        // Connect-attempt failures never emit connectedChanged (the socket
+        // was never open) — without this arm the session sat "active"
+        // forever with the UI showing Connecting.
+        if (m_active && !m_signalingConnected) {
+            m_connectingProactively = false;
+            scheduleReconnect();
+        }
+    });
+
+    connect(m_signaling, &WebRtcSignalingClient::queuePositionChanged, this,
+            [this](int position, int queueSize) {
+        if (m_active)
+            setStatus(Status::Connecting,
+                      tr("Queued: position %1 of %2").arg(position).arg(qMax(position, queueSize)));
     });
 
     connect(m_signaling, &WebRtcSignalingClient::generatingChanged, this, [this]() {
@@ -117,9 +254,20 @@ void SessionManager::createNativePeer()
     m_peer = new GstRtcPeer(this);
     m_peer->setDirection(GstRtcPeer::Direction::SendRecv);
 
+    // webrtcbin's stun-server property takes the "stun://host:port" URI form
+    // (NOT the RFC 7064 "stun:host" ICE-URL form — that would fail to parse).
     m_peer->setStunServer(QStringLiteral("stun://stun.l.google.com:19302"));
-    if (const QByteArray turnUrl = qgetenv("LIVEESCAPE_TURN_URLS"); !turnUrl.isEmpty())
+    QByteArray turnUrl = qgetenv("LIVEMORPH_TURN_URLS"); // canonical product name
+    if (turnUrl.isEmpty())
+        turnUrl = qgetenv("LIVEESCAPE_TURN_URLS"); // legacy pre-rebrand name
+    if (!turnUrl.isEmpty())
         m_peer->setTurnServer(QString::fromUtf8(turnUrl));
+
+    // Apply tier quality ladder: HD → 720p30 @ 2.5 Mbps; Standard → 540p24 @ 1.2 Mbps.
+    // Electron morphme: Smooth (Decart) = 1280x720@30 camera-feed passthrough;
+    // Standard = fal JPEG at 256px/24fps (budget realtime); our unified ladder favors
+    // the same visual tier distinction.
+    m_peer->setQualityPreset(m_hd ? QStringLiteral("hd") : QStringLiteral("standard"));
 
     connect(m_peer, &GstRtcPeer::offerReady, this, [this](const QString &sdp) {
         if (m_signaling && m_signaling->isConnected())
@@ -144,8 +292,10 @@ void SessionManager::createNativePeer()
             const QString s = m_peer->connectionState();
             if (s == QLatin1String("connected"))
                 setStatus(Status::Connected, tr("Media connected · %1").arg(engineLabel()));
-            else if (s == QLatin1String("failed"))
+            else if (s == QLatin1String("failed")) {
+                ++m_consecutiveSwapFailures;
                 setStatus(Status::Error, tr("WebRTC connection failed"));
+            }
         }
     });
 
@@ -154,8 +304,41 @@ void SessionManager::createNativePeer()
             setStatus(Status::Connecting, tr("ICE checking…"));
     });
 
+    // Real RTT stats → connection status line + StatusBar latency chip
+    // (Electron hides the latency component; we display it — improvement).
+    connect(m_peer, &GstRtcPeer::statsUpdated, this, [this](const QVariantMap &s) {
+        const double rtt = s.value(QStringLiteral("rtt_ms")).toDouble();
+        if (rtt >= 0 && m_active) {
+            if (m_rttMs != rtt) {
+                m_rttMs = rtt;
+                emit statsChanged();
+            }
+            const QString q = rtt < 200 ? tr("good") : (rtt < 500 ? tr("fair") : tr("poor"));
+            setStatus(m_active ? Status::Generating : m_status,
+                      tr("%1 · %2ms").arg(engineLabel(), int(rtt)) + QStringLiteral(" · ") + q);
+        }
+    });
+
+    // Stall watchdog → force reconnect (Electron fal HD: 3 identical frames → reset).
+    connect(m_peer, &GstRtcPeer::stallDetected, this, [this]() {
+        if (m_active) {
+            setStatus(Status::Connecting, tr("Media stalled — reconnecting…"));
+            m_wantReconnect = true;
+            m_reconnectTimer.start();
+        }
+    });
+
     // Tee decoded morph frames out to OBS (MJPEG), vcam, popout/preview and recording.
     connect(m_peer, &GstRtcPeer::frameReady, this, [this](const QImage &img) {
+        // Count DECODED frames (Electron counts framesDecoded), not UI ticks —
+        // a 100ms timer counted 10× the real fps. First frame also resets the
+        // swap-failure ladder (Electron: success clears consecutiveSwapFailures).
+        ++m_frames;
+        if (m_frames == 1) {
+            m_consecutiveSwapFailures = 0;
+            m_connectWatchdog.stop();
+        }
+        emit framesChanged();
         emit morphFrameReady(img);
     });
 
@@ -247,6 +430,7 @@ void SessionManager::setScenePrompt(const QString &p)
     if (m_scenePrompt == p) return;
     m_scenePrompt = p;
     emit scenePromptChanged();
+    pushSceneToProvider();
 }
 
 void SessionManager::setActiveScene(const QString &s)
@@ -254,6 +438,7 @@ void SessionManager::setActiveScene(const QString &s)
     if (m_scene == s) return;
     m_scene = s;
     emit activeSceneChanged();
+    pushSceneToProvider();
 }
 
 void SessionManager::setSceneEnabled(bool v)
@@ -261,6 +446,54 @@ void SessionManager::setSceneEnabled(bool v)
     if (m_sceneEnabled == v) return;
     m_sceneEnabled = v;
     emit sceneEnabledChanged();
+    pushSceneToProvider();
+}
+
+// Electron prompt composition:
+//  - reference image attached → "Turn the person into the character shown in
+//    the reference image. <prompt>." prefix (bo Dashboard)
+//  - identity lock on → ", while keeping the person's real face, identity,
+//    and live background unchanged." suffix (wP index)
+QString SessionManager::composedPrompt() const
+{
+    QString p = m_prompt.trimmed();
+    if (!m_characterImage.isEmpty() && !p.isEmpty())
+        p = QStringLiteral("Turn the person into the character shown in the reference image. %1.").arg(p);
+    if (m_identityLock && !p.isEmpty())
+        p += QStringLiteral(", while keeping the person's real face, identity, and live background unchanged.");
+    return p;
+}
+
+// Scene mode composes the live prompt as "<prompt>, set in <scene>" (Electron
+// OP composer — the "set in" prefix is skipped when the scene text already
+// opens with its own location preposition).
+void SessionManager::pushSceneToProvider()
+{
+    if (!m_active || !m_sceneEnabled || !m_signaling || !m_signaling->isConnected())
+        return;
+    QString prompt = composedPrompt();
+    if (!m_scenePrompt.trimmed().isEmpty()) {
+        QString scene = m_scenePrompt.trimmed();
+        static const QStringList locationPrefixes = {
+            QStringLiteral("in "), QStringLiteral("on "), QStringLiteral("at "),
+            QStringLiteral("inside "), QStringLiteral("within "), QStringLiteral("under "),
+            QStringLiteral("set in ")
+        };
+        bool hasPrefix = false;
+        for (const QString &pre : locationPrefixes) {
+            if (scene.startsWith(pre, Qt::CaseInsensitive)) { hasPrefix = true; break; }
+        }
+        if (!hasPrefix)
+            scene.prepend(QStringLiteral("set in "));
+        if (!prompt.isEmpty())
+            prompt = prompt + QStringLiteral(", ") + scene;
+        else
+            prompt = scene;
+    }
+    if (prompt.trimmed().isEmpty())
+        return;
+    setStatus(Status::Generating, tr("Applying scene…"));
+    m_signaling->sendPrompt(prompt.trimmed(), m_enhance);
 }
 
 void SessionManager::setIdentityLockEnabled(bool v)
@@ -268,6 +501,13 @@ void SessionManager::setIdentityLockEnabled(bool v)
     if (m_identityLock == v) return;
     m_identityLock = v;
     emit identityLockChanged();
+}
+
+void SessionManager::setEnhancePrompts(bool v)
+{
+    if (m_enhance == v) return;
+    m_enhance = v;
+    emit enhancePromptsChanged();
 }
 
 void SessionManager::setHdActive(bool v)
@@ -289,7 +529,9 @@ void SessionManager::setStatus(Status s, const QString &text)
 
 void SessionManager::updateRates()
 {
-    m_creditsPerSec = m_hd ? 3.0 : 2.0;
+    const double base = m_backend ? m_backend->creditsPerSecond() : 2.0;
+    const double mult = (m_hd && m_backend) ? m_backend->hdMultiplier() : 1.0;
+    m_creditsPerSec = base * mult;
     emit ratesChanged();
 }
 
@@ -306,12 +548,21 @@ void SessionManager::applyCooldown(int seconds)
 void SessionManager::startSession(const QString &provider, const QString &tier)
 {
     if (m_active || m_cooldownSec > 0) return;
+    m_provider = provider;
+    m_tier = tier;
+    m_hd = (tier == QLatin1String("hd"));
+    updateRates(); // needed BEFORE the gate: the minimum scales with the live rate
+
+    // Electron start gate: at least rate×60 credits (120 @ 2/s) — one minute
+    // of swap. The old >0 gate let 1-credit sessions "start" then instantly
+    // die on the server's own 402.
     const double totalCredits = m_auth
         ? (m_auth->creditBalance() + m_auth->bonusBalance())
         : 0.0;
-    if (m_auth && totalCredits <= 0.0) {
+    if (m_auth && totalCredits < m_creditsPerSec * 60.0) {
         setStatus(Status::InsufficientCredits, tr("Out of credits"));
-        emit error(tr("Insufficient credits"));
+        emit error(tr("You need at least %1 credits (about 1 minute of swap) to start.")
+                       .arg(qRound(m_creditsPerSec * 60.0)));
         return;
     }
     if (m_auth && m_auth->accessToken().isEmpty()) {
@@ -319,23 +570,29 @@ void SessionManager::startSession(const QString &provider, const QString &tier)
         return;
     }
 
-    m_provider = provider;
-    m_tier = tier;
-    m_hd = (tier == QLatin1String("hd"));
-    updateRates();
     m_frames = 0;
     m_active = true;
+    m_wantReconnect = true;
+    m_reconnectAttempts = 0;
+    m_connectingProactively = false;
     m_timer.restart();
     m_tickTimer.start();
     setStatus(Status::Connecting, tr("Connecting to %1…").arg(engineLabel()));
+    qInfo() << "SessionManager: startSession provider=" << provider << "tier=" << tier << "hd=" << m_hd;
     emit isActiveChanged();
     emit engineLabelChanged();
     emit sessionStarted();
 
     // Auth + credits gated above. JWT → Rust proxy WS → Decart (key stays on server).
     if (m_signaling && m_auth) {
-        const QString model = m_config ? m_config->defaultModel() : QStringLiteral("lucy-2.1");
-        m_signaling->connectToProxy(wsBaseUrl(), m_auth->accessToken(), model);
+        // HD selects a higher-fidelity model; standard/smooth use the configured default.
+        // (The Rust proxy validates the model against DECART_ALLOWED_MODELS.)
+        QString model = m_config ? m_config->defaultModel() : QStringLiteral("lucy-2.1");
+        if (m_hd && (model.isEmpty() || model == QLatin1String("lucy-2.1")))
+            model = QStringLiteral("lucy-2.5");
+        m_connectingProactively = true;
+        m_reconnectTimer.stop();
+        m_signaling->connectToProxy(wsBaseUrl(), m_auth->accessToken(), model, m_tier);
     } else {
         setStatus(Status::Error, tr("Signaling unavailable"));
         m_active = false;
@@ -343,6 +600,10 @@ void SessionManager::startSession(const QString &provider, const QString &tier)
         emit isActiveChanged();
         emit error(tr("Realtime signaling client missing"));
     }
+
+    // Connect-timeout watchdog (15s): a proxy that never completes the
+    // handshake gets a retry instead of an eternal "Connecting".
+    m_connectWatchdog.start(kConnectTimeoutMs);
 
     // Apply identity-lock default from config on new sessions
     if (m_config && m_config->identityLockDefault() && !m_identityLock) {
@@ -356,12 +617,18 @@ void SessionManager::pushActiveTargetsToProvider()
     if (!m_active)
         return;
     if (m_signaling && m_signaling->isConnected()) {
-        if (!m_characterImage.isEmpty())
-            m_signaling->sendSetImage(m_characterImage, m_prompt, true);
-        else if (!m_prompt.isEmpty())
-            m_signaling->sendPrompt(m_prompt, true);
-        else if (!m_characterId.isEmpty())
-            m_signaling->sendPrompt(m_characterId, true);
+        const QString prompt = composedPrompt();
+        if (!m_characterImage.isEmpty()) {
+            const QString b64 = imageToBase64DataUrl(m_characterImage);
+            if (!b64.isEmpty())
+                m_signaling->sendSetImage(b64, prompt, m_enhance);
+            else if (!prompt.isEmpty())
+                m_signaling->sendPrompt(prompt, m_enhance);
+        } else if (!prompt.isEmpty()) {
+            m_signaling->sendPrompt(prompt, m_enhance);
+        } else if (!m_characterId.isEmpty()) {
+            m_signaling->sendPrompt(m_characterId, m_enhance);
+        }
         return;
     }
 
@@ -371,7 +638,13 @@ void SessionManager::pushActiveTargetsToProvider()
 void SessionManager::stopSession()
 {
     if (!m_active) return;
+    qInfo() << "SessionManager: stopSession elapsed=" << m_timer.elapsed() << "ms frames=" << m_frames;
     m_active = false;
+    m_wantReconnect = false;
+    m_connectingProactively = false;
+    m_reconnectAttempts = 0;
+    m_reconnectTimer.stop();
+    m_connectWatchdog.stop();
     m_tickTimer.stop();
     destroyNativePeer();
     if (m_signaling)
@@ -379,11 +652,24 @@ void SessionManager::stopSession()
     setStatus(Status::Idle, tr("Ready"));
     emit isActiveChanged();
     emit sessionStopped();
+    m_timer.invalidate(); // elapsedSec() kept counting after stop
+    m_rttMs = -1;
+    emit statsChanged();
     emit elapsedChanged();
-    applyCooldown(3);
+    // Base 3s cooldown (Qt extra) + Electron's swap-failure escalation ladder
+    // (3rd failure: 15s, 4th: 60s, 5+: 300s).
+    applyCooldown(qMax(3, swapFailureCooldown()));
     // Server is source of truth for balances after morph billing
     if (m_auth)
         m_auth->refreshProfile();
+}
+
+int SessionManager::swapFailureCooldown() const
+{
+    if (m_consecutiveSwapFailures <= 2) return 0;
+    if (m_consecutiveSwapFailures == 3) return 15;
+    if (m_consecutiveSwapFailures == 4) return 60;
+    return 300;
 }
 
 void SessionManager::setActiveCharacter(const QString &id, const QString &name,
@@ -400,10 +686,16 @@ void SessionManager::setActiveCharacter(const QString &id, const QString &name,
     if (m_active) {
         setStatus(Status::Generating, tr("Applying %1…").arg(m_characterName));
         if (m_signaling && m_signaling->isConnected()) {
-            if (!m_characterImage.isEmpty())
-                m_signaling->sendSetImage(m_characterImage, m_prompt, true);
-            else if (!m_prompt.isEmpty())
-                m_signaling->sendPrompt(m_prompt, true);
+            const QString prompt = composedPrompt();
+            if (!m_characterImage.isEmpty()) {
+                const QString b64 = imageToBase64DataUrl(m_characterImage);
+                if (!b64.isEmpty())
+                    m_signaling->sendSetImage(b64, prompt, m_enhance);
+                else if (!prompt.isEmpty())
+                    m_signaling->sendPrompt(prompt, m_enhance);
+            } else if (!prompt.isEmpty()) {
+                m_signaling->sendPrompt(prompt, m_enhance);
+            }
         }
     }
 }
@@ -413,45 +705,38 @@ void SessionManager::commitPrompt(const QString &prompt)
     setActivePrompt(prompt);
     if (m_active && m_signaling && m_signaling->isConnected()) {
         setStatus(Status::Generating, tr("Updating prompt…"));
-        m_signaling->sendPrompt(prompt, true);
+        m_signaling->sendPrompt(composedPrompt(), m_enhance);
     }
-}
-
-void SessionManager::onLocalOfferReady(const QString &sdp)
-{
-    if (m_signaling && m_signaling->isConnected())
-        m_signaling->sendOffer(sdp);
-}
-
-void SessionManager::onLocalIceCandidate(const QJsonObject &candidate)
-{
-    if (m_signaling && m_signaling->isConnected())
-        m_signaling->sendIceCandidate(candidate);
 }
 
 void SessionManager::tickFrame()
 {
     if (!m_active) return;
-    ++m_frames;
-    emit framesChanged();
     emit elapsedChanged();
 
-    // When proxy is live, server bills generation_tick — only refresh UI balance.
-    // Offline/debug (no signaling): optimistic local burn for UX only.
-    if (m_signaling && m_signaling->isConnected()) {
-        if (m_auth && (m_frames % 50 == 0)) // ~5s
-            m_auth->refreshProfile();
+    // Billing: the Rust proxy bills server-side via generation_tick — the
+    // client NEVER burns locally (Electron burns via deduct-credits every
+    // 10s; the old optimistic local burn drained the displayed balance during
+    // connection failures until "Insufficient credits" misdiagnosed it).
+
+    // First-frame watchdog (Electron Du = 35s): a live session that never
+    // decodes a frame must not sit there billing "warmup" forever.
+    if (m_signaling && m_signaling->isConnected() && m_frames == 0
+        && m_timer.elapsed() > kFirstFrameTimeoutMs) {
+        ++m_consecutiveSwapFailures;
+        setStatus(Status::Error, tr("No video received — session ended"));
+        emit error(tr("No video received within %1s — ending session")
+                       .arg(kFirstFrameTimeoutMs / 1000));
+        stopSession();
         return;
     }
 
-    if (m_auth && m_creditsPerSec > 0.0) {
-        const double burn = m_creditsPerSec * 0.1; // tick is 100ms
-        m_auth->deductCredits(burn);
-        if ((m_auth->creditBalance() + m_auth->bonusBalance()) <= 0.0) {
-            setStatus(Status::InsufficientCredits, tr("Out of credits"));
-            stopSession();
-            emit error(tr("Insufficient credits — session ended"));
-        }
+    // Keep-alive balance refresh (~60s): realtime balance_update pushes keep
+    // the UI in sync between polls (Electron relies on the realtime profile
+    // channel the same way).
+    if (m_signaling && m_signaling->isConnected()) {
+        if (m_auth && (++m_tickCount % 600 == 0))
+            m_auth->refreshProfile();
     }
 }
 

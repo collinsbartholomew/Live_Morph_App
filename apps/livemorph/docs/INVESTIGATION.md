@@ -21,7 +21,7 @@
 
 - VDPAU warning: no NVIDIA lib — cosmetic
 - WebEngine for morph Stage only after login
-- Backend must run on :3001 for real auth
+- Backend must run on :3874 for real auth
 
 ## Rebuild
 

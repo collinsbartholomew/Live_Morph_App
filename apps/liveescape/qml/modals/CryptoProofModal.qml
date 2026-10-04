@@ -13,7 +13,7 @@ ModalBase {
         width: parent.width
 
         Text {
-            text: "CRYPTO PAYMENT"
+            text: qsTr("CRYPTO PAYMENT")
             color: Theme.gold
             font.family: Theme.fontUi
             font.pixelSize: 16
@@ -23,7 +23,7 @@ ModalBase {
         }
 
         GhostButton {
-            text: "✕"
+            text: qsTr("✕")
             onClicked: App.showCryptoProof = false
         }
 
@@ -32,7 +32,7 @@ ModalBase {
     Text {
         width: parent.width
         wrapMode: Text.WordWrap
-        text: "Send the exact amount to the wallet below, then paste your transaction ID. Status is polled automatically."
+        text: qsTr("Send the exact amount to the wallet below, then submit. Your Payment ID (pre-filled below) is what links your crypto transfer to this order — do not replace it with a blockchain TX hash.")
         color: Theme.dim
         font.family: Theme.fontMono
         font.pixelSize: 10
@@ -55,7 +55,7 @@ ModalBase {
             spacing: 8
 
             Text {
-                text: "WALLET / ADDRESS"
+                text: qsTr("WALLET / ADDRESS")
                 color: Theme.dim
                 font.family: Theme.fontMono
                 font.pixelSize: 9
@@ -65,23 +65,23 @@ ModalBase {
             Text {
                 width: parent.width
                 wrapMode: Text.WrapAnywhere
-                text: (App.cryptoCheckout.wallet_address || App.cryptoCheckout.address || App.cryptoCheckout.wallet || "—").toString()
+                text: (App.cryptoCheckout.pay_address || App.cryptoCheckout.wallet_address || App.cryptoCheckout.address || App.cryptoCheckout.wallet || "—").toString()
                 color: Theme.gold
                 font.family: Theme.fontMono
                 font.pixelSize: 12
             }
 
             Text {
-                visible: !!(App.cryptoCheckout.amount || App.cryptoCheckout.crypto_amount)
-                text: "Amount: " + (App.cryptoCheckout.amount || App.cryptoCheckout.crypto_amount || "") + " " + (App.cryptoCheckout.currency || App.cryptoCheckout.coin || "")
+                visible: !!(App.cryptoCheckout.pay_amount || App.cryptoCheckout.amount || App.cryptoCheckout.crypto_amount)
+                text: "Amount: " + (App.cryptoCheckout.pay_amount || App.cryptoCheckout.amount || App.cryptoCheckout.crypto_amount || "") + " " + (App.cryptoCheckout.pay_currency || App.cryptoCheckout.currency || App.cryptoCheckout.coin || "")
                 color: Theme.text
                 font.family: Theme.fontMono
                 font.pixelSize: 11
             }
 
             GhostButton {
-                text: "COPY ADDRESS"
-                onClicked: App.copyToClipboard((App.cryptoCheckout.wallet_address || App.cryptoCheckout.address || App.cryptoCheckout.wallet || "").toString())
+                text: qsTr("COPY ADDRESS")
+                onClicked: App.copyToClipboard((App.cryptoCheckout.pay_address || App.cryptoCheckout.wallet_address || App.cryptoCheckout.address || App.cryptoCheckout.wallet || "").toString())
             }
 
         }
@@ -92,26 +92,31 @@ ModalBase {
         id: txField
 
         width: parent.width
-        label: "TRANSACTION ID (TXID)"
-        placeholderText: "Paste blockchain TX hash"
+        // Backend matches the order by the checkout's Payment ID (returned as
+        // `reference`/`payment_id` at init), NOT the blockchain TX hash — a TX
+        // hash never matches any order's provider_ref.
+        label: qsTr("PAYMENT ID (PRE-FILLED)")
+        placeholderText: qsTr("Auto-filled from your checkout")
+        text: (App.cryptoCheckout.reference || App.cryptoCheckout.payment_id
+               || App.cryptoCheckout.order_id || "").toString()
     }
 
     GhostButton {
         width: parent.width
-        text: "📎 ATTACH PROOF IMAGE (OPTIONAL)"
+        text: qsTr("📎 ATTACH PROOF IMAGE (OPTIONAL)")
         onClicked: App.pickCryptoProofImage()
     }
 
     GoldButton {
         width: parent.width
-        text: "SUBMIT PROOF"
+        text: qsTr("SUBMIT PROOF")
         busy: Api.busy
         onClicked: App.submitCryptoProof(txField.text)
     }
 
     GhostButton {
         width: parent.width
-        text: "CHECK STATUS"
+        text: qsTr("CHECK STATUS")
         onClicked: App.pollPaymentStatus()
     }
 

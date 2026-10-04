@@ -1,6 +1,7 @@
 #include "SessionManager.h"
 #include "SecureStore.h"
 
+#include <QDateTime>
 #include <QHash>
 #include <QtMath>
 
@@ -83,6 +84,24 @@ void SessionManager::setUser(const QString &email, const QString &name, const QS
     emit sessionChanged();
 }
 
+void SessionManager::setDisplayName(const QString &name)
+{
+    if (m_displayName == name)
+        return;
+    m_displayName = name;
+    saveToDisk();
+    emit sessionChanged();
+}
+
+void SessionManager::setPhone(const QString &phone)
+{
+    if (m_phone == phone)
+        return;
+    m_phone = phone;
+    saveToDisk();
+    emit sessionChanged();
+}
+
 void SessionManager::setRefreshToken(const QString &token)
 {
     if (m_refreshToken == token)
@@ -110,6 +129,10 @@ void SessionManager::setAccess(const QVariantMap &access)
     if (!plan.isEmpty())
         m_plan = plan.toLower();
 
+    const QString exp = access.value(QStringLiteral("expires_at")).toString();
+    if (!exp.isEmpty())
+        m_licenseExpiry = exp;
+
     if (access.contains(QStringLiteral("free_credits"))) {
         const double fc = access.value(QStringLiteral("free_credits")).toDouble();
         if (fc > 0 && m_creditsRemaining <= 0) {
@@ -121,6 +144,16 @@ void SessionManager::setAccess(const QVariantMap &access)
     applyCreditsMap(access);
     saveToDisk();
     emit sessionChanged();
+}
+
+bool SessionManager::licenseExpired() const
+{
+    if (m_licenseExpiry.isEmpty())
+        return false;
+    const QDateTime d = QDateTime::fromString(m_licenseExpiry, Qt::ISODate);
+    if (!d.isValid())
+        return false;
+    return d < QDateTime::currentDateTimeUtc();
 }
 
 void SessionManager::setCredits(qint64 total, double used, double remaining, const QString &plan)
@@ -176,7 +209,7 @@ void SessionManager::applyCreditsMap(const QVariantMap &credits)
         if (!p.isEmpty())
             m_plan = p.toLower();
     }
-    saveToDisk();
+    throttledSave();
     emit creditsChanged();
 }
 
@@ -184,7 +217,7 @@ void SessionManager::setBurnRate(double creditsPerSecond)
 {
     if (qFuzzyCompare(m_burnRate, creditsPerSecond))
         return;
-    m_burnRate = creditsPerSecond > 0 ? creditsPerSecond : 0.5;
+    m_burnRate = creditsPerSecond > 0 ? creditsPerSecond : 2.0;
     emit burnRateChanged();
 }
 
@@ -233,6 +266,7 @@ void SessionManager::clearSession()
     SecureStore::remove(QStringLiteral("le_refresh"));
     m_plan = QStringLiteral("starter");
     m_referralCode.clear();
+    m_licenseExpiry.clear();
     m_creditsTotal = 0;
     m_creditsUsed = 0;
     m_creditsRemaining = 0;
@@ -245,6 +279,23 @@ void SessionManager::clearSession()
     emit sessionChanged();
     emit creditsChanged();
     emit connectedChanged();
+}
+
+void SessionManager::clearLicenseState()
+{
+    m_accessKey.clear();
+    SecureStore::remove(QStringLiteral("le_access_key"));
+    m_plan = QStringLiteral("starter");
+    m_licenseExpiry.clear();
+    emit sessionChanged();
+}
+
+void SessionManager::throttledSave()
+{
+    if (!m_lastSaveTimer.isValid() || m_lastSaveTimer.elapsed() >= 30000) {
+        saveToDisk();
+        m_lastSaveTimer.start();
+    }
 }
 
 void SessionManager::logout()
@@ -265,16 +316,14 @@ void SessionManager::burnCreditsLocal(double seconds)
         emit creditsExhausted();
     }
     // Throttle disk writes during live sessions: save at most every 30s
-    if (!m_lastSaveTimer.isValid() || m_lastSaveTimer.elapsed() >= 30000) {
-        saveToDisk();
-        m_lastSaveTimer.start();
-    }
+    throttledSave();
 }
 
 void SessionManager::loadFromDisk()
 {
     m_email = m_settings.value(QStringLiteral("email")).toString();
     m_displayName = m_settings.value(QStringLiteral("displayName")).toString();
+    m_phone = m_settings.value(QStringLiteral("phone")).toString();
     m_userId = m_settings.value(QStringLiteral("userId")).toString();
     m_sessionToken = SecureStore::read(QStringLiteral("le_session"));
     m_accessKey = SecureStore::read(QStringLiteral("le_access_key"));
@@ -292,6 +341,7 @@ void SessionManager::loadFromDisk()
     }
     m_deviceId = m_settings.value(QStringLiteral("deviceId")).toString();
     m_plan = m_settings.value(QStringLiteral("plan"), QStringLiteral("starter")).toString();
+    m_licenseExpiry = m_settings.value(QStringLiteral("licenseExpiry")).toString();
     m_referralEarned = 0;
     m_referralCode = m_settings.value(QStringLiteral("referralCode")).toString();
     m_referralEarned = m_settings.value(QStringLiteral("referralEarned")).toDouble();
@@ -305,6 +355,7 @@ void SessionManager::saveToDisk()
 {
     m_settings.setValue(QStringLiteral("email"), m_email);
     m_settings.setValue(QStringLiteral("displayName"), m_displayName);
+    m_settings.setValue(QStringLiteral("phone"), m_phone);
     m_settings.setValue(QStringLiteral("userId"), m_userId);
     SecureStore::write(QStringLiteral("le_session"), m_sessionToken);
     SecureStore::write(QStringLiteral("le_access_key"), m_accessKey);
@@ -313,6 +364,7 @@ void SessionManager::saveToDisk()
     m_settings.remove(QStringLiteral("accessKey"));
     m_settings.setValue(QStringLiteral("deviceId"), m_deviceId);
     m_settings.setValue(QStringLiteral("plan"), m_plan);
+    m_settings.setValue(QStringLiteral("licenseExpiry"), m_licenseExpiry);
     m_settings.setValue(QStringLiteral("referralCode"), m_referralCode);
     m_settings.setValue(QStringLiteral("referralEarned"), m_referralEarned);
     m_settings.setValue(QStringLiteral("creditsTotal"), m_creditsTotal);

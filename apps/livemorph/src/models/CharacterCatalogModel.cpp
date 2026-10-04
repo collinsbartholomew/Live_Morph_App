@@ -1,8 +1,12 @@
 #include "CharacterCatalogModel.h"
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QDir>
+#include <QStandardPaths>
+#include <algorithm>
 
 CharacterCatalogModel::CharacterCatalogModel(QObject *parent)
     : QAbstractListModel(parent)
@@ -59,8 +63,18 @@ void CharacterCatalogModel::setSearchText(const QString &t)
 {
     if (m_search == t) return;
     m_search = t;
-    rebuildFiltered();
-    emit filterChanged();
+    // Debounce: a full model reset per keystroke drops scroll/selection state
+    // on large catalogs — coalesce typing bursts to one 300ms rebuild.
+    if (!m_searchDebounce)
+        m_searchDebounce = new QTimer(this);
+    m_searchDebounce->setSingleShot(true);
+    m_searchDebounce->setInterval(300);
+    disconnect(m_searchDebounce, &QTimer::timeout, nullptr, nullptr);
+    connect(m_searchDebounce, &QTimer::timeout, this, [this]() {
+        rebuildFiltered();
+        emit filterChanged();
+    });
+    m_searchDebounce->start();
 }
 
 void CharacterCatalogModel::setHideStarters(bool v)
@@ -74,6 +88,13 @@ void CharacterCatalogModel::setHideStarters(bool v)
 void CharacterCatalogModel::rebuildFiltered()
 {
     beginResetModel();
+    populateFiltered();
+    endResetModel();
+    emit countChanged();
+}
+
+void CharacterCatalogModel::populateFiltered()
+{
     m_filtered.clear();
     for (const auto &c : m_all) {
         if (c.isHidden)
@@ -88,8 +109,61 @@ void CharacterCatalogModel::rebuildFiltered()
             continue;
         m_filtered.append(c);
     }
-    endResetModel();
-    emit countChanged();
+}
+
+QString CharacterCatalogModel::cacheFilePath() const
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+           + QStringLiteral("/catalog/catalog.json");
+}
+
+void CharacterCatalogModel::persistCache(const QVector<CharacterEntry> &entries)
+{
+    QJsonArray arr;
+    for (const auto &c : entries) {
+        QJsonObject o;
+        o.insert(QStringLiteral("id"), c.id);
+        o.insert(QStringLiteral("name"), c.name);
+        o.insert(QStringLiteral("category"), c.category);
+        o.insert(QStringLiteral("thumbnail"), c.thumbnail);
+        o.insert(QStringLiteral("description"), c.description);
+        o.insert(QStringLiteral("isPremium"), c.isPremium);
+        o.insert(QStringLiteral("isStarter"), c.isStarter);
+        arr.append(o);
+    }
+    const QString path = cacheFilePath();
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QFile f(path);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        f.write(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+        f.close();
+    }
+}
+
+QVector<CharacterEntry> CharacterCatalogModel::readCache() const
+{
+    QVector<CharacterEntry> out;
+    QFile f(cacheFilePath());
+    if (!f.open(QIODevice::ReadOnly))
+        return out;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    f.close();
+    if (!doc.isArray())
+        return out;
+    for (const auto &v : doc.array()) {
+        const QJsonObject o = v.toObject();
+        CharacterEntry e;
+        e.id = o.value(QStringLiteral("id")).toString();
+        e.name = o.value(QStringLiteral("name")).toString();
+        e.category = o.value(QStringLiteral("category")).toString();
+        e.thumbnail = o.value(QStringLiteral("thumbnail")).toString();
+        e.description = o.value(QStringLiteral("description")).toString();
+        e.isPremium = o.value(QStringLiteral("isPremium")).toBool();
+        e.isStarter = o.value(QStringLiteral("isStarter")).toBool();
+        if (!e.id.isEmpty())
+            out.append(e);
+    }
+    return out;
 }
 
 void CharacterCatalogModel::load()
@@ -98,10 +172,28 @@ void CharacterCatalogModel::load()
         m_loading = true;
         emit loadingChanged();
     }
-    beginResetModel();
-    m_all.clear();
+
+    // Restore any previously cached backend catalog (offline-safe) before
+    // falling back to built-in starters.
+    const QVector<CharacterEntry> cached = readCache();
+    if (!cached.isEmpty()) {
+        beginResetModel();
+        m_all.clear();
+        for (const auto &c : cached)
+            m_all.append(c);
+        populateFiltered();
+        endResetModel();
+        m_loading = false;
+        emit loadingChanged();
+        emit categoriesChanged();
+        emit loaded();
+        emit countChanged();
+        return;
+    }
 
     // Built-in starters matching original assets
+    beginResetModel();
+    m_all.clear();
     m_all.append({
         QStringLiteral("crimson-knight"),
         QStringLiteral("Crimson Knight"),
@@ -143,7 +235,7 @@ void CharacterCatalogModel::load()
         false, false
     });
 
-    rebuildFiltered();
+    populateFiltered();
     endResetModel();
     m_loading = false;
     emit loadingChanged();
@@ -186,6 +278,14 @@ int CharacterCatalogModel::indexOfId(const QString &id) const
     return -1;
 }
 
+int CharacterCatalogModel::savedCount() const
+{
+    int n = 0;
+    for (const auto &c : m_filtered)
+        if (!c.isStarter && !c.isHidden) ++n;
+    return n;
+}
+
 void CharacterCatalogModel::loadFromBackend(const QVariantList &entries)
 {
     m_loading = true;
@@ -225,8 +325,11 @@ void CharacterCatalogModel::loadFromBackend(const QVariantList &entries)
                       QStringLiteral("qrc:/assets/starters/vampire-lord.webp"),
                       QStringLiteral("Elegant and deadly vampire noble"), false, true});
     }
-    rebuildFiltered();
+    populateFiltered();
     endResetModel();
+    // Persist the (possibly augmented) backend catalog so a later offline boot
+    // shows the same characters without a network round-trip.
+    persistCache(m_all);
     m_loading = false;
     emit loadingChanged();
     emit categoriesChanged();
@@ -262,4 +365,24 @@ void CharacterCatalogModel::renameCharacter(const QString &id, const QString &ne
             return;
         }
     }
+}
+
+void CharacterCatalogModel::deleteCharacter(const QString &id)
+{
+    for (int i = 0; i < m_all.size(); ++i) {
+        if (m_all[i].id == id) {
+            m_all.removeAt(i);
+            rebuildFiltered();
+            emit characterDeleteRequested(id);
+            return;
+        }
+    }
+}
+
+void CharacterCatalogModel::sortAlphabetically()
+{
+    std::sort(m_all.begin(), m_all.end(), [](const CharacterEntry &a, const CharacterEntry &b) {
+        return a.name.toLower().localeAwareCompare(b.name.toLower()) < 0;
+    });
+    rebuildFiltered();
 }

@@ -51,7 +51,7 @@ Port: Qt 6 QML/C++ client + Rust/Axum/Mongo backend (`SmokeScreen/`)
 | adminPanel | AdminModal | Ctrl+Shift+A |
 | abuseReportModal | AbuseReportModal | Present |
 | bgPanel | BackgroundPanel | Present |
-| payModal / starterPay / upgrade | PayModal + CheckoutWebModal | Present |
+| payModal / starterPay / upgrade | PayModal + CryptoProofModal | Present |
 | crypto panels | CryptoProofModal | Present |
 | paySuccess / payment status | PaymentStatusModal | Present |
 | dashboardNotification | NotificationModal | Present |

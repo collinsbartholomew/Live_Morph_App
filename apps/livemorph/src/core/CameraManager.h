@@ -24,9 +24,12 @@ class CameraManager : public QObject
     Q_PROPERTY(QStringList availableDevices READ availableDevices NOTIFY devicesChanged)
     Q_PROPERTY(QString currentDeviceId READ currentDeviceId WRITE setCurrentDeviceId NOTIFY currentDeviceChanged)
     Q_PROPERTY(QString currentDeviceName READ currentDeviceName NOTIFY currentDeviceChanged)
+    Q_PROPERTY(QString currentMicName READ currentMicName NOTIFY currentDeviceChanged)
     Q_PROPERTY(bool mirrored READ mirrored WRITE setMirrored NOTIFY mirroredChanged)
     Q_PROPERTY(QObject* videoSink READ videoSink CONSTANT)
+    Q_PROPERTY(QObject* mirrorVideoSink READ mirrorVideoSink CONSTANT)
     Q_PROPERTY(bool isRecording READ isRecording NOTIFY isRecordingChanged)
+    Q_PROPERTY(double lastFrameMs READ lastFrameMs NOTIFY lastFrameMsChanged)
 
 public:
     explicit CameraManager(QObject *parent = nullptr);
@@ -34,12 +37,17 @@ public:
 
     bool isActive() const { return m_active; }
     bool isRecording() const { return m_recording; }
+    double lastFrameMs() const { return m_lastFrameMs.load(std::memory_order_relaxed); }
     QStringList availableDevices() const { return m_deviceNames; }
     QString currentDeviceId() const { return m_currentId; }
     QString currentDeviceName() const;
+    QString currentMicName() const;
     bool mirrored() const { return m_mirrored; }
     void setMirrored(bool v);
     QObject *videoSink() const { return m_sink; }
+    QObject *mirrorVideoSink() const { return m_mirrorSink; }
+    Q_INVOKABLE void bindVideoOutput(QObject *output);
+    Q_INVOKABLE void bindMirrorVideoOutput(QObject *output);
 
 public slots:
     void refreshDevices();
@@ -63,6 +71,7 @@ signals:
     void localRecordingStarted(const QString &path);
     void localRecordingStopped(const QString &path);
     void localRecordingFailed(const QString &message);
+    void lastFrameMsChanged();
 
 private:
     void setupCamera();
@@ -72,6 +81,7 @@ private:
     QMediaCaptureSession m_session;
     QMediaRecorder *m_recorder = nullptr;
     QVideoSink *m_sink = nullptr;
+    QVideoSink *m_mirrorSink = nullptr;
     bool m_active = false;
     bool m_recording = false;
     bool m_mirrored = true;
@@ -81,5 +91,6 @@ private:
     QString m_recordPath;
     QElapsedTimer m_frameThrottle;
     std::atomic_bool m_frameEmitPending{false};
+    std::atomic<qint64> m_lastFrameMs{0}; // for PiP INPUT-LOST watchdogs
     static constexpr int kMinFrameIntervalMs = 33; // ~30 FPS
 };

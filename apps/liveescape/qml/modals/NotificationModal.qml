@@ -1,5 +1,7 @@
 import LiveEscape
 import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
 
 /**
  * NotificationModal — server-pushed announcement / dashboard notification.
@@ -16,12 +18,6 @@ Item {
     z: 560
     focus: root.open
     Keys.onEscapePressed: App.dismissNotification()
-    Keys.onPressed: (event) => {
-        if (event.key === Qt.Key_Escape) {
-            App.dismissNotification();
-            event.accepted = true;
-        }
-    }
     onOpenChanged: {
         if (root.open) {
             forceActiveFocus();
@@ -107,14 +103,14 @@ Item {
             anchors.margins: 24
             spacing: 14
 
-            Row {
+            RowLayout {
                 spacing: 12
                 anchors.left: parent.left
                 anchors.right: parent.right
 
                 Rectangle {
-                    width: 40
-                    height: 40
+                    Layout.preferredWidth: 40
+                    Layout.preferredHeight: 40
                     radius: 20
                     color: Theme.goldGlow
                     border.color: Theme.goldDim
@@ -122,7 +118,7 @@ Item {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "✦"
+                        text: qsTr("✦")
                         color: Theme.gold
                         font.pixelSize: 18
                     }
@@ -131,8 +127,8 @@ Item {
 
                 Column {
                     spacing: 2
-                    width: parent.width - 52
-                    anchors.verticalCenter: parent.verticalCenter
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
 
                     Text {
                         text: App.notificationTitle
@@ -178,7 +174,7 @@ Item {
                 anchors.right: parent.right
 
                 GoldButton {
-                    text: qsTr("Dismiss")
+                    text: qsTr("GOT IT")
                     onClicked: App.dismissNotification()
                 }
 

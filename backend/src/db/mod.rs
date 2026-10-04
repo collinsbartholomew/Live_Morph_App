@@ -44,14 +44,12 @@ impl Db {
         self.db.collection("users")
     }
 
-    pub fn access_keys(&self) -> Collection<crate::models::AccessKey> {
-        // Access keys live in the Live Escape DB
-        self.db_le.collection("access_keys")
-    }
-
     /// Live Escape isolated collections
     pub fn users_le(&self) -> Collection<User> {
         self.db_le.collection("users")
+    }
+    pub fn access_keys_le(&self) -> Collection<crate::models::AccessKey> {
+        self.db_le.collection("access_keys")
     }
     pub fn ledger_le(&self) -> Collection<crate::models::CreditLedgerEntry> {
         self.db_le.collection("credit_ledger")
@@ -62,14 +60,35 @@ impl Db {
     pub fn payment_orders_le(&self) -> Collection<mongodb::bson::Document> {
         self.db_le.collection("payment_orders")
     }
+    pub fn payment_orders_le_typed(&self) -> Collection<crate::models::PaymentOrder> {
+        self.db_le.collection("payment_orders")
+    }
     pub fn refresh_tokens_le(&self) -> Collection<mongodb::bson::Document> {
         self.db_le.collection("refresh_tokens")
     }
     pub fn otps(&self) -> Collection<crate::models::OtpChallenge> {
         self.db.collection("otp_challenges")
     }
+    pub fn otps_le(&self) -> Collection<crate::models::OtpChallenge> {
+        self.db_le.collection("otp_challenges")
+    }
+    pub fn password_reset_tokens(&self) -> Collection<mongodb::bson::Document> {
+        self.db.collection("password_reset_tokens")
+    }
+    pub fn password_reset_tokens_le(&self) -> Collection<mongodb::bson::Document> {
+        self.db_le.collection("password_reset_tokens")
+    }
+    pub fn credit_keys(&self) -> Collection<mongodb::bson::Document> {
+        self.db.collection("credit_keys")
+    }
+    pub fn credit_keys_le(&self) -> Collection<mongodb::bson::Document> {
+        self.db_le.collection("credit_keys")
+    }
     pub fn characters(&self) -> Collection<Character> {
         self.db.collection("characters")
+    }
+    pub fn user_characters(&self) -> Collection<crate::models::UserCharacter> {
+        self.db.collection("user_characters")
     }
     pub fn sessions(&self) -> Collection<crate::models::MorphSession> {
         self.db.collection("morph_sessions")
@@ -97,14 +116,14 @@ impl Db {
             .keys(doc! { "key": 1 })
             .options(IndexOptions::builder().unique(true).build())
             .build();
-        let _ = self.access_keys().create_index(key_idx).await;
+        let _ = self.access_keys_le().create_index(key_idx).await;
         let device_idx = IndexModel::builder().keys(doc! { "device_id": 1 }).build();
-        let _ = self.access_keys().create_index(device_idx).await;
+        let _ = self.access_keys_le().create_index(device_idx).await;
 
         let otp_email = IndexModel::builder()
             .keys(doc! { "email": 1, "created_at": -1 })
             .build();
-        self.otps().create_index(otp_email).await?;
+        self.otps().create_index(otp_email.clone()).await?;
 
         let otp_ttl = IndexModel::builder()
             .keys(doc! { "expires_at": 1 })
@@ -114,7 +133,25 @@ impl Db {
                     .build(),
             )
             .build();
-        let _ = self.otps().create_index(otp_ttl).await;
+        let _ = self.otps().create_index(otp_ttl.clone()).await;
+        // Product-branched auth challenges — mirror OTP + reset-token indexes in LE DB
+        let _ = self.otps_le().create_index(otp_email).await;
+        let _ = self.otps_le().create_index(otp_ttl).await;
+        let rt_hash = IndexModel::builder()
+            .keys(doc! { "token_hash": 1, "product": 1 })
+            .build();
+        let _ = self.password_reset_tokens().create_index(rt_hash.clone()).await;
+        let _ = self.password_reset_tokens_le().create_index(rt_hash).await;
+        let rt_tok_ttl = IndexModel::builder()
+            .keys(doc! { "expires_at": 1 })
+            .options(
+                IndexOptions::builder()
+                    .expire_after(std::time::Duration::from_secs(0))
+                    .build(),
+            )
+            .build();
+        let _ = self.password_reset_tokens().create_index(rt_tok_ttl.clone()).await;
+        let _ = self.password_reset_tokens_le().create_index(rt_tok_ttl).await;
 
         let sess_user = IndexModel::builder()
             .keys(doc! { "user_id": 1, "started_at": -1 })
@@ -147,6 +184,12 @@ impl Db {
             .collection::<mongodb::bson::Document>("payment_orders")
             .create_index(pay_user)
             .await;
+
+        // User characters: compound index for user queries
+        let uc_user = IndexModel::builder()
+            .keys(doc! { "user_id": 1, "created_at": -1 })
+            .build();
+        let _ = self.user_characters().create_index(uc_user).await;
 
         // Refresh tokens by hash
         let rt = IndexModel::builder()
@@ -258,6 +301,28 @@ impl Db {
             .keys(doc! { "user_id": 1, "status": 1 })
             .build();
         let _ = self.sessions().create_index(sess_status).await;
+
+        // Session housekeeping: TTL on ended_at auto-purges ended sessions 30
+        // days after they close (active rows have ended_at: null → untouched).
+        let sess_ttl = IndexModel::builder()
+            .keys(doc! { "ended_at": 1 })
+            .options(
+                IndexOptions::builder()
+                    .expire_after(std::time::Duration::from_secs(30 * 24 * 3600))
+                    .build(),
+            )
+            .build();
+        let _ = self.sessions().create_index(sess_ttl.clone()).await;
+        let _ = self.sessions_le().create_index(sess_ttl.clone()).await;
+        // LE sessions: user + status indexes (were missing entirely)
+        let sess_le_user = IndexModel::builder()
+            .keys(doc! { "user_id": 1, "started_at": -1 })
+            .build();
+        let _ = self.sessions_le().create_index(sess_le_user.clone()).await;
+        let sess_le_status = IndexModel::builder()
+            .keys(doc! { "user_id": 1, "status": 1 })
+            .build();
+        let _ = self.sessions_le().create_index(sess_le_status).await;
 
         let audit_idx = IndexModel::builder()
             .keys(doc! { "user_id": 1, "at": -1 })

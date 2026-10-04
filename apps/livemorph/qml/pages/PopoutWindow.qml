@@ -6,9 +6,9 @@ import LiveMorph
 
 ApplicationWindow {
     id: root
-    title: "LiveMorph Overlay"
-    width: 320
-    height: 240
+    title: "MorphMe Output"
+    width: 480
+    height: 300
     minimumWidth: 200
     minimumHeight: 150
     color: "#000000"
@@ -17,18 +17,21 @@ ApplicationWindow {
 
     property point dragOffset
 
+    onClosing: {
+        root.destroy();
+    }
+
     Rectangle {
         anchors.fill: parent
-        color: "#0a0a0e"
-        border.color: Colors.accent + "66"
+        color: "#000000"
+        border.color: "#ffffff1a"
         border.width: 1
-        radius: 8
+        radius: Theme.radiusXl
         clip: true
 
         VideoOutput {
             id: videoOut
             anchors.fill: parent
-            anchors.margins: 2
             fillMode: VideoOutput.PreserveAspectCrop
             visible: Session.isActive && Session.peerVideoSink !== null
         }
@@ -39,12 +42,38 @@ ApplicationWindow {
             when: Session.peerVideoSink !== null && root.visible
         }
 
-        Text {
+        // Empty state
+        Column {
             anchors.centerIn: parent
-            text: Session.isActive ? "" : "Start a morph to show output"
-            color: Colors.textMuted
-            font.pixelSize: 12
+            spacing: 6
             visible: !Session.isActive
+
+            Image {
+                anchors.horizontalCenter: parent.horizontalCenter
+                source: "qrc:/assets/livemorph-icon.png"
+                width: 36
+                height: 36
+                opacity: 0.25
+                fillMode: Image.PreserveAspectFit
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Waiting for output"
+                color: Colors.textMuted
+                font.pixelSize: 11
+                opacity: 0.45
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Start a morph to begin"
+                color: Colors.textMuted
+                font.pixelSize: 8
+                font.family: Theme.fontMono.family
+                font.letterSpacing: 1.5
+                opacity: 0.25
+            }
         }
 
         // Title drag bar
@@ -52,31 +81,65 @@ ApplicationWindow {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: 24
-            color: "#000000b3"
-            radius: 8
+            height: 28
+            color: Colors.surfaceRaised + "f2"
+            border.color: "#ffffff0d"
+            border.width: 1
 
-            Text {
+            // Round top corners only
+            Rectangle {
                 anchors.left: parent.left
-                anchors.leftMargin: 8
-                anchors.verticalCenter: parent.verticalCenter
-                text: Session.isActive ? "LIVE OVERLAY" : "OVERLAY"
-                color: Session.isActive ? Colors.statusError : Colors.textSecondary
-                font.pixelSize: 10
-                font.weight: Font.Bold
-                font.family: "monospace"
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: Theme.radiusLg
+                color: parent.color
             }
 
-            Text {
-                anchors.right: parent.right
-                anchors.rightMargin: 8
+            Row {
+                anchors.left: parent.left
+                anchors.leftMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
-                text: "✕"
-                color: Colors.textMuted
-                font.pixelSize: 12
+                spacing: 6
+
+                Rectangle {
+                    width: 6
+                    height: 6
+                    radius: 3
+                    color: Session.isActive ? Colors.accent + "cc" : Colors.textMuted
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "LIVE MORPH OUTPUT"
+                    color: Colors.textMuted
+                    font.pixelSize: 9
+                    font.family: Theme.fontMono.family
+                    font.letterSpacing: 1.5
+                }
+            }
+
+            Rectangle {
+                width: 24
+                height: 24
+                radius: Theme.radiusSm
+                anchors.right: parent.right
+                anchors.rightMargin: 6
+                anchors.verticalCenter: parent.verticalCenter
+                color: closeOverlayMa.containsMouse ? Colors.dangerMuted : "transparent"
+
+                Icon {
+                    anchors.centerIn: parent
+                    name: "x"
+                    size: 12
+                    color: Colors.textMuted
+                    opacity: 0.5
+                }
+
                 MouseArea {
+                    id: closeOverlayMa
                     anchors.fill: parent
-                    anchors.margins: -4
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.close()
                 }
@@ -84,7 +147,7 @@ ApplicationWindow {
 
             MouseArea {
                 anchors.fill: parent
-                anchors.rightMargin: 28
+                anchors.rightMargin: 32
                 property point start
                 onPressed: function(m) {
                     start = Qt.point(m.x, m.y)

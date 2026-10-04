@@ -3,6 +3,7 @@
 #include <QAbstractListModel>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QVector>
 #include <QVariantList>
 #include <QVariantMap>
@@ -60,9 +61,12 @@ public slots:
     void loadFromBackend(const QVariantList &entries);
     QVariantMap get(int index) const;
     int indexOfId(const QString &id) const;
+    int savedCount() const; // user characters (non-starters) currently listed
     void hideStarter(const QString &id);
     void unhideAll();
     void renameCharacter(const QString &id, const QString &newName);
+    void deleteCharacter(const QString &id);
+    void sortAlphabetically();
 
 signals:
     void countChanged();
@@ -70,14 +74,20 @@ signals:
     void loaded();
     void loadingChanged();
     void categoriesChanged();
+    void characterDeleteRequested(const QString &id);
 
 private:
     void rebuildFiltered();
+    void populateFiltered();
+    QString cacheFilePath() const;
+    void persistCache(const QVector<CharacterEntry> &entries);
+    QVector<CharacterEntry> readCache() const;
 
     QVector<CharacterEntry> m_all;
     QVector<CharacterEntry> m_filtered;
     QString m_filterCategory;
     QString m_search;
+    QTimer *m_searchDebounce = nullptr;
     bool m_hideStarters = false;
     bool m_loading = false;
 };

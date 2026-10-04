@@ -3,7 +3,7 @@
 ## Product architecture (matches original)
 
 ```
-Desktop app                          Your Rust API (:3001)              Decart
+Desktop app                          Your Rust API (:3874)              Decart
 ───────────                          ────────────────────              ──────
 Auth OTP ──────────────────────────► JWT / session
 Credits balance ◄─────────────────── ledger / burn

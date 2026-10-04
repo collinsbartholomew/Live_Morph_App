@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QGuiApplication>
+#include <QScreen>
 #include <QtGlobal>
 #include <QCoreApplication>
 #include <QQmlApplicationEngine>
@@ -16,6 +17,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QFontDatabase>
 
 #include "core/AppController.h"
 #include "core/Notifier.h"
@@ -24,23 +26,78 @@
 #include "core/CameraManager.h"
 #include "core/RecordingManager.h"
 #include "core/ConfigManager.h"
-#include "core/I18nManager.h"
+#include "I18nManager.h"
 #include "models/CharacterCatalogModel.h"
 #include "models/PresetModel.h"
 #include "services/BackendClient.h"
 #include "services/WebRtcSignalingClient.h"
-#include "core/StreamServer.h"
+#include "StreamServer.h"
 #include <QTimer>
 #include "core/VirtualCameraHelper.h"
 
+namespace {
+QAtomicInt g_qmlVerifyError = 0;
+QtMessageHandler g_prevMessageHandler = nullptr;
+
+// In --verify-qml mode, watch for the runtime-only failures that break QML
+// component creation. They surface through the "qml" logging category at
+// warning-or-above; cmake/qmlcachegen cannot catch them.
+void qmlVerifyMessageHandler(QtMsgType type, const QMessageLogContext &ctx, const QString &msg)
+{
+    if ((type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
+        && (qstrcmp(ctx.category, "qml") == 0 || qstrcmp(ctx.category, "default") == 0)) {
+        fprintf(stderr, "[qml-verify msg] %s: %s\n", ctx.category, msg.toUtf8().constData());
+        if (msg.contains(QLatin1String("Cannot assign to non-existent"))
+            || msg.contains(QLatin1String("is not a type"))
+            || msg.contains(QLatin1String("Cannot create component"))
+            || msg.contains(QLatin1String("object creation failed"))
+            || msg.contains(QLatin1String("Required property"))) {
+            g_qmlVerifyError.storeRelease(1);
+        }
+    }
+    if (g_prevMessageHandler)
+        g_prevMessageHandler(type, ctx, msg);
+}
+} // namespace
+
 int main(int argc, char *argv[])
 {
+    // --verify-qml: headless self-test — loads the real UI, flips to the
+    // dashboard page (forcing every dashboard component to instantiate) and
+    // exits non-zero on any QML load error. Regression gate for the class of
+    // runtime-only failures ("Cannot assign to non-existent property",
+    // missing type imports) that cmake builds cannot catch.
+    bool verifyQml = false;
+    for (int i = 1; i < argc; ++i) {
+        if (qstrcmp(argv[i], "--verify-qml") == 0) {
+            verifyQml = true;
+            qputenv("QT_QPA_PLATFORM", "offscreen");
+            g_prevMessageHandler = qInstallMessageHandler(qmlVerifyMessageHandler);
+        }
+    }
+
     QApplication app(argc, argv);
     app.setOrganizationName(QStringLiteral("LiveMorph"));
     app.setOrganizationDomain(QStringLiteral("livemorph.com"));
     app.setApplicationName(QStringLiteral("LiveMorph"));
     app.setApplicationVersion(QStringLiteral("1.8.0"));
     app.setWindowIcon(QIcon(QStringLiteral(":/assets/livemorph-icon.png")));
+
+    // Bundle the app font so it renders identically on every machine —
+    // fontconfig-driven fallback was resolving "Inter" to Noto Sans.
+    // Maple Mono is OFL-licensed; loaded from embedded resources.
+    {
+        const QStringList fonts = {
+            QStringLiteral(":/fonts/MapleMono-Regular.ttf"),
+            QStringLiteral(":/fonts/MapleMono-Light.ttf"),
+            QStringLiteral(":/fonts/MapleMono-Bold.ttf"),
+        };
+        for (const QString &f : fonts) {
+            const int id = QFontDatabase::addApplicationFont(f);
+            if (id == -1)
+                qWarning() << "Failed to load embedded font:" << f;
+        }
+    }
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
@@ -59,20 +116,24 @@ int main(int argc, char *argv[])
     app.setPalette(dark);
 
     auto *config    = new ConfigManager(&app);
-    fprintf(stderr, "config OK\n");
     auto *backend   = new BackendClient(&app);
-    fprintf(stderr, "backend OK\n");
     backend->setBaseUrl(config->apiBaseUrl());
     backend->fetchBootstrap();
+    // fetchFeatureFlags() and fetchMaintenance() are redundant: bootstrap
+    // already provides credits.hd_multiplier, ui.maintenance, and feature flags.
+    backend->fetchStreamingAvailability();
     // BackendClient has its own internal 15s ping timer; no need for a second one.
     QObject::connect(config, &ConfigManager::apiBaseUrlChanged, backend, [backend, config]() {
         backend->setBaseUrl(config->apiBaseUrl());
         backend->ping();
     });
     auto *signaling = new WebRtcSignalingClient(&app);
-    fprintf(stderr, "signaling OK\n");
     /* camera bound below */
     auto *auth      = new AuthManager(config, backend, &app);
+    // A 401 from any backend request refreshes the access token so the app
+    // recovers from an expired session instead of failing every call.
+    QObject::connect(backend, &BackendClient::authenticationExpired, auth,
+                     [auth]() { auth->refreshTokens(); });
     auto *session   = new SessionManager(auth, config, backend, signaling, &app);
     // Server-side force disconnect (credits depleted / revoked) stops the morph.
     QObject::connect(auth, &AuthManager::forceDisconnected, session, [session](const QString &) {
@@ -81,7 +142,7 @@ int main(int argc, char *argv[])
     });
     auto *camera    = new CameraManager(&app);
     session->setCameraManager(camera);
-    auto *recording = new RecordingManager(config, backend, camera, &app);
+    auto *recording = new RecordingManager(config, backend, camera, session, &app);
     auto *streamServer = new StreamServer(&app);
     auto *vcam = new VirtualCameraHelper(streamServer, &app);
     streamServer->setPort(config->streamPort());
@@ -91,7 +152,6 @@ int main(int argc, char *argv[])
     auto *catalog   = new CharacterCatalogModel(&app);
     auto *presets   = new PresetModel(&app);
     auto *appCtrl   = new AppController(auth, session, camera, recording, config, catalog, presets, &app);
-    fprintf(stderr, "appCtrl OK\n");
     auto *notifier  = new Notifier(&app);
 
     // Single notification funnel: C++ signals → Notifier store → toast + center.
@@ -118,41 +178,47 @@ int main(int argc, char *argv[])
                          catalog->loadFromBackend(entries);
                      });
 
+    // Enable HD tier selector when bootstrap advertises hd_multiplier > 1.
+    QObject::connect(backend, &BackendClient::bootstrapLoaded, appCtrl,
+                     [appCtrl](const QVariantMap &b) {
+                         const QVariantMap credits = b.value(QStringLiteral("credits")).toMap();
+                         const double hdMult = credits.value(QStringLiteral("hd_multiplier"), 1.0).toDouble();
+                         appCtrl->setHdAvailable(hdMult > 1.0);
+                     });
+
+    QObject::connect(catalog, &CharacterCatalogModel::characterDeleteRequested, backend,
+                     [backend](const QString &id) {
+                         backend->deleteUserCharacter(id);
+                     });
+
     // Camera mirror preference from settings
     camera->setMirrored(config->mirrorCamera());
     QObject::connect(config, &ConfigManager::mirrorCameraChanged, camera, [camera, config]() {
         camera->setMirrored(config->mirrorCamera());
     });
 
-    // Morph (AI output) frames — the GStreamer tee — feed OBS MJPEG, vcam and
-    // the recording sidecar so downstream captures the swapped output (not raw camera).
+    // Morph (AI output) frames — the GStreamer tee — feed OBS MJPEG and vcam so
+    // downstream captures the swapped output (not raw camera).
     QObject::connect(session, &SessionManager::morphFrameReady, streamServer,
-                     [streamServer, vcam, recording](const QImage &img) {
+                     [streamServer, vcam](const QImage &img) {
                          const bool needStream = streamServer->running();
                          const bool needVcam = vcam->active();
-                         const bool needRec = recording->isRecording();
-                         if (!needStream && !needVcam && !needRec)
+                         if (!needStream && !needVcam)
                              return;
                          if (needStream)
                              streamServer->pushFrame(img);
                          if (needVcam)
                              vcam->pushFrame(img);
-                         if (needRec) {
-                             QByteArray j;
-                             QBuffer b(&j);
-                             b.open(QIODevice::WriteOnly);
-                             img.save(&b, "JPG", 60);
-                             recording->pushChunk(j);
-                         }
                      });
 
     QQmlApplicationEngine engine;
-    auto *i18n = new I18nManager(&engine, &app);
+    auto *i18n = new I18nManager(&engine, QStringLiteral("LiveMorph"),
+                                   QStringLiteral(":/i18n/livemorph_en.ts"), &app);
     auto *ctx = engine.rootContext();
     ctx->setContextProperty(QStringLiteral("App"), appCtrl);
     ctx->setContextProperty(QStringLiteral("Auth"), auth);
     ctx->setContextProperty(QStringLiteral("Session"), session);
-    ctx->setContextProperty(QStringLiteral("Camera"), camera);
+    ctx->setContextProperty(QStringLiteral("CameraCtrl"), camera);
     ctx->setContextProperty(QStringLiteral("Recording"), recording);
     ctx->setContextProperty(QStringLiteral("StreamServer"), streamServer);
     ctx->setContextProperty(QStringLiteral("VirtualCamera"), vcam);
@@ -213,7 +279,52 @@ int main(int argc, char *argv[])
                      &app, []() { QCoreApplication::exit(-1); },
                      Qt::QueuedConnection);
     engine.load(url);
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [streamServer, vcam, session, recording]() {
+
+    // Restore window geometry (Electron parity: saves/restores window size & position).
+    // Guard on "width" — the save path never writes "geometry", so the old
+    // contains("geometry") check made this whole block dead code. Clamp x/y
+    // to the available screen so a unplugged monitor doesn't strand the window.
+    if (engine.rootObjects().size() > 0) {
+        auto *rootObj = engine.rootObjects().first();
+        QSettings winSettings;
+        winSettings.beginGroup(QStringLiteral("Window"));
+        if (winSettings.contains("width")) {
+            const int w = winSettings.value("width", 1280).toInt();
+            const int h = winSettings.value("height", 800).toInt();
+            int x = winSettings.value("x", -1).toInt();
+            int y = winSettings.value("y", -1).toInt();
+            const QList<QScreen *> screens = QGuiApplication::screens();
+            bool onScreen = false;
+            for (QScreen *s : screens) {
+                const QRect g = s->availableGeometry();
+                if (g.intersects(QRect(x, y, w, h))) { onScreen = true; break; }
+            }
+            if (!onScreen && !screens.isEmpty()) {
+                const QRect primary = screens.first()->availableGeometry();
+                x = primary.x() + 80;
+                y = primary.y() + 80;
+            }
+            rootObj->setProperty("width", w);
+            rootObj->setProperty("height", h);
+            rootObj->setProperty("x", x);
+            rootObj->setProperty("y", y);
+        }
+        winSettings.endGroup();
+    }
+
+    if (verifyQml) {
+        QTimer::singleShot(1500, &app, [appCtrl]() {
+            // Force every dashboard component (TopBar, WorkshopPanel →
+            // UploadTab/CustomizeForm, PresetGrid, drawers, tour…) to load.
+            appCtrl->setCurrentPage(QStringLiteral("dashboard"));
+            QTimer::singleShot(1200, qApp, []() {
+                const bool failed = g_qmlVerifyError;
+                fprintf(stderr, "[qml-verify] %s\n", failed ? "FAIL" : "PASS");
+                QCoreApplication::exit(failed ? 3 : 0);
+            });
+        });
+    }
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [streamServer, vcam, session, recording, &engine]() {
         if (session && session->isActive())
             session->stopSession();
         if (recording && recording->isRecording())
@@ -222,6 +333,17 @@ int main(int argc, char *argv[])
             vcam->stop();
         if (streamServer && streamServer->running())
             streamServer->stop();
+        // Save window geometry
+        if (engine.rootObjects().size() > 0) {
+            auto *rootObj = engine.rootObjects().first();
+            QSettings winSettings;
+            winSettings.beginGroup(QStringLiteral("Window"));
+            winSettings.setValue("width", rootObj->property("width").toInt());
+            winSettings.setValue("height", rootObj->property("height").toInt());
+            winSettings.setValue("x", rootObj->property("x").toInt());
+            winSettings.setValue("y", rootObj->property("y").toInt());
+            winSettings.endGroup();
+        }
     });
 
     // Deep links from argv (protocol handler / second instance)

@@ -43,10 +43,12 @@ AppController::AppController(AuthManager *auth,
         emit notification(tr("Signed in"), QStringLiteral("success"));
         if (m_auth)
             m_auth->refreshProfile();
+        updateHdAvailability();
         // Start camera only after successful auth when user opted in
         if (m_config && m_config->startWithCamera() && m_camera && !m_camera->isActive())
             m_camera->start();
     });
+    connect(m_auth, &AuthManager::profileChanged, this, &AppController::updateHdAvailability);
     connect(m_auth, &AuthManager::signedOut, this, [this]() {
         if (m_session && m_session->isActive())
             m_session->stopSession();
@@ -54,6 +56,7 @@ AppController::AppController(AuthManager *auth,
             m_recording->stopRecording(QStringLiteral("sign-out"));
         if (m_camera && m_camera->isActive())
             m_camera->stop();
+        updateHdAvailability();
         setCurrentPage(QStringLiteral("auth"));
         emit notification(tr("Signed out"), QStringLiteral("info"));
     });
@@ -118,6 +121,10 @@ void AppController::setSwapMode(const QString &mode)
     if (m_swapMode == mode)
         return;
     m_swapMode = mode;
+    // Wire scene mode to SessionManager
+    if (m_session) {
+        m_session->setSceneEnabled(mode == QLatin1String("scene"));
+    }
     emit swapModeChanged();
 }
 
@@ -133,10 +140,44 @@ void AppController::setSwapTier(const QString &tier)
 {
     if (m_swapTier == tier)
         return;
+    // HD is gated to paid tiers (Electron parity: unlocks with a Starter+ pack).
+    if (tier == QLatin1String("hd") && !m_hdAvailable)
+        return;
     m_swapTier = tier;
     if (m_session)
         m_session->setHdActive(tier == QLatin1String("hd"));
     emit swapTierChanged();
+}
+
+void AppController::setHdAvailable(bool available)
+{
+    if (m_hdAvailable == available)
+        return;
+    m_hdAvailable = available;
+    if (!m_hdAvailable && m_swapTier == QLatin1String("hd")) {
+        m_swapTier = QStringLiteral("standard");
+        if (m_session)
+            m_session->setHdActive(false);
+        emit swapTierChanged();
+    }
+    emit hdAvailableChanged();
+}
+
+void AppController::updateHdAvailability()
+{
+    const QString t = m_auth ? m_auth->tier().toLower() : QStringLiteral("free");
+    // Paid tiers (starter / mid / pro) unlock HD; free tier does not.
+    const bool available = !t.isEmpty() && t != QLatin1String("free") && t != QLatin1String("basic");
+    if (m_hdAvailable == available)
+        return;
+    m_hdAvailable = available;
+    if (!m_hdAvailable && m_swapTier == QLatin1String("hd")) {
+        m_swapTier = QStringLiteral("standard");
+        if (m_session)
+            m_session->setHdActive(false);
+        emit swapTierChanged();
+    }
+    emit hdAvailableChanged();
 }
 
 void AppController::setShowWhatsNew(bool v)
@@ -188,6 +229,51 @@ void AppController::setShowTour(bool v)
     emit showTourChanged();
 }
 
+void AppController::setShowDownloads(bool v)
+{
+    if (m_showDownloads == v)
+        return;
+    m_showDownloads = v;
+    emit showDownloadsChanged();
+}
+
+void AppController::setShowLockScreen(bool v)
+{
+    if (m_showLockScreen == v)
+        return;
+    m_showLockScreen = v;
+    emit showLockScreenChanged();
+    if (v)
+        emit lockScreenChanged();
+}
+
+void AppController::openDownloads()
+{
+    setShowDownloads(true);
+}
+
+void AppController::closeDownloads()
+{
+    setShowDownloads(false);
+}
+
+void AppController::showLock(const QString &title, const QString &message, bool dismissable)
+{
+    m_lockTitle = title;
+    m_lockMessage = message;
+    m_lockDismissable = dismissable;
+    // setShowLockScreen() early-returns when the lock is already up, so its
+    // lockScreenChanged() never fires — a second lock (e.g. credits depleted
+    // during a maintenance lock) would keep showing the FIRST title/message.
+    emit lockScreenChanged();
+    setShowLockScreen(true);
+}
+
+void AppController::dismissLockScreen()
+{
+    setShowLockScreen(false);
+}
+
 void AppController::openHelp()
 {
     emit helpRequested();
@@ -209,9 +295,29 @@ void AppController::startSwap()
         setCurrentPage(QStringLiteral("auth"));
         return;
     }
-    if ((m_auth->creditBalance() + m_auth->bonusBalance()) <= 0.0) {
+    const double balance = m_auth->creditBalance() + m_auth->bonusBalance();
+    if (balance <= 0.0) {
         emit errorOccurred(tr("Insufficient credits"), tr("Buy more credits to continue."));
         openBuyCredits();
+        return;
+    }
+    // Gate: need at least rate×60 credits to start a session
+    if (m_session) {
+        const double minStart = m_session->creditsPerSecond() * 60.0;
+        if (minStart > 0.0 && balance < minStart) {
+            emit errorOccurred(tr("Low credits"),
+                tr("Need at least %1 credits to start. Buy more credits.")
+                    .arg(QString::number(minStart, 'f', 0)));
+            openBuyCredits();
+            return;
+        }
+    }
+    // Electron avatarPrompt gate: no character picked → toast, no session
+    if (m_session
+        && m_session->activeCharacterId().isEmpty()
+        && m_session->activePrompt().isEmpty()) {
+        emit errorOccurred(tr("Pick a character"),
+                           tr("Pick or upload a character before starting your swap."));
         return;
     }
     if (!m_session)
@@ -255,13 +361,14 @@ void AppController::showOsNotification(const QString &title, const QString &body
         emit notification(body.isEmpty() ? title : (title + ": " + body), QStringLiteral("info"));
         return;
     }
-    // Transient tray icon for one-shot notification
-    auto *tray = new QSystemTrayIcon(this);
-    tray->setIcon(QIcon(QStringLiteral(":/qt/qml/LiveMorph/resources/assets/livemorph-icon.png")));
-    tray->show();
-    tray->showMessage(title, body, QSystemTrayIcon::Information, 5000);
-    QObject::connect(tray, &QSystemTrayIcon::messageClicked, tray, &QObject::deleteLater);
-    QTimer::singleShot(6000, tray, &QObject::deleteLater);
+    // ONE persistent tray icon — creating/destroying an icon per notification
+    // churned the notification area (ghost entries on some DEs).
+    if (!m_tray) {
+        m_tray = new QSystemTrayIcon(this);
+        m_tray->setIcon(QIcon(QStringLiteral(":/qt/qml/LiveMorph/resources/assets/livemorph-icon.png")));
+        m_tray->show();
+    }
+    m_tray->showMessage(title, body, QSystemTrayIcon::Information, 5000);
 }
 
 void AppController::handleDeepLink(const QString &url)
@@ -301,8 +408,11 @@ void AppController::handleDeepLink(const QString &url)
         return;
     } else if (path.contains(QLatin1String("auth")) || path.contains(QLatin1String("login"))) {
         navigateTo(QStringLiteral("auth"));
+        return;
     } else if (path.contains(QLatin1String("credits")) || path.contains(QLatin1String("buy"))) {
         setShowBuyCredits(true);
+        return;
     }
+    // Only emit generic notification if no specific handler matched
     emit notification(tr("Opened link"), QStringLiteral("info"));
 }

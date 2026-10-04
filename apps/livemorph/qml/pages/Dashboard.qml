@@ -6,19 +6,16 @@ import LiveMorph
 Item {
     id: root
 
-    // Phase A–C layout system
-    readonly property int contentWidth: width
-    readonly property bool narrowLayout: contentWidth < Theme.narrowBreakpoint
-    // Drawer mode on narrow; in-flow panel on wide
-    property bool workshopDrawerOpen: false
-    readonly property int workshopEffectiveWidth: {
-        if (narrowLayout)
-            return Math.min(Theme.workshopMaxWidth, Math.max(Theme.workshopMinWidth, Math.round(contentWidth * 0.85)))
-        if (Config.workshopCollapsed)
-            return Theme.workshopCollapsedWidth
-        var w = Math.round(contentWidth * 0.28)
-        return Math.max(Theme.workshopMinWidth, Math.min(Theme.workshopMaxWidth, w))
+    // Electron layout: single fixed 360px workshop on the left — no drawer,
+    // no collapse, no narrow mode (min window width 1024 fits it fine).
+    readonly property bool narrowLayout: false
+
+    // Escape key: close dashboard-specific overlays
+    Keys.onEscapePressed: function(event) {
+        if (helpDrawer.open) { helpDrawer.open = false; event.accepted = true; }
+        else if (notifPanel.open) { notifPanel.open = false; event.accepted = true; }
     }
+    focus: true
     readonly property bool useCompactChrome: Config.compactChrome || height < Theme.compactChromeBelow
     readonly property int actionBarEffectiveHeight: useCompactChrome
           ? Theme.actionBarHeightCompact
@@ -27,12 +24,6 @@ Item {
           ? Theme.statusBarHeightCompact
           : Theme.statusBarHeight
     readonly property int promptBarEffectiveHeight: Config.promptBarVisible ? Theme.promptBarHeight : 0
-
-
-    onWidthChanged: {
-        if (!narrowLayout)
-            workshopDrawerOpen = false
-    }
 
     // Orphan recovery banner
     Rectangle {
@@ -101,7 +92,9 @@ Item {
 
     TopBar {
         id: topBar
-        anchors.top: orphanBanner.bottom
+        // Chain through the streaming banner: when hidden its height is 0, so
+        // layout is unchanged — and both banners visible no longer collide.
+        anchors.top: streamingUnavailableBanner.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         height: Theme.topBarHeight
@@ -112,6 +105,7 @@ Item {
         onOpenHelp: helpDrawer.open = true
         onOpenNotifications: notifPanel.open = !notifPanel.open
         onOpenWhatsNew: whatsNew.open = true
+        onOpenStreamKit: streamKitPanel.open()
     }
 
     Item {
@@ -120,33 +114,59 @@ Item {
         anchors.right: parent.right
         anchors.bottom: actionBar.top
 
-        Item {
-            id: stageArea
+        // ── Workshop (Electron: LEFT side, fixed w-[360px], no collapse) ──
+        WorkshopPanel {
+            id: workshop
+            width: Theme.workshopWidth
             anchors.left: parent.left
             anchors.top: parent.top
-            anchors.bottom: Config.promptBarVisible ? promptBar.top : parent.bottom
-            anchors.right: root.narrowLayout ? parent.right : workshop.left
+            anchors.bottom: parent.bottom
+            collapsed: false
+        }
 
-            StageFrame {
-                id: stage
-                anchors.fill: parent
-                anchors.margins: 12
+        Item {
+            id: stageArea
+            anchors.left: workshop.right
+            anchors.top: parent.top
+            // Drive the resize via an animated bottomMargin (the instant
+            // anchor-target flip made hiding the prompt bar jump).
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: promptBar.height
+            anchors.right: parent.right
+
+            // Electron stage box: aspect-video 16:9, max-w 880px, centered in
+            // the column with 24px padding — a letterboxed box, not full-bleed.
+            Item {
+                id: stageBox
+                readonly property real maxW: Math.min(parent.width - 48, 880)
+                readonly property real w: Math.min(maxW, (parent.height - 48) * 16 / 9)
+                readonly property real h: w * 9 / 16
+                anchors.centerIn: parent
+                width: Math.max(320, w)
+                height: Math.max(180, h)
+
+                StageFrame {
+                    id: stage
+                    anchors.fill: parent
+                    onPopoutRequested: App.popoutRequested()
+                }
             }
 
             InputPiP {
-                anchors.left: stage.left
-                anchors.bottom: stage.bottom
+                id: inputPip
+                anchors.left: stageBox.left
+                anchors.top: stageBox.top
                 anchors.leftMargin: 16
-                anchors.bottomMargin: 64
-                width: root.narrowLayout ? 140 : 180
-                height: root.narrowLayout ? 94 : 120
+                anchors.topMargin: 16
+                width: 256
+                height: 144
             }
 
-            // Cooldown overlay
+            // Cooldown overlay (Qt functional extra; Electron gates via tooltip)
             Rectangle {
                 visible: Session.cooldownActive
-                anchors.horizontalCenter: stage.horizontalCenter
-                anchors.top: stage.top
+                anchors.horizontalCenter: stageBox.horizontalCenter
+                anchors.top: stageBox.top
                 anchors.topMargin: 20
                 width: cdLabel.implicitWidth + 20
                 height: 28
@@ -158,25 +178,19 @@ Item {
                     text: "Cooldown " + Session.cooldownRemainingSec + "s"
                     color: Colors.statusWarning
                     font.pixelSize: 11
-                    font.family: "monospace"
+                    font.family: Theme.fontMono.family
                 }
-            }
-
-            StageControls {
-                anchors.horizontalCenter: stage.horizontalCenter
-                anchors.bottom: stage.bottom
-                anchors.bottomMargin: 52
             }
         }
 
-        // Dual prompt / scene bars (Phase B: collapsible)
+        // Dual prompt / scene bars (collapsible) — margins symmetric with the
+        // stage (12) so the bar aligns with the stage edges.
         PromptCommitBar {
             id: promptBar
-            anchors.left: parent.left
-            anchors.right: root.narrowLayout ? parent.right : workshop.left
+            anchors.left: workshop.right
+            anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.margins: Config.promptBarVisible ? 8 : 0
-            anchors.rightMargin: root.narrowLayout ? 8 : 4
+            anchors.margins: Config.promptBarVisible ? 12 : 0
             height: root.promptBarEffectiveHeight
             opacity: Config.promptBarVisible ? 1 : 0
             visible: height > 0
@@ -187,100 +201,67 @@ Item {
                     easing.type: Easing.OutCubic
                 }
             }
-        }
-
-        // Phase C: in-flow workshop (wide) or hidden (narrow — drawn as overlay below)
-        WorkshopPanel {
-            id: workshop
-            visible: !root.narrowLayout
-            width: root.narrowLayout ? 0 : root.workshopEffectiveWidth
-            collapsed: Config.workshopCollapsed && !root.narrowLayout
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            Behavior on width {
+            Behavior on opacity {
                 NumberAnimation {
-                    duration: Theme.motionNormal
+                    duration: Theme.motionFast
                     easing.type: Easing.OutCubic
                 }
             }
-            onToggleCollapsed: Config.workshopCollapsed = !Config.workshopCollapsed
         }
-    }
 
-    // Phase C: workshop drawer overlay (narrow windows)
-    Rectangle {
-        id: workshopScrim
-        anchors.fill: parent
-        anchors.topMargin: topBar.height + orphanBanner.height
-        anchors.bottomMargin: actionBar.height + statusBar.height
-        color: Colors.overlayScrim
-        opacity: root.narrowLayout && root.workshopDrawerOpen ? 1 : 0
-        visible: opacity > 0.01
-        z: 70
-        Behavior on opacity { NumberAnimation { duration: Theme.motionFast } }
-        MouseArea {
-            anchors.fill: parent
-            onClicked: root.workshopDrawerOpen = false
-        }
-    }
-
-    WorkshopPanel {
-        id: workshopDrawer
-        visible: root.narrowLayout
-        width: root.workshopEffectiveWidth
-        collapsed: false
-        z: 71
-        anchors.top: parent.top
-        anchors.topMargin: topBar.height + orphanBanner.height
-        anchors.bottom: actionBar.top
-        anchors.right: parent.right
-        anchors.rightMargin: root.workshopDrawerOpen ? 0 : -width
-        Behavior on anchors.rightMargin {
-            NumberAnimation {
-                duration: Theme.motionNormal
-                easing.type: Easing.OutCubic
-            }
-        }
-        onToggleCollapsed: root.workshopDrawerOpen = false
-    }
-
-    // Floating workshop open button (narrow)
-    Rectangle {
-        id: workshopFab
-        visible: root.narrowLayout && !root.workshopDrawerOpen
-        z: 65
-        width: 44
-        height: 44
-        radius: 22
-        anchors.right: parent.right
-        anchors.rightMargin: 16
-        anchors.bottom: actionBar.top
-        anchors.bottomMargin: 16 + (Config.promptBarVisible ? Theme.promptBarHeight : 0)
-        color: Colors.accent
-        border.color: Colors.accent40
-        border.width: 1
-        Icon {
-            anchors.centerIn: parent
-            name: "layers"
-            size: 18
-            color: Colors.white
-        }
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.workshopDrawerOpen = true
-        }
-        // soft glow
+        // Critical low-credits bar — sibling of the prompt bar so it stacks
+        // ABOVE it (the old root-level actionBar.top anchor overlapped this
+        // exact band, hiding the prompt inputs mid-session).
         Rectangle {
-            anchors.centerIn: parent
-            width: parent.width + 10
-            height: parent.height + 10
-            radius: width / 2
-            color: Colors.accent
-            opacity: 0.25
-            z: -1
+            id: criticalCreditsBar
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: Config.promptBarVisible ? promptBar.top : parent.bottom
+            height: visible ? 44 : 0
+            z: 60
+            visible: {
+                if (!Session.isActive) return false
+                var bal = Auth.creditBalance + (Auth.bonusBalance || 0)
+                var rate = Session.creditsPerSecond || 2
+                return rate > 0 && (bal / rate) < 15
+            }
+            color: Colors.statusErrorMuted
+            border.color: Colors.statusError
+            border.width: 1
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 12
+                spacing: 12
+                Icon {
+                    name: "alert-circle"
+                    size: 14
+                    color: Colors.statusError
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Credits almost gone — session will end soon")
+                    color: Colors.textPrimary
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
+                PrimaryButton {
+                    text: qsTr("Buy credits")
+                    implicitHeight: 32
+                    onClicked: App.openBuyCredits()
+                }
+                GhostButton {
+                    text: qsTr("Stop")
+                    onClicked: Session.stopSession()
+                }
+            }
+            Behavior on height { NumberAnimation { duration: Theme.motionFast } }
         }
+
+        // Electron layout keeps a single fixed workshop — no drawer/FAB/collapse.
     }
 
     ActionBar {
@@ -335,9 +316,6 @@ Item {
 
     HelpDrawer {
         id: helpDrawer
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.right: parent.right
     }
 
     NotificationCenter {
@@ -358,82 +336,46 @@ Item {
         anchors.fill: parent
     }
 
-    // Critical low-credits bar while session is live
-    Rectangle {
-        id: criticalCreditsBar
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: actionBar.top
-        height: visible ? 44 : 0
-        z: 60
-        visible: {
-            if (!Session.isActive) return false
-            var bal = Auth.creditBalance + (Auth.bonusBalance || 0)
-            var rate = Session.creditsPerSecond || 2
-            return rate > 0 && (bal / rate) < 15
-        }
-        color: Colors.statusErrorMuted
-        border.color: Colors.statusError
-        border.width: 1
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 12
-            spacing: 12
-            Icon {
-                name: "alert-circle"
-                size: 14
-                color: Colors.statusError
-                anchors.verticalCenter: parent.verticalCenter
-            }
-            Text {
-                Layout.fillWidth: true
-                text: qsTr("Credits almost gone — session will end soon")
-                color: Colors.textPrimary
-                font.pixelSize: 12
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
-            }
-            PrimaryButton {
-                text: qsTr("Buy credits")
-                implicitHeight: 32
-                onClicked: App.openBuyCredits()
-            }
-            GhostButton {
-                text: qsTr("Stop")
-                onClicked: Session.stopSession()
-            }
-        }
-        Behavior on height { NumberAnimation { duration: Theme.motionFast } }
+    StreamKitPanel {
+        id: streamKitPanel
+        anchors.centerIn: parent
     }
 
-    // Global shortcuts
-    Shortcut {
-        sequence: "Ctrl+B"
-        onActivated: {
-            if (root.narrowLayout)
-                root.workshopDrawerOpen = !root.workshopDrawerOpen
-            else
-                Config.workshopCollapsed = !Config.workshopCollapsed
-        }
-    }
+    // Global shortcuts (Electron has no Ctrl+B — the workshop is always up)
     Shortcut {
         sequence: "Ctrl+E"
         onActivated: Config.promptBarVisible = !Config.promptBarVisible
+    }
+    Shortcut {
+        sequence: "F12"
+        onActivated: {
+            if (Recording.isRecording) {
+                Recording.stopRecording();
+            } else {
+                Recording.startRecording(Session.activeCharacterId);
+            }
+        }
+    }
+    Shortcut {
+        sequence: "Ctrl+P"
+        onActivated: App.openPreview()
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+P"
+        onActivated: App.openPopout()
     }
 
     Connections {
         target: Auth
         function onSignedOut() {
-            if (Camera.isActive)
-                Camera.stop()
+            if (CameraCtrl.isActive)
+                CameraCtrl.stop()
             if (Session && Session.isActive)
                 Session.stopSession()
         }
         function onSignedIn() {
-            if (Config.startWithCamera && !Camera.isActive)
-                Camera.start()
+            if (Config.startWithCamera && !CameraCtrl.isActive)
+                CameraCtrl.start()
             // First-run tour only after successful sign-in
             if (!Config.onboardingDone)
                 Qt.callLater(function() {
@@ -446,7 +388,7 @@ Item {
     Component.onCompleted: {
         tour.registerTargets(topBar, stageArea, workshop, actionBar)
         if (Auth.isAuthenticated && Config.startWithCamera)
-            Camera.start()
+            CameraCtrl.start()
         Recording.scanOrphans()
         if (Catalog.count === 0)
             Catalog.load()

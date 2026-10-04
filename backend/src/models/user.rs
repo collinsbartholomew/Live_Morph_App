@@ -16,6 +16,8 @@ pub struct User {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub google_sub: Option<String>,
     pub display_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phone: Option<String>,
     pub credit_balance: f64,
     pub bonus_balance: f64,
     pub tier: String, // free | standard | pro
@@ -28,6 +30,12 @@ pub struct User {
     pub plan: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub referral_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub referred_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub referral_earned: Option<f64>,
     pub is_active: bool,
     pub created_at: bson::DateTime,
     pub updated_at: bson::DateTime,
@@ -47,6 +55,7 @@ impl User {
             password_hash: None,
             google_sub: None,
             display_name: name,
+            phone: None,
             credit_balance: 0.0,
             bonus_balance: signup_bonus,
             tier: "free".into(),
@@ -54,6 +63,9 @@ impl User {
             access_key: None,
             plan: None,
             device_id: None,
+            referral_code: None,
+            referred_by: None,
+            referral_earned: None,
             is_active: true,
             created_at: now,
             updated_at: now,

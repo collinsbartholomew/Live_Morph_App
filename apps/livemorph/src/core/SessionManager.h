@@ -31,6 +31,7 @@ class SessionManager : public QObject
     Q_PROPERTY(QString activeScene READ activeScene NOTIFY activeSceneChanged)
     Q_PROPERTY(bool sceneEnabled READ sceneEnabled NOTIFY sceneEnabledChanged)
     Q_PROPERTY(bool identityLockEnabled READ identityLockEnabled WRITE setIdentityLockEnabled NOTIFY identityLockChanged)
+    Q_PROPERTY(bool enhancePrompts READ enhancePrompts WRITE setEnhancePrompts NOTIFY enhancePromptsChanged)
     Q_PROPERTY(bool cooldownActive READ cooldownActive NOTIFY cooldownChanged)
     Q_PROPERTY(int cooldownRemainingSec READ cooldownRemainingSec NOTIFY cooldownChanged)
     Q_PROPERTY(bool hdActive READ hdActive WRITE setHdActive NOTIFY hdActiveChanged)
@@ -38,6 +39,7 @@ class SessionManager : public QObject
     Q_PROPERTY(bool signalingConnected READ signalingConnected NOTIFY signalingConnectedChanged)
     Q_PROPERTY(QString realtimeSessionId READ realtimeSessionId NOTIFY realtimeSessionIdChanged)
     Q_PROPERTY(QVideoSink *peerVideoSink READ peerVideoSink NOTIFY peerVideoSinkChanged)
+    Q_PROPERTY(double rttMs READ rttMs NOTIFY statsChanged)
 
 public:
     enum class Status { Idle, Connecting, Connected, Generating, Cooldown, InsufficientCredits, Error };
@@ -66,6 +68,8 @@ public:
     Q_INVOKABLE void setSceneEnabled(bool v);
     bool identityLockEnabled() const { return m_identityLock; }
     void setIdentityLockEnabled(bool v);
+    bool enhancePrompts() const { return m_enhance; }
+    void setEnhancePrompts(bool v);
     bool cooldownActive() const { return m_cooldownSec > 0; }
     int cooldownRemainingSec() const { return m_cooldownSec; }
     bool hdActive() const { return m_hd; }
@@ -73,6 +77,7 @@ public:
     QString engineLabel() const;
     bool signalingConnected() const { return m_signalingConnected; }
     QString realtimeSessionId() const { return m_realtimeSessionId; }
+    double rttMs() const { return m_rttMs; }
     QVideoSink *peerVideoSink() const;
 
 public slots:
@@ -84,9 +89,6 @@ public slots:
     void tickFrame();
     void applyCooldown(int seconds = 3);
     void reportError(const QString &message);
-    /// Called by a native WebRTC peer when local SDP offer is ready
-    void onLocalOfferReady(const QString &sdp);
-    void onLocalIceCandidate(const QJsonObject &candidate);
 
 signals:
     void isActiveChanged();
@@ -101,14 +103,17 @@ signals:
     void activeSceneChanged();
     void sceneEnabledChanged();
     void identityLockChanged();
+    void enhancePromptsChanged();
     void cooldownChanged();
     void hdActiveChanged();
     void engineLabelChanged();
     void signalingConnectedChanged();
     void realtimeSessionIdChanged();
+    void statsChanged();
     void sessionStarted();
     void sessionStopped();
     void creditsDeducted(int amount);
+    void characterSwitchFailed(); // Electron stage.characterSwitchFailed
     void error(const QString &message);
     void morphFrameReady(const QImage &image);
     /// Forwarded from signaling for a native WebRTC peer to consume
@@ -122,10 +127,14 @@ private:
     void setStatus(Status s, const QString &text = {});
     void updateRates();
     void pushActiveTargetsToProvider();
+    void pushSceneToProvider();
     void wireSignaling();
     void createNativePeer();
     void destroyNativePeer();
     QString wsBaseUrl() const;
+    void scheduleReconnect();
+    QString composedPrompt() const;
+    int swapFailureCooldown() const;
 
     AuthManager *m_auth = nullptr;
     ConfigManager *m_config = nullptr;
@@ -147,8 +156,10 @@ private:
     QTimer m_cooldownTimer;
     int m_frames = 0;
     int m_cooldownSec = 0;
+    int m_tickCount = 0; // 100ms UI ticks since session start
     bool m_hd = false;
-    bool m_identityLock = false;
+    bool m_identityLock = true; // Electron session store default: ON
+    bool m_enhance = true;
     bool m_sceneEnabled = false;
     QString m_characterId;
     QString m_characterName;
@@ -156,4 +167,14 @@ private:
     QString m_prompt;
     QString m_scene;
     QString m_scenePrompt;
+    QTimer m_reconnectTimer;
+    QTimer m_connectWatchdog; // 15s first-connect timeout (Electron connect timeout)
+    int m_reconnectAttempts = 0;
+    bool m_wantReconnect = false;
+    bool m_connectingProactively = false; // self-issued connect — its induced disconnect must not re-arm the ladder
+    int m_consecutiveSwapFailures = 0;   // Electron swap-failure ladder 0/15/60/300s
+    double m_rttMs = -1;                  // cached from GstRtcPeer stats pump
+    static const int kMaxReconnectAttempts = 5;
+    static const int kConnectTimeoutMs = 15000;
+    static const int kFirstFrameTimeoutMs = 35000; // Electron no-output watchdog (Du)
 };

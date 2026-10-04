@@ -2,17 +2,15 @@ import LiveMorph
 import QtMultimedia
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import QtQuick.Window
 
-/**
- * Preview window — mirrors the morph (AI) output at 1280×720 for OBS/window capture.
- */
 ApplicationWindow {
     id: root
 
     property bool cleanMode: false
 
-    title: "LiveMorph Preview"
+    title: "Preview Window"
     width: 1280
     height: 720
     minimumWidth: 640
@@ -21,8 +19,15 @@ ApplicationWindow {
     flags: Qt.Window
     visible: false
     onClosing: {
-        root.visible = false;
-        close.accepted = false;
+        root.destroy();
+    }
+
+    Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_F11) {
+            root.visibility = root.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen
+        } else if (event.key === Qt.Key_Escape && root.visibility === Window.FullScreen) {
+            root.visibility = Window.Windowed
+        }
     }
 
     Rectangle {
@@ -33,6 +38,7 @@ ApplicationWindow {
             id: videoOut
 
             anchors.fill: parent
+            anchors.bottomMargin: !root.cleanMode ? 32 : 0
             fillMode: VideoOutput.PreserveAspectFit
             visible: Session.isActive && Session.peerVideoSink !== null
 
@@ -45,153 +51,163 @@ ApplicationWindow {
             when: Session.peerVideoSink !== null && root.visible
         }
 
-        Text {
+        // Empty state
+        Column {
             anchors.centerIn: parent
-            text: Session.isActive ? "" : "Start a morph to preview the output"
-            color: Colors.textMuted
-            font.pixelSize: 15
+            spacing: 8
             visible: !Session.isActive
-        }
 
-        // Session badge (always visible, including clean mode)
-        Rectangle {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.margins: root.cleanMode ? 12 : 44
-            height: 22
-            width: badgeRow.implicitWidth + 14
-            radius: 4
-            color: Session.isActive ? Colors.statusErrorMuted : Colors.surfaceOverlay
-            border.color: Session.isActive ? Colors.statusError + "66" : Colors.surfaceBorder
-            border.width: 1
-            visible: Session.isActive || !root.cleanMode
-
-            Row {
-                id: badgeRow
-
-                anchors.centerIn: parent
-                spacing: 6
-
-                Rectangle {
-                    width: 6
-                    height: 6
-                    radius: 3
-                    color: Session.isActive ? Colors.statusError : Colors.textMuted
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    SequentialAnimation on opacity {
-                        running: Session.isActive && root.visible && Qt.application.state === Qt.ApplicationActive
-                        loops: Animation.Infinite
-
-                        NumberAnimation {
-                            from: 1
-                            to: 0.35
-                            duration: 700
-                        }
-
-                        NumberAnimation {
-                            from: 0.35
-                            to: 1
-                            duration: 700
-                        }
-
-                    }
-
-                }
-
-                Text {
-                    text: Session.isActive ? "LIVE MORPH" : "IDLE"
-                    color: Session.isActive ? Colors.statusError : Colors.textMuted
-                    font.pixelSize: 10
-                    font.weight: Font.Bold
-                    font.family: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
+            Image {
+                anchors.horizontalCenter: parent.horizontalCenter
+                source: "qrc:/assets/livemorph-icon.png"
+                width: 64
+                height: 64
+                opacity: 0.4
+                fillMode: Image.PreserveAspectFit
             }
-
-        }
-
-        // Character chip when live
-        Rectangle {
-            anchors.top: parent.top
-            anchors.right: parent.right
-            anchors.margins: root.cleanMode ? 12 : 44
-            height: 22
-            width: charLab.implicitWidth + 14
-            radius: 4
-            color: Colors.surfaceOverlay
-            border.color: Colors.surfaceBorder
-            visible: Session.isActive && (Session.activeCharacterName.length || Session.activeCharacterId.length)
 
             Text {
-                id: charLab
-
-                anchors.centerIn: parent
-                text: Session.activeCharacterName.length ? Session.activeCharacterName : Session.activeCharacterId
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "LiveMorph Live Preview"
                 color: Colors.textPrimary
+                font.pixelSize: 18
+                font.weight: Font.SemiBold
+                opacity: 0.6
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Waiting for stream..."
+                color: Colors.textSecondary
+                font.pixelSize: 13
+                opacity: 0.5
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Start OBS Stream in the main window"
+                color: Colors.textSecondary
                 font.pixelSize: 10
+                opacity: 0.3
             }
 
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: obsInfoCol.implicitWidth + 40
+                height: obsInfoCol.implicitHeight + 20
+                radius: Theme.radiusMd
+                color: Colors.surfaceRaised
+                border.color: Colors.surfaceBorder
+                border.width: 1
+
+                ColumnLayout {
+                    id: obsInfoCol
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    Text {
+                        text: "Capture this window in OBS using Window Capture"
+                        color: Colors.textSecondary
+                        font.pixelSize: 11
+                        font.family: Theme.fontMono.family
+                        opacity: 0.6
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Text {
+                        text: "Window title: Preview Window"
+                        color: Colors.textMuted
+                        font.pixelSize: 10
+                        font.family: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Consolas, monospace"
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+                }
+            }
         }
 
-        // Chrome
+        // Hover toolbar (top-right, auto-hide)
         Rectangle {
-            visible: !root.cleanMode
+            id: hoverToolbar
+            visible: !root.cleanMode && !hoverArea.containsMouse
             anchors.top: parent.top
-            anchors.left: parent.left
             anchors.right: parent.right
-            height: 36
-            color: "#000000cc"
+            anchors.margins: 12
+            width: hoverRow.implicitWidth + 16
+            height: 32
+            radius: Theme.radiusSm
+            color: Colors.surfaceRaised + "cc"
+            border.color: Colors.surfaceBorder
+            border.width: 1
+            opacity: hoverArea.containsMouse ? 0 : 1
+
+            Behavior on opacity { NumberAnimation { duration: 200 } }
 
             Row {
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                anchors.leftMargin: 12
-                spacing: 12
+                id: hoverRow
+                anchors.centerIn: parent
+                spacing: 4
 
-                Text {
-                    text: "PREVIEW · Morph output"
-                    color: Colors.textSecondary
-                    font.pixelSize: 11
-                    font.family: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-                    anchors.verticalCenter: parent.verticalCenter
+                Rectangle {
+                    width: cleanModeBtn.implicitWidth + 16
+                    height: 24
+                    radius: 3
+                    color: root.cleanMode ? Colors.accentMuted : "transparent"
+                    border.color: root.cleanMode ? Colors.accent : "transparent"
+                    border.width: 1
+
+                    Text {
+                        id: cleanModeBtn
+                        anchors.centerIn: parent
+                        text: root.cleanMode ? "Show Footer" : "Clean Mode"
+                        color: root.cleanMode ? Colors.accent : Colors.textSecondary
+                        font.pixelSize: 10
+                        font.family: Theme.fontMono.family
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.cleanMode = !root.cleanMode
+                    }
                 }
 
-                Text {
-                    visible: Session.isActive
-                    text: Session.creditsPerSecond.toFixed(1) + " cr/s"
-                    color: Colors.accent
-                    font.pixelSize: 11
-                    font.family: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
-                    anchors.verticalCenter: parent.verticalCenter
-                }
+                Rectangle {
+                    width: fsBtn.implicitWidth + 16
+                    height: 24
+                    radius: 3
+                    color: "transparent"
 
+                    Text {
+                        id: fsBtn
+                        anchors.centerIn: parent
+                        text: root.visibility === Window.FullScreen ? "Exit Fullscreen" : "Fullscreen"
+                        color: Colors.textSecondary
+                        font.pixelSize: 10
+                        font.family: Theme.fontMono.family
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.visibility = root.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen
+                    }
+                }
             }
-
-            Row {
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.right: parent.right
-                anchors.rightMargin: 8
-                spacing: 8
-
-                GhostButton {
-                    text: root.cleanMode ? "Show chrome" : "Clean mode"
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 400
-                    ToolTip.text: "Hide UI chrome for a clean program feed"
-                    onClicked: root.cleanMode = !root.cleanMode
-                }
-
-                GhostButton {
-                    text: "Close"
-                    onClicked: root.close()
-                }
-
-            }
-
         }
 
+        // Invisible hover area for toolbar
+        MouseArea {
+            id: hoverArea
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 4
+            width: 200
+            height: 50
+            hoverEnabled: true
+            visible: !root.cleanMode
+        }
+
+        // Hamburger restore button (clean mode)
         Rectangle {
             visible: root.cleanMode
             anchors.top: parent.top
@@ -199,14 +215,14 @@ ApplicationWindow {
             anchors.margins: 8
             width: 28
             height: 28
-            radius: 6
+            radius: Theme.radiusSm
             color: "#00000099"
 
-            Text {
+            Icon {
                 anchors.centerIn: parent
-                text: "☰"
+                name: "menu"
+                size: 14
                 color: Colors.textSecondary
-                font.pixelSize: 12
             }
 
             MouseArea {
@@ -214,7 +230,71 @@ ApplicationWindow {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.cleanMode = false
             }
+        }
 
+        // Chrome bar at bottom
+        Rectangle {
+            visible: !root.cleanMode
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 32
+            color: Colors.surfaceRaised
+            border.color: Colors.surfaceBorder
+            border.width: 1
+
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 16
+                spacing: 12
+
+                Text {
+                    text: "LiveMorph Live Preview — 1280x720"
+                    color: Colors.textMuted
+                    font.pixelSize: 9
+                    font.family: Theme.fontMono.family
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: parent.right
+                anchors.rightMargin: 16
+                spacing: 12
+
+                Text {
+                    text: "A product of TheTools Hub"
+                    color: Colors.textMuted
+                    font.pixelSize: 9
+                    font.family: Theme.fontMono.family
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    text: "|"
+                    color: Colors.textMuted
+                    font.pixelSize: 9
+                    opacity: 0.2
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    text: "Support"
+                    color: Colors.accent
+                    font.pixelSize: 9
+                    font.family: Theme.fontMono.family
+                    opacity: 0.6
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Qt.openUrlExternally("https://livemorph.app/support")
+                    }
+                }
+            }
         }
 
     }

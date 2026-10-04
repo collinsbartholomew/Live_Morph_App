@@ -10,10 +10,20 @@ ApplicationWindow {
     height: 860
     minimumWidth: 1100
     minimumHeight: 700
-    title: "Live Escape"
+    title: qsTr("Live Escape")
     color: Theme.bg
 
-    Component.onCompleted: showMaximized()
+    Component.onCompleted: {
+        showMaximized()
+        ResponsiveHelper.syncViewport(win.width)
+    }
+    onWidthChanged: ResponsiveHelper.syncViewport(win.width)
+
+    // Maintenance Blocker — z-index 100000, blocks ALL content
+    MaintenanceBlocker {}
+
+    // Gate Blocker — FAIL-CLOSED: z-index 99999, shows while boot resolves
+    GateBlocker {}
 
     // Offline API strip
     Rectangle {
@@ -59,6 +69,7 @@ ApplicationWindow {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+        property var dashItem: item
         sourceComponent: {
             switch (App.screen) {
             case "preloader":   return preloaderComp
@@ -81,10 +92,12 @@ ApplicationWindow {
             Rectangle { anchors.fill: parent; color: Theme.bg }
             Column {
                 anchors.centerIn: parent
+                width: parent.width
                 spacing: 16
                 Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "MAINTENANCE"
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    text: qsTr("MAINTENANCE")
                     color: Theme.gold
                     font.family: Theme.fontUi
                     font.pixelSize: 24
@@ -92,12 +105,12 @@ ApplicationWindow {
                     font.letterSpacing: 4
                 }
                 Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "Live Escape is temporarily unavailable.\nPlease try again later."
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    text: qsTr("Live Escape is temporarily unavailable.\nPlease try again later.")
                     color: Theme.dim
                     font.family: Theme.fontMono
                     font.pixelSize: 12
-                    horizontalAlignment: Text.AlignHCenter
                 }
             }
         }
@@ -109,7 +122,9 @@ ApplicationWindow {
     ConsentModal {}
     WelcomeModal {}
     TutorialsModal {}
-    TourOverlay {}
+    TourOverlay {
+        dashboard: screenLoader.dashItem
+    }
     BackgroundPanel {}
     AbuseReportModal {}
     UpgradeModal {}
@@ -117,21 +132,42 @@ ApplicationWindow {
     PaymentStatusModal {}
     CryptoProofModal {}
     FreeCreditsModal {}
+    ExpiryModal {}
+    StreamConsentModal {}
     LockScreen {}
     AdminModal {}
-    CheckoutWebModal {}
+    ForceUpdateModal {}
+    OnboardingOverlay {}
+    GetStartedModal {}
+    StarterPayModal {}
+    StarterLockScreen {}
+    PaySuccessModal {}
+    DownloadsScreen { visible: App.showDownloads; z: 750 }
+    SettingsScreen { visible: App.showSettings; z: 800 }
 
     Toast {
         message: App.toastMessage
         kind: App.toastKind
     }
 
-    // Provider: Ctrl+Shift+A opens admin (mutations still need ADMIN_SECRET)
-    Keys.onPressed: (event) => {
-        if (event.modifiers & Qt.ControlModifier && event.modifiers & Qt.ShiftModifier
-            && (event.key === Qt.Key_A)) {
-            App.showAdminPanel = true
-            event.accepted = true
+    // F toggles fullscreen (skip when typing in text fields)
+    // Ctrl+Shift+A intentionally blocked (matches Electron — admin panel disabled for security)
+    Item {
+        anchors.fill: parent
+        focus: true
+        Keys.onPressed: (event) => {
+            if (event.modifiers & Qt.ControlModifier && event.modifiers & Qt.ShiftModifier
+                && (event.key === Qt.Key_A)) {
+                event.accepted = true;
+                return;
+            }
+            if (event.key === Qt.Key_F && !(event.modifiers & Qt.ControlModifier)) {
+                var f = win.activeFocusItem;
+                if (!f || (f.toString().indexOf("TextEdit") === -1 && f.toString().indexOf("TextField") === -1)) {
+                    win.visibility = (win.visibility === Window.FullScreen) ? Window.Windowed : Window.FullScreen;
+                    event.accepted = true;
+                }
+            }
         }
     }
 }

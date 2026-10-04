@@ -18,6 +18,7 @@ use crate::config::Config;
 use crate::db::{new_id, Db};
 use crate::error::{AppError, AppResult};
 use crate::models::{AccessKey, CreditLedgerEntry, PaymentOrder, User};
+use crate::product::ProductId;
 use chrono::Utc;
 use mongodb::bson::doc;
 use serde::{Deserialize, Serialize};
@@ -79,7 +80,7 @@ pub async fn settle_and_provision(
     cfg: &Config,
     order: &mut PaymentOrder,
 ) -> AppResult<User> {
-    let is_le = order.product == "liveescape";
+    let is_le = ProductId::parse(&order.product) == Some(ProductId::LiveEscape);
     let orders_coll = if is_le {
         db.db_le.collection::<PaymentOrder>("payment_orders")
     } else {
@@ -101,11 +102,15 @@ pub async fn settle_and_provision(
         )));
     }
 
-    // Claim order for provisioning (webhook + client verify race)
+    // Claim order for provisioning (webhook + client verify race).
+    // Stamp claimed_at: crash-recovery staleness is measured from THIS claim
+    // moment, not from paid_at (payment time) — otherwise a long-since-paid
+    // crypto order looks "stale" instantly and two settlers can double-provision.
+    let now_claim = Utc::now();
     let claim = orders_coll
         .update_one(
             doc! { "_id": &order.id, "status": "paid" },
-            doc! { "$set": { "status": "provisioning" } },
+            doc! { "$set": { "status": "provisioning", "claimed_at": bson::DateTime::from_chrono(now_claim) } },
         )
         .await?;
     if claim.matched_count == 0 {
@@ -121,21 +126,20 @@ pub async fn settle_and_provision(
                 .await?
                 .ok_or_else(|| AppError::NotFound("user".into()));
         }
-        // Crash recovery: stuck "provisioning" older than 2 minutes → reclaim to paid
+        // Crash recovery: a claim stuck "provisioning" older than 2 minutes
+        // (measured from claimed_at, never from paid_at) → reclaim to paid.
+        // Legacy pre-fix docs have no claimed_at — base staleness on
+        // created_at (non-optional in the model) so they self-heal instead
+        // of 409ing forever.
         if latest.status == "provisioning" {
-            let stale = latest
-                .paid_at
-                .map(|t| {
-                    let t_chrono = Some(t.to_chrono());
-                    t_chrono
-                        .map(|tc| (Utc::now() - tc).num_seconds() > 120)
-                        .unwrap_or(true)
-                })
-                .unwrap_or(true);
+            let stale = match latest.claimed_at {
+                Some(t) => (Utc::now() - t.to_chrono()).num_seconds() > 120,
+                None => (Utc::now() - latest.created_at.to_chrono()).num_seconds() > 120,
+            };
             if stale {
                 let reclaim = orders_coll
                     .update_one(
-                        doc! { "_id": &order.id, "status": "provisioning" },
+                        doc! { "_id": &order.id, "status": "provisioning", "claimed_at": latest.claimed_at },
                         doc! { "$set": { "status": "paid" } },
                     )
                     .await?;
@@ -233,18 +237,23 @@ pub async fn settle_and_provision(
     // LiveEscape activation payment: mint the user's annual license access key
     // now that the order is settled. Without this, a paying user gets credits but
     // never a key, so `licensed()` stays false and they are stuck at the AccessGate.
-    if order.product == "liveescape"
+    if ProductId::parse(&order.product) == Some(ProductId::LiveEscape)
         && order.kind.as_deref() == Some("activation")
     {
         let plan = order.package_key.clone();
         let has_key = db
-            .access_keys()
+            .access_keys_le()
             .find_one(doc! { "user_id": &user.id, "active": true })
             .await?;
         if has_key.is_none() {
             let mut ak = AccessKey::new(&plan, order.credits);
             ak.user_id = user.id.clone();
-            db.access_keys().insert_one(&ak).await?;
+            // Credits were already delivered via the `$inc` above (step 2). The
+            // key must NOT carry a pending `credits_granted`, otherwise the next
+            // `/keys/validate` from the client would re-grant the same activation
+            // credits a second time.
+            ak.credits_granted = 0.0;
+            db.access_keys_le().insert_one(&ak).await?;
             // Bind the key + plan on the user so subsequent boots are licensed.
             users_coll
                 .update_one(
@@ -252,7 +261,7 @@ pub async fn settle_and_provision(
                     doc! { "$set": {
                         "access_key": &ak.key,
                         "plan": &plan,
-                        "product": "liveescape",
+                        "product": ProductId::LiveEscape.as_str(),
                         "updated_at": Utc::now(),
                     }},
                 )
@@ -267,12 +276,76 @@ pub async fn settle_and_provision(
                     }},
                 )
                 .await?;
+            // Also update the in-memory order so the verify/status responses
+            // can return the minted key to the client immediately.
+            order.access_key = Some(ak.key.clone());
+            order.plan = Some(plan.clone());
             info!(
                 user = %user.id,
                 order = %order.id,
                 "activation order provisioned: access key minted"
             );
         }
+    }
+
+    // LiveEscape upgrade: promote the user (and any bound license key) to the
+    // target plan so feature tiers unlock immediately after payment settles.
+    if ProductId::parse(&order.product) == Some(ProductId::LiveEscape) && order.kind.as_deref() == Some("upgrade") {
+        if let Some(ref target) = order.plan {
+            users_coll
+                .update_one(
+                    doc! { "_id": &user.id },
+                    doc! { "$set": { "plan": target, "updated_at": Utc::now() } },
+                )
+                .await?;
+            db.access_keys_le()
+                .update_many(
+                    doc! { "user_id": &user.id, "active": true },
+                    doc! { "$set": { "plan": target } },
+                )
+                .await?;
+            info!(
+                user = %user.id,
+                order = %order.id,
+                plan = %target,
+                "upgrade order provisioned: plan promoted"
+            );
+        }
+    }
+
+    // LiveEscape starter pack: tag the account so the client can show the
+    // starter-specific lock/upsell states (credits exhausted → activate).
+    if ProductId::parse(&order.product) == Some(ProductId::LiveEscape) && order.kind.as_deref() == Some("starter_pack") {
+        users_coll
+            .update_one(
+                doc! { "_id": &user.id },
+                doc! {
+                    "$set": { "starter_pack": true, "updated_at": Utc::now() }
+                },
+            )
+            .await?;
+    }
+
+    // LiveEscape renewal: extend every active license key's expiry by a fresh
+    // year. Without this, a paid renewal grants credits but never extends
+    // expires_at — the user pays and stays locked out at the gate.
+    if ProductId::parse(&order.product) == Some(ProductId::LiveEscape)
+        && order.kind.as_deref() == Some("renew")
+    {
+        let new_expiry = bson::DateTime::from_chrono(Utc::now() + chrono::Duration::days(365));
+        let key_res = db
+            .access_keys_le()
+            .update_many(
+                doc! { "user_id": &user.id, "active": true },
+                doc! { "$set": { "expires_at": new_expiry } },
+            )
+            .await?;
+        info!(
+            user = %user.id,
+            order = %order.id,
+            keys_extended = key_res.modified_count,
+            "renew order provisioned: license expiry extended 365 days"
+        );
     }
 
     // Reload balances for response

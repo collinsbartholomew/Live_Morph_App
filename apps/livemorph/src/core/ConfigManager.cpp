@@ -224,7 +224,8 @@ void ConfigManager::setProductNotifications(bool v)
 
 bool ConfigManager::identityLockDefault() const
 {
-    return m_settings.value(QStringLiteral("session/identityLockDefault"), false).toBool();
+    // Electron session store defaults identity lock ON.
+    return m_settings.value(QStringLiteral("session/identityLockDefault"), true).toBool();
 }
 
 void ConfigManager::setIdentityLockDefault(bool v)
@@ -259,25 +260,80 @@ void ConfigManager::setValue(const QString &key, const QVariant &value)
     emit configChanged();
 }
 
-QString ConfigManager::decartApiKey() const
+bool ConfigManager::uploadConsentShown() const
 {
-    return {}; // never expose vendor API keys in the desktop binary
+    return m_settings.value(QStringLiteral("ui/uploadConsentShown"), false).toBool();
 }
 
-void ConfigManager::setDecartApiKey(const QString &)
+void ConfigManager::setUploadConsentShown(bool v)
 {
-    // Intentionally ignored — Decart keys live only on the backend
+    if (uploadConsentShown() == v) return;
+    m_settings.setValue(QStringLiteral("ui/uploadConsentShown"), v);
+    emit uploadConsentShownChanged();
+    emit configChanged();
 }
 
-QString ConfigManager::decartWsUrl() const
+QString ConfigManager::pipVisibility() const
 {
-    return m_settings.value(QStringLiteral("decart/wsUrl"),
-                            QStringLiteral("wss://api3.decart.ai/v1/stream")).toString();
+    return m_settings.value(QStringLiteral("camera/pipVisibility"), QStringLiteral("whileSwapping")).toString();
 }
 
-void ConfigManager::setDecartWsUrl(const QString &u)
+void ConfigManager::setPipVisibility(const QString &v)
 {
-    if (decartWsUrl() == u) return;
-    m_settings.setValue(QStringLiteral("decart/wsUrl"), u);
-    emit decartWsUrlChanged();
+    if (pipVisibility() == v) return;
+    m_settings.setValue(QStringLiteral("camera/pipVisibility"), v);
+    emit pipVisibilityChanged();
+    emit configChanged();
+}
+
+bool ConfigManager::smoothOutput() const
+{
+    return m_settings.value(QStringLiteral("recording/smoothOutput"), false).toBool();
+}
+
+void ConfigManager::setSmoothOutput(bool v)
+{
+    if (smoothOutput() == v) return;
+    m_settings.setValue(QStringLiteral("recording/smoothOutput"), v);
+    emit smoothOutputChanged();
+    emit configChanged();
+}
+
+QString ConfigManager::recordingQuality() const
+{
+    return m_settings.value(QStringLiteral("recording/quality"), QStringLiteral("balanced")).toString();
+}
+
+void ConfigManager::setRecordingQuality(const QString &q)
+{
+    if (recordingQuality() == q) return;
+    m_settings.setValue(QStringLiteral("recording/quality"), q);
+    emit recordingQualityChanged();
+    emit configChanged();
+}
+
+bool ConfigManager::micAudioEnabled() const
+{
+    return m_settings.value(QStringLiteral("recording/micAudio"), false).toBool();
+}
+
+void ConfigManager::setMicAudioEnabled(bool v)
+{
+    if (micAudioEnabled() == v) return;
+    m_settings.setValue(QStringLiteral("recording/micAudio"), v);
+    emit micAudioEnabledChanged();
+    emit configChanged();
+}
+
+bool ConfigManager::autoRecordOnSwap() const
+{
+    return m_settings.value(QStringLiteral("recording/autoRecordOnSwap"), false).toBool();
+}
+
+void ConfigManager::setAutoRecordOnSwap(bool v)
+{
+    if (autoRecordOnSwap() == v) return;
+    m_settings.setValue(QStringLiteral("recording/autoRecordOnSwap"), v);
+    emit autoRecordOnSwapChanged();
+    emit configChanged();
 }

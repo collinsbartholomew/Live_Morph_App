@@ -9,7 +9,7 @@
 #include <QVariantList>
 #include <functional>
 
-class QWebSocket;
+
 
 /**
  * HTTP client for the unified platform API (LiveMorph Actix host + Live Escape routes).
@@ -51,8 +51,6 @@ public:
     void setRefreshToken(const QString &refreshToken);
     QString refreshToken() const { return m_refreshToken; }
     Q_INVOKABLE void refreshSession();
-    Q_INVOKABLE void connectBalanceSocket();
-    Q_INVOKABLE void disconnectBalanceSocket();
 
     // ── Auth ──────────────────────────────────────────────
     Q_INVOKABLE void login(const QString &email, const QString &password, const QString &deviceId);
@@ -78,6 +76,7 @@ public:
     Q_INVOKABLE void resolveApiEndpoint();
     Q_INVOKABLE void fetchFeatureFlags();
     Q_INVOKABLE void fetchPlans();
+    Q_INVOKABLE void fetchActivationPlans();
     Q_INVOKABLE void fetchPlatformSettings();
     Q_INVOKABLE void fetchPaymentGateway();
     Q_INVOKABLE void fetchDashboardMaintenance();
@@ -89,6 +88,7 @@ public:
     // ── Streaming ─────────────────────────────────────────
     Q_INVOKABLE void fetchEngineKey();
     Q_INVOKABLE void rotateEngineKey();
+    Q_INVOKABLE void fetchIceServers();
     Q_INVOKABLE void startStreamingSession(const QVariantMap &body);
     Q_INVOKABLE void endStreamingSession(const QVariantMap &body);
     Q_INVOKABLE void fetchBackgroundPresets();
@@ -97,7 +97,6 @@ public:
     // ── Payments ──────────────────────────────────────────
     Q_INVOKABLE void starterPackPay(const QString &email, const QString &method, const QVariantMap &extra = {});
     Q_INVOKABLE void activationPay(const QString &planId, const QString &method, const QVariantMap &extra = {});
-    Q_INVOKABLE void devActivate(const QString &planId);
     Q_INVOKABLE void upgradePay(const QString &planId, const QString &method, const QVariantMap &extra = {});
     Q_INVOKABLE void purchaseCredits(const QString &planId, const QString &method, const QVariantMap &extra = {});
     Q_INVOKABLE void starterPackStatus(const QString &email);
@@ -111,10 +110,25 @@ public:
     Q_INVOKABLE void attachReferral(const QString &email, const QString &deviceId, const QString &code);
     Q_INVOKABLE void getPayoutDetails();
     Q_INVOKABLE void savePayoutDetails(const QVariantMap &details);
+    Q_INVOKABLE void redeemCreditKey(const QString &key);
     Q_INVOKABLE void createSupportTicket(const QString &subject, const QString &message);
 
     Q_INVOKABLE void adminSaveEngineKey(const QString &key, const QString &adminSecret);
     Q_INVOKABLE void adminSetCredits(double total, const QString &adminSecret, const QString &userEmail);
+
+    // Internal HTTP helpers exposed for controller composition.
+    using OkFn = std::function<void(const QJsonObject &)>;
+    using ErrFn = std::function<void(const QString &)>;
+    using ListOkFn = std::function<void(const QJsonArray &)>;
+    using RetryFn = std::function<void()>;
+    void getJson(const QString &path, bool licenseAuth, const OkFn &onOk, const ErrFn &onErr);
+    void postJson(const QString &path, const QJsonObject &body, bool licenseAuth,
+                  const OkFn &onOk, const ErrFn &onErr);
+
+    // ── Google OAuth ──────────────────────────────────────
+    void googleOAuthStart(const OkFn &onOk, const ErrFn &onErr);
+    void googleOAuthPoll(const QString &state, const OkFn &onOk, const ErrFn &onErr);
+    void googleOAuthExchange(const QString &ticket, const OkFn &onOk, const ErrFn &onErr);
 
 signals:
     void baseUrlChanged();
@@ -130,8 +144,6 @@ signals:
     void loginSucceeded(const QVariantMap &payload);
     void refreshSucceeded(const QVariantMap &payload);
     void refreshFailed(const QString &message);
-    void balanceUpdated(const QVariantMap &payload);
-    void balanceForceDisconnect(const QString &reason);
     void loginFailed(const QString &message);
     void registerSucceeded(const QVariantMap &payload);
     void registerFailed(const QString &message);
@@ -146,6 +158,7 @@ signals:
     void bootstrapLoaded(const QVariantMap &payload);
     void featureFlagsLoaded(const QVariantMap &flags);
     void plansLoaded(const QVariantList &plans);
+    void activationPlansLoaded(const QVariantList &plans);
     void platformSettingsLoaded(const QVariantMap &settings);
     void paymentGatewayLoaded(const QVariantMap &gateway);
     void maintenanceResult(bool blocked, const QString &message);
@@ -155,11 +168,13 @@ signals:
     void versionCheckResult(bool forceUpdate, const QString &latest, const QString &downloadUrl);
 
     void engineKeyLoaded(const QVariantMap &keyInfo);
+    void iceServersLoaded(const QVariantList &servers);
     void sessionStarted(const QVariantMap &session);
     void sessionEnded(const QVariantMap &result);
     void sessionFailed(const QString &message);
     void backgroundPresetsLoaded(const QVariantList &presets);
     void backgroundSelected(const QVariantMap &result);
+    void backgroundApplyFailed(const QString &message);
 
     void paymentInitiated(const QVariantMap &payload);
     void paymentFailed(const QString &message);
@@ -171,18 +186,14 @@ signals:
     void supportTicketCreated(const QVariantMap &ticket);
 
 private:
-    using OkFn = std::function<void(const QJsonObject &)>;
-    using ErrFn = std::function<void(const QString &)>;
-    using ListOkFn = std::function<void(const QJsonArray &)>;
-
     void beginRequest();
     void applyBootstrap(const QJsonObject &o);
     void endRequest();
     QNetworkRequest makeRequest(const QString &path, bool licenseAuth) const;
-    void getJson(const QString &path, bool licenseAuth, const OkFn &onOk, const ErrFn &onErr);
-    void postJson(const QString &path, const QJsonObject &body, bool licenseAuth,
-                  const OkFn &onOk, const ErrFn &onErr);
-    void handleReply(QNetworkReply *reply, const OkFn &onOk, const ErrFn &onErr);
+    void handleReply(QNetworkReply *reply, const OkFn &onOk, const ErrFn &onErr,
+                     const RetryFn &retry = {});
+    void onRefreshSucceededHandler(const QVariantMap &payload);
+    void onRefreshFailedHandler(const QString &message);
     static QVariantMap toMap(const QJsonObject &o);
     static QString extractError(const QJsonObject &o, const QString &fallback);
 
@@ -198,9 +209,11 @@ private:
     QString m_deviceId;
     QString m_bearerToken;
     QString m_refreshToken;
-    class QWebSocket *m_balanceSocket = nullptr;
     int m_busyCount = 0;
     bool m_reachable = false;
     bool m_refreshInFlight = false;
     bool m_pendingRetry = false;
+    bool m_retryInProgress = false;
+    RetryFn m_retryFn;
+    ErrFn m_retryErr;
 };

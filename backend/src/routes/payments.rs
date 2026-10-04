@@ -27,11 +27,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(create_order)
         .service(verify_order)
         .service(order_status)
+        .service(cancel_order)
         .service(refund_order);
 }
 
 /// Provider webhooks — must be public (no JWT). Signature-checked where configured.
-/// Dual paths: LiveMorph `/api/v1/payments/...` and Live Escape legacy `/webhooks/...`, `/pay/callback`.
+/// Unified paths under `/api/v1/payments/...` for both products (same merchant).
 pub fn configure_webhooks(cfg: &mut web::ServiceConfig) {
     cfg.service(webhook_paystack)
         .service(webhook_nowpayments)
@@ -60,16 +61,10 @@ async fn webhook_nowpayments(
 
 #[get("/payments/callback/paystack")]
 async fn paystack_browser_callback(
+    db: web::Data<Db>,
     query: web::Query<std::collections::HashMap<String, String>>,
 ) -> HttpResponse {
-    paystack_browser_callback_impl(query).await
-}
-
-/// Root-level aliases for Live Escape clients (same handlers, same Paystack merchant).
-pub fn configure_webhook_aliases(cfg: &mut web::ServiceConfig) {
-    cfg.service(webhook_paystack_root)
-        .service(webhook_nowpayments_root)
-        .service(paystack_callback_root);
+    paystack_browser_callback_impl(db, query).await
 }
 
 #[get("/payments/packages")]
@@ -86,6 +81,14 @@ async fn list_packages(
         .unwrap_or(false)
     {
         providers.push("nowpayments");
+    }
+    if cfg
+        .flutterwave_secret_key
+        .as_ref()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false)
+    {
+        providers.push("flutterwave");
     }
     if cfg.allow_manual_payments {
         providers.push("manual");
@@ -113,6 +116,9 @@ struct CreateOrderBody {
     currency: Option<String>,
     /// Crypto pay currency override (e.g. usdttrc20, usdterc20)
     pay_currency: Option<String>,
+    /// Device fingerprint for abuse detection
+    #[serde(default)]
+    device_id: Option<String>,
 }
 
 fn default_provider() -> String {
@@ -165,13 +171,16 @@ async fn create_order(
     };
 
     let order_id = new_id();
-    let reference = format!("lm_{}", Uuid::new_v4().simple());
-
     let product = body
         .product
         .as_deref()
         .and_then(ProductId::parse)
         .unwrap_or_else(|| ProductId::from_request(&req));
+    let ref_prefix = match product {
+        ProductId::LiveEscape => "le",
+        ProductId::LiveMorph => "lm",
+    };
+    let reference = format!("{}_{}", ref_prefix, Uuid::new_v4().simple());
 
     let mut order = PaymentOrder {
         id: order_id.clone(),
@@ -195,8 +204,10 @@ async fn create_order(
         kind: None,
         plan: None,
         access_key: None,
+        device_id: body.device_id.clone(),
         created_at: bson::DateTime::from_chrono(Utc::now()),
         paid_at: None,
+        claimed_at: None,
         provisioned_at: None,
     };
 
@@ -207,11 +218,18 @@ async fn create_order(
     }
 
     if provider == "paystack" {
-        let user = db
-            .users()
-            .find_one(doc! { "_id": &auth.user_id })
-            .await?
-            .ok_or_else(|| AppError::NotFound("user".into()))?;
+        let user = match product {
+            ProductId::LiveEscape => db
+                .users_le()
+                .find_one(doc! { "_id": &auth.user_id })
+                .await?
+                .ok_or_else(|| AppError::NotFound("user".into()))?,
+            ProductId::LiveMorph => db
+                .users()
+                .find_one(doc! { "_id": &auth.user_id })
+                .await?
+                .ok_or_else(|| AppError::NotFound("user".into()))?,
+        };
 
         let init = initialize_transaction(
             &cfg,
@@ -251,12 +269,57 @@ async fn create_order(
         order.crypto_status = Some(invoice.payment_status.clone());
         order.currency = "USD".into();
         order.amount_subunit = (pack.price_usd * 100.0).round() as i64;
+    } else if provider == "flutterwave" {
+        let user = match product {
+            ProductId::LiveEscape => db
+                .users_le()
+                .find_one(doc! { "_id": &auth.user_id })
+                .await?
+                .ok_or_else(|| AppError::NotFound("user".into()))?,
+            ProductId::LiveMorph => db
+                .users()
+                .find_one(doc! { "_id": &auth.user_id })
+                .await?
+                .ok_or_else(|| AppError::NotFound("user".into()))?,
+        };
+        let redirect_url = cfg
+            .paystack_callback_url
+            .clone()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| {
+                format!(
+                    "{}/api/v1/payments/callback/paystack",
+                    cfg.public_base_url.trim_end_matches('/')
+                )
+            });
+        let init = crate::services::flutterwave::initialize_payment(
+            &cfg,
+            &crate::services::flutterwave::InitRequest {
+                email: &user.email,
+                amount_subunit,
+                currency: &currency,
+                tx_ref: &order_id,
+                order_id: &order_id,
+                package_key: &pack.key,
+                platform: product.as_str(),
+                redirect_url: &redirect_url,
+            },
+        )
+        .await?;
+        order.provider_ref = init.tx_ref.clone().or(Some(order_id.clone()));
+        order.authorization_url = init.link.clone();
     }
 
-    db.db
-        .collection::<PaymentOrder>("payment_orders")
-        .insert_one(&order)
-        .await?;
+    // Persist to the product-correct order collection (same data isolation
+    // as the unified plan-order engine).
+    match product {
+        ProductId::LiveEscape => db.payment_orders_le_typed().insert_one(&order).await?,
+        ProductId::LiveMorph => db
+            .db
+            .collection::<PaymentOrder>("payment_orders")
+            .insert_one(&order)
+            .await?,
+    };
 
     Ok(HttpResponse::Created().json(json!({
         "order_id": order.id,
@@ -278,30 +341,45 @@ async fn create_order(
 }
 
 #[derive(Deserialize)]
-struct VerifyBody {
-    order_id: String,
+pub struct VerifyBody {
+    pub order_id: String,
     /// Optional — if omitted we use order.provider_ref
-    reference: Option<String>,
+    pub reference: Option<String>,
 }
 
-#[post("/payments/orders/verify")]
-async fn verify_order(
+pub async fn verify_order_impl(
     db: web::Data<Db>,
     cfg: web::Data<Arc<Config>>,
     req: HttpRequest,
-    body: web::Json<VerifyBody>,
+    body: VerifyBody,
 ) -> AppResult<HttpResponse> {
     let auth = require_user(&req)?;
-    let coll = db.db.collection::<PaymentOrder>("payment_orders");
 
-    let mut order = coll
-        .find_one(doc! { "_id": &body.order_id, "user_id": &auth.user_id })
-        .await?
+    // Search for the order across both product collections
+    let mut order_and_is_le = find_order_any_db(
+        &db,
+        doc! { "_id": &body.order_id, "user_id": &auth.user_id },
+    )
+    .await?;
+    // Also try by provider_ref if reference is provided
+    if order_and_is_le.is_none() {
+        if let Some(ref ref_str) = body.reference {
+            order_and_is_le = find_order_any_db(
+                &db,
+                doc! { "provider_ref": ref_str, "user_id": &auth.user_id },
+            )
+            .await?;
+        }
+    }
+    let (mut order, is_le) = order_and_is_le
         .ok_or_else(|| AppError::NotFound("order".into()))?;
 
     if order.status == "provisioned" {
-        let user = db
-            .users()
+        let users_coll = match is_le {
+            true => db.users_le(),
+            false => db.users(),
+        };
+        let user = users_coll
             .find_one(doc! { "_id": &auth.user_id })
             .await?
             .ok_or_else(|| AppError::NotFound("user".into()))?;
@@ -330,11 +408,25 @@ async fn verify_order(
             }
             order.status = "paid".into();
             order.paid_at = Some(bson::DateTime::from_chrono(Utc::now()));
-            coll.update_one(
-                doc! { "_id": &order.id },
-                doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
-            )
-            .await?;
+            // Guarded write: only flip to "paid" if still pending. The billing
+            // settle flow claims paid→provisioning atomically; an unguarded write
+            // here would clobber the claim and allow a double-provision race.
+            if is_le {
+                db.payment_orders_le()
+                    .update_one(
+                        doc! { "_id": &order.id, "status": "pending" },
+                        doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
+                    )
+                    .await?;
+            } else {
+                db.db
+                    .collection::<PaymentOrder>("payment_orders")
+                    .update_one(
+                        doc! { "_id": &order.id, "status": "pending" },
+                        doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
+                    )
+                    .await?;
+            }
         }
         "nowpayments" | "crypto" => {
             let payment_id = body
@@ -346,14 +438,28 @@ async fn verify_order(
             order.crypto_status = Some(inv.payment_status.clone());
             if nowpayments::is_terminal_failure(&inv.payment_status) {
                 order.status = "failed".into();
-                coll.update_one(
-                    doc! { "_id": &order.id },
-                    doc! { "$set": {
-                        "status": "failed",
-                        "crypto_status": &inv.payment_status,
-                    }},
-                )
-                .await?;
+                if is_le {
+                    db.payment_orders_le()
+                        .update_one(
+                            doc! { "_id": &order.id },
+                            doc! { "$set": {
+                                "status": "failed",
+                                "crypto_status": &inv.payment_status,
+                            }},
+                        )
+                        .await?;
+                } else {
+                    db.db
+                        .collection::<PaymentOrder>("payment_orders")
+                        .update_one(
+                            doc! { "_id": &order.id },
+                            doc! { "$set": {
+                                "status": "failed",
+                                "crypto_status": &inv.payment_status,
+                            }},
+                        )
+                        .await?;
+                }
                 return Err(AppError::BadRequest(format!(
                     "crypto payment {}",
                     inv.payment_status
@@ -361,11 +467,22 @@ async fn verify_order(
             }
             if !nowpayments::is_paid(&inv.payment_status) {
                 let in_flight = nowpayments::is_in_flight(&inv.payment_status);
-                coll.update_one(
-                    doc! { "_id": &order.id },
-                    doc! { "$set": { "crypto_status": &inv.payment_status } },
-                )
-                .await?;
+                if is_le {
+                    db.payment_orders_le()
+                        .update_one(
+                            doc! { "_id": &order.id },
+                            doc! { "$set": { "crypto_status": &inv.payment_status } },
+                        )
+                        .await?;
+                } else {
+                    db.db
+                        .collection::<PaymentOrder>("payment_orders")
+                        .update_one(
+                            doc! { "_id": &order.id },
+                            doc! { "$set": { "crypto_status": &inv.payment_status } },
+                        )
+                        .await?;
+                }
                 return Ok(HttpResponse::Ok().json(json!({
                     "order_id": order.id,
                     "status": order.status,
@@ -378,15 +495,68 @@ async fn verify_order(
             }
             order.status = "paid".into();
             order.paid_at = Some(bson::DateTime::from_chrono(Utc::now()));
-            coll.update_one(
-                doc! { "_id": &order.id },
-                doc! { "$set": {
-                    "status": "paid",
-                    "paid_at": order.paid_at,
-                    "crypto_status": &inv.payment_status,
-                }},
-            )
-            .await?;
+            if is_le {
+                db.payment_orders_le()
+                    .update_one(
+                        doc! { "_id": &order.id, "status": "pending" },
+                        doc! { "$set": {
+                            "status": "paid",
+                            "paid_at": order.paid_at,
+                            "crypto_status": &inv.payment_status,
+                        }},
+                    )
+                    .await?;
+            } else {
+                db.db
+                    .collection::<PaymentOrder>("payment_orders")
+                    .update_one(
+                        doc! { "_id": &order.id, "status": "pending" },
+                        doc! { "$set": {
+                            "status": "paid",
+                            "paid_at": order.paid_at,
+                            "crypto_status": &inv.payment_status,
+                        }},
+                    )
+                    .await?;
+            }
+        }
+        "flutterwave" => {
+            let tx_ref = body
+                .reference
+                .clone()
+                .or(order.provider_ref.clone())
+                .ok_or_else(|| AppError::BadRequest("missing tx_ref".into()))?;
+            let data = crate::services::flutterwave::verify_transaction(&cfg, &tx_ref).await?;
+            tracing::debug!(tx_ref = %tx_ref, "flutterwave verify succeeded");
+            if !crate::services::flutterwave::amount_matches(order.amount_subunit, data.amount) {
+                return Err(AppError::BadRequest("amount mismatch".into()));
+            }
+            if let Some(ref cur) = data.currency {
+                if !cur.eq_ignore_ascii_case(&order.currency) {
+                    return Err(AppError::BadRequest("currency mismatch".into()));
+                }
+            }
+            order.status = "paid".into();
+            order.paid_at = Some(bson::DateTime::from_chrono(Utc::now()));
+            // Guarded write: only flip to "paid" if still pending. The billing
+            // settle flow claims paid→provisioning atomically; an unguarded write
+            // here would clobber the claim and allow a double-provision race.
+            if is_le {
+                db.payment_orders_le()
+                    .update_one(
+                        doc! { "_id": &order.id, "status": "pending" },
+                        doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
+                    )
+                    .await?;
+            } else {
+                db.db
+                    .collection::<PaymentOrder>("payment_orders")
+                    .update_one(
+                        doc! { "_id": &order.id, "status": "pending" },
+                        doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
+                    )
+                    .await?;
+            }
         }
         "manual" => {
             if !cfg.allow_manual_payments {
@@ -394,11 +564,25 @@ async fn verify_order(
             }
             order.status = "paid".into();
             order.paid_at = Some(bson::DateTime::from_chrono(Utc::now()));
-            coll.update_one(
-                doc! { "_id": &order.id },
-                doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
-            )
-            .await?;
+            // Guarded write: only flip to "paid" if still pending. The billing
+            // settle flow claims paid→provisioning atomically; an unguarded write
+            // here would clobber the claim and allow a double-provision race.
+            if is_le {
+                db.payment_orders_le()
+                    .update_one(
+                        doc! { "_id": &order.id, "status": "pending" },
+                        doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
+                    )
+                    .await?;
+            } else {
+                db.db
+                    .collection::<PaymentOrder>("payment_orders")
+                    .update_one(
+                        doc! { "_id": &order.id, "status": "pending" },
+                        doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
+                    )
+                    .await?;
+            }
         }
         other => {
             return Err(AppError::BadRequest(format!(
@@ -413,8 +597,20 @@ async fn verify_order(
         "order_id": order.id,
         "status": order.status,
         "credits": order.credits,
+        "access_key": order.access_key,
+        "plan": order.plan,
         "balance": user.public_view(),
     })))
+}
+
+#[post("/payments/orders/verify")]
+async fn verify_order(
+    db: web::Data<Db>,
+    cfg: web::Data<Arc<Config>>,
+    req: HttpRequest,
+    body: web::Json<VerifyBody>,
+) -> AppResult<HttpResponse> {
+    verify_order_impl(db, cfg, req, body.into_inner()).await
 }
 
 #[get("/payments/orders/{id}")]
@@ -425,10 +621,24 @@ async fn order_status(
     path: web::Path<String>,
 ) -> AppResult<HttpResponse> {
     let auth = require_user(&req)?;
-    let coll = db.db.collection::<PaymentOrder>("payment_orders");
-    let mut order = coll
-        .find_one(doc! { "_id": path.as_str(), "user_id": &auth.user_id })
-        .await?
+
+    // Search across both product collections: by order _id first, then by
+    // provider_ref (Paystack reference / NOWPayments payment_id) — clients may
+    // hold either identifier when they poll status.
+    let order_and_is_le = match find_order_any_db(
+        &db,
+        doc! { "_id": path.as_str(), "user_id": &auth.user_id },
+    )
+    .await?
+    {
+        Some(found) => Some(found),
+        None => find_order_any_db(
+            &db,
+            doc! { "provider_ref": path.as_str(), "user_id": &auth.user_id },
+        )
+        .await?,
+    };
+    let (mut order, is_le) = order_and_is_le
         .ok_or_else(|| AppError::NotFound("order".into()))?;
 
     // Live-refresh crypto status while pending
@@ -440,16 +650,32 @@ async fn order_status(
                 if nowpayments::is_paid(&inv.payment_status) {
                     order.status = "paid".into();
                     order.paid_at = Some(bson::DateTime::from_chrono(Utc::now()));
-                    let _ = coll
-                        .update_one(
-                            doc! { "_id": &order.id },
-                            doc! { "$set": {
-                                "status": "paid",
-                                "paid_at": order.paid_at,
-                                "crypto_status": &inv.payment_status,
-                            }},
-                        )
-                        .await;
+                    // Guarded write: only flip pending→paid; never clobber a
+                    // settled claim (same double-provision class as verify).
+                    if is_le {
+                        let _ = db.payment_orders_le()
+                            .update_one(
+                                doc! { "_id": &order.id, "status": "pending" },
+                                doc! { "$set": {
+                                    "status": "paid",
+                                    "paid_at": order.paid_at,
+                                    "crypto_status": &inv.payment_status,
+                                }},
+                            )
+                            .await;
+                    } else {
+                        let _ = db.db
+                            .collection::<PaymentOrder>("payment_orders")
+                            .update_one(
+                                doc! { "_id": &order.id, "status": "pending" },
+                                doc! { "$set": {
+                                    "status": "paid",
+                                    "paid_at": order.paid_at,
+                                    "crypto_status": &inv.payment_status,
+                                }},
+                            )
+                            .await;
+                    }
                     // Auto-provision when poll sees finished
                     if let Ok(user) = provision_order(&db, &cfg, &mut order).await {
                         return Ok(HttpResponse::Ok().json(json!({
@@ -465,8 +691,16 @@ async fn order_status(
                             "provisioned": true,
                         })));
                     }
+                } else if is_le {
+                    let _ = db.payment_orders_le()
+                        .update_one(
+                            doc! { "_id": &order.id },
+                            doc! { "$set": { "crypto_status": &inv.payment_status } },
+                        )
+                        .await;
                 } else {
-                    let _ = coll
+                    let _ = db.db
+                        .collection::<PaymentOrder>("payment_orders")
                         .update_one(
                             doc! { "_id": &order.id },
                             doc! { "$set": { "crypto_status": &inv.payment_status } },
@@ -476,6 +710,22 @@ async fn order_status(
             }
         }
     }
+
+    // If the order is already provisioned, include balance so the client can
+    // refresh credits without a separate /credits/balance call.
+    let (balance, provisioned) = if order.status == "provisioned" {
+        let product = ProductId::parse(&order.product).unwrap_or(ProductId::LiveMorph);
+        let (users_coll, _) = match product {
+            ProductId::LiveEscape => (db.users_le(), db.ledger_le()),
+            _ => (db.users(), db.ledger()),
+        };
+        match users_coll.find_one(doc! { "_id": &auth.user_id }).await? {
+            Some(user) => (Some(user.public_view()), true),
+            None => (None, true),
+        }
+    } else {
+        (None, false)
+    };
 
     Ok(HttpResponse::Ok().json(json!({
         "order_id": order.id,
@@ -489,12 +739,15 @@ async fn order_status(
         "network": order.network,
         "authorization_url": order.authorization_url,
         "reference": order.provider_ref,
+        "balance": balance,
+        "provisioned": provisioned,
     })))
 }
 
 /// Browser return URL after Paystack Hosted Checkout (user browser only — not a webhook).
 /// Query: ?reference=... or ?trxref=...
 async fn paystack_browser_callback_impl(
+    db: web::Data<Db>,
     query: web::Query<std::collections::HashMap<String, String>>,
 ) -> HttpResponse {
     let reference = query
@@ -502,10 +755,30 @@ async fn paystack_browser_callback_impl(
         .or_else(|| query.get("trxref"))
         .cloned()
         .unwrap_or_default();
+    // Product detection: prefer the order's stored `product` (robust for plan
+    // orders whose bare-UUID reference carries no prefix), falling back to the
+    // `le_`/`lm_` reference prefix for token-pack orders.
+    let mut product_opt: Option<ProductId> = None;
+    if !reference.is_empty() {
+        if let Ok(Some((order, is_le))) =
+            find_order_any_db(&db, doc! { "provider_ref": &reference }).await
+        {
+            product_opt = if is_le {
+                Some(ProductId::LiveEscape)
+            } else {
+                ProductId::parse(&order.product).or(Some(ProductId::LiveMorph))
+            };
+        }
+    }
+    let (scheme, brand_name) = match product_opt {
+        Some(ProductId::LiveEscape) => ("liveescape", "Live Escape"),
+        _ if reference.starts_with("le_") => ("liveescape", "Live Escape"),
+        _ => ("livemorph", "LiveMorph"),
+    };
     let deep = if reference.is_empty() {
-        "livemorph://payments/return".to_string()
+        format!("{scheme}://payments/return")
     } else {
-        format!("livemorph://payments/return?reference={}", {
+        format!("{scheme}://payments/return?reference={}", {
             let mut out = String::new();
             for b in reference.bytes() {
                 match b {
@@ -535,7 +808,7 @@ async fn paystack_browser_callback_impl(
 <html lang="en"><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>LiveMorph — Payment</title>
+<title>{brand_name} — Payment</title>
 <style>
 body{{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0b0b0f;color:#eee;
 display:flex;min-height:100vh;align-items:center;justify-content:center}}
@@ -546,8 +819,8 @@ a{{color:#8b5cf6}}
 code{{font-size:.8rem;word-break:break-all;color:#ccc}}
 </style></head><body><div class="card">
 <h1>Payment complete</h1>
-<p>You can return to <strong>LiveMorph</strong>. Credits appear after the app confirms the payment (usually a few seconds).</p>
-<p><a href="{deep_esc}">Open LiveMorph</a></p>
+<p>You can return to <strong>{brand_name}</strong>. Credits appear after the app confirms the payment (usually a few seconds).</p>
+<p><a href="{deep_esc}">Open {brand_name}</a></p>
 {ref_block}
 <script>try{{location.href={deep_js};}}catch(e){{}}</script>
 </div></body></html>"#
@@ -571,7 +844,12 @@ async fn webhook_paystack_impl(
     let secret = cfg
         .paystack_webhook_secret
         .as_ref()
-        .or(cfg.paystack_secret_key.as_ref());
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            cfg.paystack_secret_key
+                .as_ref()
+                .filter(|s| !s.is_empty())
+        });
     if let Some(secret) = secret {
         let sig = req
             .headers()
@@ -599,8 +877,15 @@ async fn webhook_paystack_impl(
         .and_then(|v| v.as_str())
         .ok_or_else(|| AppError::BadRequest("no reference".into()))?;
 
-    // Re-verify with Paystack for safety
-    let _ = verify_transaction(&cfg, reference).await?;
+    // Re-verify with Paystack for safety. In dev mode (fake/dev_mode orders) the
+    // reference will not exist upstream, so the re-verify is a soft check there.
+    match verify_transaction(&cfg, reference).await {
+        Ok(_) => {}
+        Err(e) if !cfg.is_production() => {
+            tracing::warn!(error = %e, "dev: paystack re-verify skipped for local webhook test");
+        }
+        Err(e) => return Err(e),
+    }
 
     let Some((mut order, is_le)) =
         find_order_any_db(&db, doc! { "provider_ref": reference }).await?
@@ -661,6 +946,44 @@ async fn find_order_any_db(
     Ok(None)
 }
 
+#[post("/payments/orders/cancel")]
+async fn cancel_order(
+    db: web::Data<Db>,
+    req: HttpRequest,
+    body: web::Json<VerifyBody>,
+) -> AppResult<HttpResponse> {
+    let auth = require_user(&req)?;
+    let (order, is_le) = find_order_any_db(
+        &db,
+        doc! { "_id": &body.order_id, "user_id": &auth.user_id },
+    )
+    .await?
+    .ok_or_else(|| AppError::NotFound("order".into()))?;
+
+    if order.status != "pending" {
+        return Err(AppError::BadRequest(
+            "only pending orders can be cancelled".into(),
+        ));
+    }
+
+    let set = doc! { "$set": { "status": "cancelled" } };
+    if is_le {
+        db.payment_orders_le()
+            .update_one(doc! { "_id": &order.id }, set)
+            .await?;
+    } else {
+        db.db
+            .collection::<PaymentOrder>("payment_orders")
+            .update_one(doc! { "_id": &order.id }, set)
+            .await?;
+    }
+
+    Ok(HttpResponse::Ok().json(json!({
+        "order_id": order.id,
+        "status": "cancelled",
+    })))
+}
+
 /// Reverse a provisioned order (support / chargeback). Dev or future admin role.
 #[derive(Deserialize)]
 struct RefundBody {
@@ -682,37 +1005,75 @@ async fn refund_order(
         ));
     }
     let auth = require_user(&req)?;
-    let coll = db.db.collection::<PaymentOrder>("payment_orders");
-    let mut order = coll
-        .find_one(doc! { "_id": &body.order_id, "user_id": &auth.user_id })
-        .await?
-        .ok_or_else(|| AppError::NotFound("order".into()))?;
+    let (order, is_le) = find_order_any_db(
+        &db,
+        doc! { "_id": &body.order_id, "user_id": &auth.user_id },
+    )
+    .await?
+    .ok_or_else(|| AppError::NotFound("order".into()))?;
+    let mut order = order;
     if order.status != "provisioned" {
         return Err(AppError::BadRequest(
             "only provisioned orders can be refunded".into(),
         ));
     }
-    let user = db
-        .users()
+    let (users_coll, ledger_coll, orders_coll) = if is_le {
+        (
+            db.users_le(),
+            db.ledger_le(),
+            db.payment_orders_le_typed(),
+        )
+    } else {
+        (
+            db.users(),
+            db.ledger(),
+            db.db.collection::<PaymentOrder>("payment_orders"),
+        )
+    };
+    let user = users_coll
         .find_one(doc! { "_id": &auth.user_id })
         .await?
         .ok_or_else(|| AppError::NotFound("user".into()))?;
     let take = order.credits.min(user.total_credits());
-    // Atomic refund: use $inc with a guard that balance >= take
-    let refund_result = db
-        .users()
+    // Atomic debit + split via a single aggregation-pipeline update (bonus
+    // first then credit, clamped at zero) — no stale-read split TOCTOU. The
+    // `$expr` filter still bounds the total.
+    let pipeline = vec![
+        doc! {
+            "$set": {
+                "bonus_balance": {
+                    "$max": [
+                        { "$subtract": ["$bonus_balance", take] },
+                        0.0,
+                    ]
+                },
+                "credit_balance": {
+                    "$max": [
+                        {
+                            "$subtract": [
+                                "$credit_balance",
+                                {
+                                    "$subtract": [
+                                        take,
+                                        { "$min": ["$bonus_balance", take] },
+                                    ]
+                                },
+                            ]
+                        },
+                        0.0,
+                    ]
+                },
+                "updated_at": Utc::now(),
+            }
+        }
+    ];
+    let refund_result = users_coll
         .update_one(
             doc! {
                 "_id": &user.id,
                 "$expr": { "$gte": [{ "$add": ["$credit_balance", "$bonus_balance"] }, take] }
             },
-            doc! {
-                "$inc": {
-                    "bonus_balance": -(take.min(user.bonus_balance.max(0.0))),
-                    "credit_balance": -(take - take.min(user.bonus_balance.max(0.0))),
-                },
-                "$set": { "updated_at": Utc::now() }
-            },
+            pipeline,
         )
         .await?;
     if refund_result.matched_count == 0 {
@@ -721,8 +1082,7 @@ async fn refund_order(
         ));
     }
     // Re-fetch to get actual post-refund balance (pre-update read may be stale)
-    let fresh_user = db
-        .users()
+    let fresh_user = users_coll
         .find_one(doc! { "_id": &user.id })
         .await?
         .ok_or_else(|| AppError::NotFound("user".into()))?;
@@ -737,9 +1097,9 @@ async fn refund_order(
         note: body.reason.clone(),
         created_at: bson::DateTime::from_chrono(Utc::now()),
     };
-    db.ledger().insert_one(&entry).await?;
+    ledger_coll.insert_one(&entry).await?;
     order.status = "refunded".into();
-    coll.update_one(
+    orders_coll.update_one(
         doc! { "_id": &order.id },
         doc! { "$set": { "status": "refunded" } },
     )
@@ -862,31 +1222,4 @@ async fn webhook_nowpayments_impl(
         "status": order.status,
         "user_id": user.id,
     })))
-}
-
-#[post("/webhooks/paystack")]
-async fn webhook_paystack_root(
-    db: web::Data<Db>,
-    cfg: web::Data<Arc<Config>>,
-    req: HttpRequest,
-    body: web::Bytes,
-) -> AppResult<HttpResponse> {
-    webhook_paystack_impl(db, cfg, req, body).await
-}
-
-#[post("/webhooks/nowpayments")]
-async fn webhook_nowpayments_root(
-    db: web::Data<Db>,
-    cfg: web::Data<Arc<Config>>,
-    req: HttpRequest,
-    body: web::Bytes,
-) -> AppResult<HttpResponse> {
-    webhook_nowpayments_impl(db, cfg, req, body).await
-}
-
-#[get("/pay/callback")]
-async fn paystack_callback_root(
-    query: web::Query<std::collections::HashMap<String, String>>,
-) -> HttpResponse {
-    paystack_browser_callback_impl(query).await
 }

@@ -16,6 +16,7 @@ tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
 bytes = "1"
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+rustls = { version = "0.23", features = ["aws-lc-rs", "ring"] }
 url = "2"
 mongodb = { version = "3", default-features = true }
 bson = { version = "2", features = ["chrono-0_4"] }

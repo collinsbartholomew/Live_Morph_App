@@ -16,6 +16,9 @@
 #include <QDateTime>
 #include <QTimer>
 #include <QtGlobal>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFile>
 
 static QString apiRoot(BackendClient *b)
 {
@@ -163,8 +166,16 @@ void AuthManager::startGooglePoll()
     // Disconnect any previous poll connection to prevent stacking
     if (m_googlePollConnection)
         disconnect(m_googlePollConnection);
+    m_googlePollAttempts = 0;
     m_googlePollConnection = connect(&m_googlePollTimer, &QTimer::timeout, this, [this]() {
         if (m_googleOAuthState.isEmpty()) return;
+        // Auto-stop after ~5 minutes (150 × 2s)
+        if (++m_googlePollAttempts > 150) {
+            m_googlePollTimer.stop();
+            m_googleOAuthState.clear();
+            setError(tr("Google sign-in timed out — please try again"));
+            return;
+        }
         const QString base = apiRoot(m_backend);
         QUrl url(base + QStringLiteral("/api/v1/auth/oauth/google/poll"));
         QUrlQuery q;
@@ -187,8 +198,6 @@ void AuthManager::startGooglePoll()
         });
     });
     m_googlePollTimer.start();
-    // Auto-stop after 5 minutes
-    QTimer::singleShot(300000, &m_googlePollTimer, &QTimer::stop);
 }
 
 void AuthManager::applyOAuthTokens(const QString &accessToken, const QString &refreshToken,
@@ -230,9 +239,12 @@ void AuthManager::exchangeOAuthTicket(const QString &ticket)
     applyIdentityHeaders(req, m_backend);
     const QJsonObject body{{QStringLiteral("ticket"), ticket}};
     auto *reply = m_nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    const quint64 epoch = m_authEpoch;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, epoch]() {
         reply->deleteLater();
         setLoading(false);
+        if (epoch != m_authEpoch)
+            return; // signed out mid-flight — do not resurrect state
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QByteArray raw = reply->readAll();
         if (reply->error() != QNetworkReply::NoError || status >= 400) {
@@ -314,25 +326,30 @@ void AuthManager::requestOtp(const QString &email)
 
     const QJsonObject body{{QStringLiteral("email"), e}};
     auto *reply = m_nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    const quint64 epoch = m_authEpoch;
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply, e]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, e, epoch]() {
         reply->deleteLater();
         setLoading(false);
+        if (epoch != m_authEpoch)
+            return; // signed out mid-flight — do not resurrect OTP state
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QByteArray raw = reply->readAll();
 
         if (reply->error() != QNetworkReply::NoError && status == 0) {
-#ifdef QT_DEBUG
-            m_otpSent = true;
-            m_otpCooldownSecs = 30;
-            m_otpCooldownTimer.start();
-            emit otpSentChanged();
-            emit otpCooldownChanged();
-            emit otpRequested(e);
-            setError(tr("Backend offline — debug build: any 6–8 digit code works"));
-#else
-            setError(tr("Cannot reach authentication server. Check your connection."));
-#endif
+            // Dev affordance: must be opted in EXPLICITLY at runtime — a
+            // QT_DEBUG define shipped a local auth bypass in any debug build.
+            if (qEnvironmentVariableIsSet("LIVEMORPH_DEV_AUTH")) {
+                m_otpSent = true;
+                m_otpCooldownSecs = 30;
+                m_otpCooldownTimer.start();
+                emit otpSentChanged();
+                emit otpCooldownChanged();
+                emit otpRequested(e);
+                setError(tr("Backend offline — dev mode: any 6–8 digit code works"));
+            } else {
+                setError(tr("Cannot reach authentication server. Check your connection."));
+            }
             return;
         }
 
@@ -350,7 +367,9 @@ void AuthManager::requestOtp(const QString &email)
         }
         const int ttl = obj.value(QStringLiteral("expires_in")).toInt(600);
         m_otpSent = true;
-        m_otpCooldownSecs = qBound(30, 120, ttl > 0 ? qMin(ttl, 120) : 30);
+        // qBound(min, value, max) — args were reversed (qBound(30,120,ttl)
+        // made ttl the max). Clamp the server TTL into the 30..120 window.
+        m_otpCooldownSecs = qBound(30, ttl > 0 ? qMin(ttl, 120) : 30, 120);
         m_otpCooldownTimer.start();
         emit otpSentChanged();
         emit otpCooldownChanged();
@@ -386,16 +405,21 @@ void AuthManager::verifyOtp(const QString &email, const QString &code)
         {QStringLiteral("device_id"), DeviceIdentity::deviceId()},
     };
     auto *reply = m_nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    const quint64 epoch = m_authEpoch;
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply, e, c]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, e, c, epoch]() {
         reply->deleteLater();
         setLoading(false);
+        if (epoch != m_authEpoch)
+            return; // signed out mid-flight — do not resurrect state
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QByteArray raw = reply->readAll();
 
         if (reply->error() != QNetworkReply::NoError && status == 0) {
-#ifdef QT_DEBUG
-            if (c.length() == m_otpCodeLength) {
+            // Dev affordance behind an explicit runtime opt-in — fabricating
+            // JWTs must never happen just because the build has debug defines.
+            if (qEnvironmentVariableIsSet("LIVEMORPH_DEV_AUTH")
+                && c.length() == m_otpCodeLength) {
                 QJsonObject user{
                     {QStringLiteral("id"), QStringLiteral("demo-") + e.section(QLatin1Char('@'), 0, 0)},
                     {QStringLiteral("email"), e},
@@ -413,7 +437,6 @@ void AuthManager::verifyOtp(const QString &email, const QString &code)
                 applyAuthResponse(fake);
                 return;
             }
-#endif
             setError(tr("Cannot reach authentication server"));
             return;
         }
@@ -452,10 +475,13 @@ void AuthManager::signInWithEmail(const QString &email, const QString &password)
         {QStringLiteral("device_id"), DeviceIdentity::deviceId()},
     };
     auto *reply = m_nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    const quint64 epoch = m_authEpoch;
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, epoch]() {
         reply->deleteLater();
         setLoading(false);
+        if (epoch != m_authEpoch)
+            return; // signed out mid-flight — do not resurrect state
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QByteArray raw = reply->readAll();
         if (status >= 400 || reply->error() != QNetworkReply::NoError) {
@@ -492,10 +518,13 @@ void AuthManager::signUp(const QString &email, const QString &password, const QS
     body.insert(QStringLiteral("device_id"), DeviceIdentity::deviceId());
 
     auto *reply = m_nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    const quint64 epoch = m_authEpoch;
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, epoch]() {
         reply->deleteLater();
         setLoading(false);
+        if (epoch != m_authEpoch)
+            return; // signed out mid-flight — do not resurrect state
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QByteArray raw = reply->readAll();
         if (status >= 400 || reply->error() != QNetworkReply::NoError) {
@@ -509,15 +538,78 @@ void AuthManager::signUp(const QString &email, const QString &password, const QS
     });
 }
 
+void AuthManager::requestPasswordReset(const QString &email)
+{
+    const QString e = email.trimmed().toLower();
+    if (e.indexOf('@') < 1) {
+        setError(tr("Enter your account email"));
+        return;
+    }
+    setLoading(true);
+    clearError();
+    QNetworkRequest req{QUrl(apiRoot(m_backend) + QStringLiteral("/api/v1/auth/password-reset-request"))};
+    applyIdentityHeaders(req, m_backend);
+    const QJsonObject body{{QStringLiteral("email"), e}};
+    auto *reply = m_nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        setLoading(false);
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        reply->readAll();
+        if (status == 0 || (status >= 400 && reply->error() != QNetworkReply::NoError)) {
+            setError(tr("Cannot reach backend"));
+            return;
+        }
+        emit passwordResetRequested();
+    });
+}
+
+void AuthManager::completePasswordReset(const QString &token, const QString &email, const QString &password)
+{
+    if (token.trimmed().isEmpty() || password.length() < 8) {
+        setError(tr("Enter the code from the email and a new password (8+ chars)"));
+        return;
+    }
+    setLoading(true);
+    clearError();
+    QNetworkRequest req{QUrl(apiRoot(m_backend) + QStringLiteral("/api/v1/auth/password-reset"))};
+    applyIdentityHeaders(req, m_backend);
+    QJsonObject body{
+        {QStringLiteral("token"), token.trimmed()},
+        {QStringLiteral("password"), password},
+    };
+    if (!email.trimmed().isEmpty())
+        body.insert(QStringLiteral("email"), email.trimmed().toLower());
+    auto *reply = m_nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        setLoading(false);
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QByteArray raw = reply->readAll();
+        if (status == 0) {
+            setError(tr("Cannot reach backend"));
+            return;
+        }
+        if (status >= 400) {
+            handleHttpError(status, raw);
+            return;
+        }
+        emit passwordResetComplete();
+    });
+}
+
 void AuthManager::signOut()
 {
+    // Fence: invalidate every in-flight auth request (refreshProfile /
+    // verifyOtp / exchangeOAuthTicket completing after sign-out would
+    // otherwise re-apply tokens and re-login the user).
+    m_authEpoch++;
     if (!m_refreshToken.isEmpty() && m_backend) {
         QNetworkRequest req{QUrl(apiRoot(m_backend) + QStringLiteral("/api/v1/auth/logout"))};
-    applyIdentityHeaders(req, m_backend);
-    // Prefer explicit token from AuthManager in case backend not yet pushed
-    if (!m_accessToken.isEmpty())
-        req.setRawHeader("Authorization", QByteArray("Bearer ") + m_accessToken.toUtf8());
-    const QJsonObject body{{QStringLiteral("refresh_token"), m_refreshToken}};
+        applyIdentityHeaders(req, m_backend);
+        if (!m_accessToken.isEmpty())
+            req.setRawHeader("Authorization", QByteArray("Bearer ") + m_accessToken.toUtf8());
+        const QJsonObject body{{QStringLiteral("refresh_token"), m_refreshToken}};
         auto *reply = m_nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
         connect(reply, &QNetworkReply::finished, reply, &QObject::deleteLater);
     }
@@ -537,10 +629,13 @@ void AuthManager::refreshProfile()
     QNetworkRequest req{QUrl(apiRoot(m_backend) + QStringLiteral("/api/v1/auth/me"))};
     applyIdentityHeaders(req, m_backend);
 
-    // Backend route is POST /auth/me
-    auto *reply = m_nam.post(req, QByteArrayLiteral("{}"));
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    // Backend route is GET /auth/me (JWT via Authorization header, no body).
+    auto *reply = m_nam.get(req);
+    const quint64 epoch = m_authEpoch;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, epoch]() {
         reply->deleteLater();
+        if (epoch != m_authEpoch)
+            return; // signed out mid-flight — do not resurrect state
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (status == 401) {
             refreshTokens();
@@ -559,30 +654,42 @@ void AuthManager::refreshTokens()
         return;
     m_refreshInFlight = true;
 
-    // Safety: reset m_refreshInFlight after 30s if the reply never fires
-    QTimer::singleShot(30000, this, [this]() {
-        if (m_refreshInFlight) {
-            m_refreshInFlight = false;
-            refreshTokens();
-        }
-    });
-
     QNetworkRequest req{QUrl(apiRoot(m_backend) + QStringLiteral("/api/v1/auth/refresh"))};
     applyIdentityHeaders(req, m_backend);
     req.setTransferTimeout(20000);
 
     const QJsonObject body{{QStringLiteral("refresh_token"), m_refreshToken}};
     auto *reply = m_nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    const quint64 epoch = m_authEpoch;
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, epoch]() {
         reply->deleteLater();
         m_refreshInFlight = false;
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (status >= 400 || reply->error() != QNetworkReply::NoError) {
+        const bool transportError = status == 0 && reply->error() != QNetworkReply::NoError;
+        if (transportError) {
+            // Offline / DNS / socket timeout — KEEP the session. The persisted
+            // tokens are still valid; wiping them here would destroy the login
+            // because of a Wi-Fi blip.
+            setError(tr("Network offline — session kept, will retry"));
+            // The timer already fired — re-arm it or one blip disables
+            // proactive refresh forever (only a 401 would ever recover it).
+            m_refreshTimer.start(30 * 1000);
+            return;
+        }
+        if (status == 401 || status == 403) {
+            // Server explicitly rejected the refresh token — session is dead.
             clearSessionLocal();
             emit signedOut();
             return;
         }
+        if (status >= 400 || reply->error() != QNetworkReply::NoError) {
+            // Other server errors (5xx etc.) — keep session, retry later.
+            m_refreshTimer.start(30 * 1000);
+            return;
+        }
+        if (epoch != m_authEpoch)
+            return; // signed out mid-flight — do not resurrect state
         applyAuthResponse(QJsonDocument::fromJson(reply->readAll()).object());
     });
 }
@@ -797,10 +904,23 @@ void AuthManager::exportData()
             setError(tr("Export failed"));
             return;
         }
-        // Persist export in the secure vault (cleared on sign-out with other secrets)
-        SecureStore::write(QStringLiteral("last_export_json"), QString::fromUtf8(reply->readAll()));
-        setError({}); // clear
-        // Reuse error channel as soft status is imperfect; emit profileChanged as ping
+        const QByteArray json = reply->readAll();
+        SecureStore::write(QStringLiteral("last_export_json"), QString::fromUtf8(json));
+
+        // Write a copy to Downloads for the user to keep.
+        const QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+        const QString name = QStringLiteral("livemorph-export-%1.json")
+                                 .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")));
+        const QString path = QDir(dir).filePath(name);
+        QFile f(path);
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            f.write(json);
+            f.close();
+            emit dataExported(path);
+        } else {
+            emit dataExported({});
+        }
+        setError({});
         emit profileChanged();
     });
 }
@@ -828,10 +948,22 @@ void AuthManager::connectBalanceSocket()
             const QJsonObject o = doc.object();
             const QString type = o.value(QStringLiteral("type")).toString();
             if (type == QLatin1String("balance_update")) {
-                const double total = o.value(QStringLiteral("total")).toDouble(
-                    o.value(QStringLiteral("credits")).toDouble());
-                refreshProfile();
-                Q_UNUSED(total);
+                // Trust the pushed payload directly — the old code discarded it
+                // (Q_UNUSED) and fired a profile GET, double-fetching on every
+                // push. Electron applies realtime profile updates the same way.
+                const bool hasCredits = o.contains(QStringLiteral("credits"));
+                const bool hasTotal = o.contains(QStringLiteral("total"));
+                if (hasCredits || hasTotal) {
+                    const double bonus = o.contains(QStringLiteral("bonus"))
+                        ? o.value(QStringLiteral("bonus")).toDouble()
+                        : m_bonusBalance;
+                    const double credits = hasCredits
+                        ? o.value(QStringLiteral("credits")).toDouble()
+                        : qMax(0.0, o.value(QStringLiteral("total")).toDouble() - bonus);
+                    applyBalance(credits, bonus);
+                } else {
+                    refreshProfile(); // malformed push — fall back to a fetch
+                }
             } else if (type == QLatin1String("force_disconnect")) {
                 const QString reason = o.value(QStringLiteral("reason")).toString(tr("Credits depleted"));
                 setError(reason);
@@ -851,7 +983,7 @@ void AuthManager::connectBalanceSocket()
         QUrl http(base);
         const QString scheme = (http.scheme() == QLatin1String("https")) ? QStringLiteral("wss") : QStringLiteral("ws");
         url = QUrl(QStringLiteral("%1://%2").arg(scheme, http.authority()));
-        url.setPath(QStringLiteral("/ws"));
+        url.setPath(QStringLiteral("/api/v1/ws"));
     }
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("product"), QStringLiteral("livemorph"));
@@ -866,6 +998,9 @@ void AuthManager::connectBalanceSocket()
 
 void AuthManager::disconnectBalanceSocket()
 {
-    if (m_balanceSocket)
+    if (m_balanceSocket) {
         m_balanceSocket->close();
+        m_balanceSocket->deleteLater();
+        m_balanceSocket = nullptr;
+    }
 }

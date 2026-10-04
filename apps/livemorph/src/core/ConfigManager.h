@@ -26,8 +26,12 @@ class ConfigManager : public QObject
     Q_PROPERTY(bool productNotifications READ productNotifications WRITE setProductNotifications NOTIFY productNotificationsChanged)
     Q_PROPERTY(bool identityLockDefault READ identityLockDefault WRITE setIdentityLockDefault NOTIFY identityLockDefaultChanged)
     Q_PROPERTY(QString recordingExtension READ recordingExtension WRITE setRecordingExtension NOTIFY recordingExtensionChanged)
-    Q_PROPERTY(QString decartApiKey READ decartApiKey NOTIFY decartApiKeyChanged) // always empty; keys stay server-side
-    Q_PROPERTY(QString decartWsUrl READ decartWsUrl WRITE setDecartWsUrl NOTIFY decartWsUrlChanged)
+    Q_PROPERTY(bool uploadConsentShown READ uploadConsentShown WRITE setUploadConsentShown NOTIFY uploadConsentShownChanged)
+    Q_PROPERTY(QString pipVisibility READ pipVisibility WRITE setPipVisibility NOTIFY pipVisibilityChanged)
+    Q_PROPERTY(bool smoothOutput READ smoothOutput WRITE setSmoothOutput NOTIFY smoothOutputChanged)
+    Q_PROPERTY(QString recordingQuality READ recordingQuality WRITE setRecordingQuality NOTIFY recordingQualityChanged)
+    Q_PROPERTY(bool micAudioEnabled READ micAudioEnabled WRITE setMicAudioEnabled NOTIFY micAudioEnabledChanged)
+    Q_PROPERTY(bool autoRecordOnSwap READ autoRecordOnSwap WRITE setAutoRecordOnSwap NOTIFY autoRecordOnSwapChanged)
 
 public:
     explicit ConfigManager(QObject *parent = nullptr);
@@ -79,10 +83,18 @@ public:
     void setIdentityLockDefault(bool v);
     QString recordingExtension() const;
     void setRecordingExtension(const QString &ext);
-    QString decartApiKey() const;
-    void setDecartApiKey(const QString &k);
-    QString decartWsUrl() const;
-    void setDecartWsUrl(const QString &u);
+    bool uploadConsentShown() const;
+    void setUploadConsentShown(bool v);
+    QString pipVisibility() const;
+    void setPipVisibility(const QString &v);
+    bool smoothOutput() const;
+    void setSmoothOutput(bool v);
+    QString recordingQuality() const;
+    void setRecordingQuality(const QString &q);
+    bool micAudioEnabled() const;
+    void setMicAudioEnabled(bool v);
+    bool autoRecordOnSwap() const;
+    void setAutoRecordOnSwap(bool v);
 
     Q_INVOKABLE QVariant value(const QString &key, const QVariant &defaultValue = {}) const;
     Q_INVOKABLE void setValue(const QString &key, const QVariant &value);
@@ -105,8 +117,12 @@ signals:
     void productNotificationsChanged();
     void identityLockDefaultChanged();
     void recordingExtensionChanged();
-    void decartApiKeyChanged();
-    void decartWsUrlChanged();
+    void uploadConsentShownChanged();
+    void pipVisibilityChanged();
+    void smoothOutputChanged();
+    void recordingQualityChanged();
+    void micAudioEnabledChanged();
+    void autoRecordOnSwapChanged();
     void configChanged();
 
 private:

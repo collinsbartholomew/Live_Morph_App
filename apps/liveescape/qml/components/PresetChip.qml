@@ -7,21 +7,22 @@ Rectangle {
     property bool selected: false
     property bool enabled: true
     signal clicked()
-    implicitWidth: t.implicitWidth + 16
-    implicitHeight: 26
-    radius: 13
+    implicitWidth: t.implicitWidth + 14
+    implicitHeight: 20
+    radius: 100
     opacity: enabled ? 1 : 0.4
-    color: selected ? Theme.goldDim : (ma.containsMouse && enabled ? Theme.goldDim : Theme.s2)
-    border.color: selected ? Theme.gold : Theme.border
+    color: ma.containsMouse && enabled ? Theme.tealDim : Theme.s2
+    border.color: ma.containsMouse && enabled ? Qt.rgba(63/255, 232/255, 184/255, 0.4) : Theme.border
     border.width: 1
+    Behavior on border.color { ColorAnimation { duration: Theme.motionFast } }
     Text {
         id: t
         anchors.centerIn: parent
         text: root.label
-        color: selected ? Theme.gold : Theme.text
+        color: ma.containsMouse && enabled ? Theme.teal : Theme.dim
         font.family: Theme.fontMono
-        font.pixelSize: 9
-        font.bold: selected
+        font.pixelSize: 8
+        Behavior on color { ColorAnimation { duration: Theme.motionFast } }
     }
     MouseArea {
         id: ma

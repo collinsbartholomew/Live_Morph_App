@@ -4,6 +4,7 @@
 #include <QString>
 #include <QTimer>
 #include <QVariantMap>
+#include <functional>
 
 #if defined(QT_WEBSOCKETS_LIB) || __has_include(<QWebSocket>)
 #  include <QWebSocket>
@@ -35,6 +36,12 @@ public:
                                      const QString &bearerToken = {});
     Q_INVOKABLE void disconnectFromServer();
 
+    /// Supplies the CURRENT access token on every (re)connect attempt. The
+    /// JWT access TTL is 900s — a reconnect that reuses the token captured at
+    /// the original connect fails the handshake with 401 for the rest of the
+    /// session. The provider lets ApiClient hand over its freshest token.
+    void setTokenProvider(const std::function<QString()> &provider);
+
 signals:
     void connectedChanged();
     void balanceUpdate(const QVariantMap &credits);
@@ -42,6 +49,8 @@ signals:
     void storageReset();
     void forceLogout();
     void dashboardNotification(const QVariantMap &notification);
+    /// Server bumped CONFIG_REVISION — client should re-fetch /bootstrap.
+    void configUpdate(const QString &revision);
     void connectionError(const QString &message);
 
 private:
@@ -58,6 +67,7 @@ private:
     QTimer m_pingTimer;
     QString m_url;
     QString m_bearerToken;
+    std::function<QString()> m_tokenProvider;
     bool m_connected = false;
     bool m_intentionalClose = false;
     bool m_pongReceived = true;

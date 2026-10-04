@@ -46,12 +46,18 @@ pub async fn realtime_ws(
         .resolve_model(model_req)
         .map_err(actix_web::error::ErrorBadRequest)?;
 
-    // Credit gate — product-aware user store
-    let product = q
-        .get("product")
-        .or_else(|| q.get("frontend_id"))
-        .and_then(|s| crate::product::ProductId::parse(s))
-        .unwrap_or(crate::product::ProductId::LiveMorph);
+    // HD tier selection: client passes ?tier=hd or ?tier=standard (default).
+    let tier = q.get("tier").map(|s| s.as_str()).unwrap_or("standard");
+    let tier_multiplier = if tier == "hd" {
+        cfg.hd_credit_multiplier
+    } else {
+        1.0
+    };
+
+    // Credit gate — product-aware user store. Product resolution is shared with
+    // every other route: X-Frontend-Id header first, then ?product=/?frontend_id=,
+    // then default LiveMorph (same semantics as /api/v1/ws).
+    let product = crate::product::ProductId::from_request(&req);
     let user = match product {
         crate::product::ProductId::LiveEscape => db
             .users_le()
@@ -82,11 +88,16 @@ pub async fn realtime_ws(
     // Concurrent session limit (edge case: double-start from two windows).
     // Counts in the product's own session store so Live Escape sessions are
     // never counted against LiveMorph (and vice versa).
+    //
+    // IMPORTANT: clients call REST /streaming/session-start first (which stamps
+    // a "live" intent row) and then connect here — ONE logical session, two
+    // rows. Counting "live" would self-collide with our own REST row, so only
+    // rows that actually own a Decart stream ("connecting"/"generating") count.
     if cfg.max_concurrent_sessions > 0 {
         let active = session_coll(&db, product)
             .count_documents(doc! {
                 "user_id": &claims.sub,
-                "status": { "$in": ["connecting", "live", "generating"] }
+                "status": { "$in": ["connecting", "generating"] }
             })
             .await
             .map_err(|e| actix_web::error::ErrorInternalServerError(e.to_string()))?;
@@ -112,7 +123,8 @@ pub async fn realtime_ws(
         "end_reason": None::<String>,
         "prompt": None::<String>,
         "character_id": None::<String>,
-        "tier": "standard",
+        "tier": tier,
+        "tier_multiplier": tier_multiplier,
         "product": product.as_str(),
     };
     let _ = session_coll(&db, product).insert_one(&session_doc).await;
@@ -138,6 +150,7 @@ pub async fn realtime_ws(
             session_id: &session_id,
             model: &model,
             product: product_for_bill,
+            tier_multiplier,
         };
         let proxy_result = run_proxy(&cfg, &db, ctx, &mut session, &mut msg_stream).await;
         let reason = match &proxy_result {
@@ -164,6 +177,7 @@ struct ProxySessionCtx<'a> {
     session_id: &'a str,
     model: &'a str,
     product: crate::product::ProductId,
+    tier_multiplier: f64,
 }
 
 /// Product-aware session collection (LiveMorph `morph_sessions` | LiveEscape `sessions`).
@@ -186,6 +200,7 @@ async fn run_proxy(
         session_id,
         model,
         product,
+        tier_multiplier,
     } = ctx;
     // API key must be query-encoded (keys can contain + / =)
     let upstream_url = format!(
@@ -237,7 +252,10 @@ async fn run_proxy(
                         }
                     }
                 }
-                actix_ws::Message::Close(_) | actix_ws::Message::Ping(_) => break,
+                actix_ws::Message::Close(_) => break,
+                // Ping: client keepalive — QWebSocket auto-replies Pong at the
+                // protocol level; just keep the loop alive.
+                actix_ws::Message::Ping(_) => {}
                 actix_ws::Message::Pong(_) => {}
                 _ => {}
             }
@@ -247,6 +265,7 @@ async fn run_proxy(
     // Upstream → client + billing
     let mut last_billed_seconds: f64 = 0.0;
     let cps = cfg.credits_per_second;
+    let effective_cps = cps * tier_multiplier;
     let db_bill = db.clone();
     let cfg_bill = cfg.clone();
     let uid = user_id.to_string();
@@ -267,7 +286,11 @@ async fn run_proxy(
                                             doc! { "_id": &sid },
                                             doc! { "$set": {
                                                 "decart_session_id": dsid,
-                                                "status": "live",
+                                                // WS-row lifecycle: connecting → generating →
+                                                // ended. "generating" (not "live") is the
+                                                // counted-active state, so concurrent streams
+                                                // stay bounded by max_concurrent_sessions.
+                                                "status": "generating",
                                             }},
                                         )
                                         .await;
@@ -277,7 +300,7 @@ async fn run_proxy(
                                 let _ = session_coll(&db_bill, product)
                                     .update_one(
                                         doc! { "_id": &sid },
-                                        doc! { "$set": { "status": "live" } },
+                                        doc! { "$set": { "status": "generating" } },
                                     )
                                     .await;
                             }
@@ -286,7 +309,7 @@ async fn run_proxy(
                                 let delta_secs = (secs - last_billed_seconds).max(0.0);
                                 last_billed_seconds = secs;
                                 if delta_secs > 0.0 {
-                                    let charge = delta_secs * cps;
+                                    let charge = delta_secs * effective_cps;
                                     if let Err(e) = charge_user(
                                         &db_bill, &cfg_bill, &uid, charge, delta_secs, &sid,
                                         product,
@@ -336,7 +359,7 @@ async fn run_proxy(
                                 // tail usage is never silently granted.
                                 let delta_secs = (secs - last_billed_seconds).max(0.0);
                                 if delta_secs > 0.0 {
-                                    let charge = delta_secs * cps;
+                                    let charge = delta_secs * effective_cps;
                                     if let Err(e) = charge_user(
                                         &db_bill, &cfg_bill, &uid, charge, delta_secs, &sid,
                                         product,
@@ -443,24 +466,46 @@ async fn charge_user(
             .ok_or_else(|| anyhow::anyhow!("user not found"))?,
     };
 
-    let bonus_take = amount.min(user.bonus_balance.max(0.0));
-    let credit_take = amount - bonus_take;
-
-    let update = doc! {
-        "$inc": {
-            "bonus_balance": -bonus_take,
-            "credit_balance": -credit_take,
-        },
-        "$set": { "updated_at": chrono::Utc::now() },
-    };
+    // Atomic debit via aggregation pipeline: bonus-first then credit, each
+    // clamped at zero. The `$expr` filter bounds the *total*; this eliminates
+    // the read-then-split TOCTOU that could drive a field negative concurrently.
+    let pipeline = vec![
+        doc! {
+            "$set": {
+                "bonus_balance": {
+                    "$max": [
+                        { "$subtract": ["$bonus_balance", amount] },
+                        0.0,
+                    ]
+                },
+                "credit_balance": {
+                    "$max": [
+                        {
+                            "$subtract": [
+                                "$credit_balance",
+                                {
+                                    "$subtract": [
+                                        amount,
+                                        { "$min": ["$bonus_balance", amount] },
+                                    ]
+                                },
+                            ]
+                        },
+                        0.0,
+                    ]
+                },
+                "updated_at": chrono::Utc::now(),
+            }
+        }
+    ];
 
     let result = match product {
         crate::product::ProductId::LiveEscape => {
             db.users_le()
-                .update_one(filter.clone(), update.clone())
+                .update_one(filter.clone(), pipeline.clone())
                 .await?
         }
-        crate::product::ProductId::LiveMorph => db.users().update_one(filter, update).await?,
+        crate::product::ProductId::LiveMorph => db.users().update_one(filter, pipeline).await?,
     };
     if result.matched_count == 0 {
         anyhow::bail!("insufficient_credits");
@@ -468,11 +513,11 @@ async fn charge_user(
 
     // 2) Platform pays Decart on the shared API key
     if let Err(e) = crate::services::billing::debit_decart_budget(db, cfg, delta_secs).await {
+        // Refund the exact amount back to the platform (credit) balance. The
+        // debit was bonus-first, but both balances are interchangeable spendable
+        // credits, so a single credit-balance refund preserves the user's total.
         let refund = doc! {
-            "$inc": {
-                "bonus_balance": bonus_take,
-                "credit_balance": credit_take,
-            },
+            "$inc": { "credit_balance": amount },
             "$set": { "updated_at": chrono::Utc::now() },
         };
         let _ = match product {

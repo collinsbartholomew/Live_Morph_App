@@ -8,11 +8,13 @@
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
-#include <QFile>
+#include <QImage>
 
 class ConfigManager;
 class BackendClient;
 class CameraManager;
+class SessionManager;
+class MorphRecorder;
 
 class RecordingManager : public QObject
 {
@@ -28,7 +30,8 @@ class RecordingManager : public QObject
 
 public:
     explicit RecordingManager(ConfigManager *config, BackendClient *backend,
-                            CameraManager *camera = nullptr, QObject *parent = nullptr);
+                            CameraManager *camera = nullptr, SessionManager *session = nullptr,
+                            QObject *parent = nullptr);
 
     bool isRecording() const { return m_recording; }
     qint64 elapsedMs() const;
@@ -52,7 +55,6 @@ public slots:
     void dismissOrphan(const QString &path);
     void listRecent();
     void clearError();
-    void pushChunk(const QByteArray &data); // frame/audio chunk while recording
 
 signals:
     void isRecordingChanged();
@@ -68,19 +70,30 @@ signals:
     void recordingSaved(const QString &path);   // toast trigger
     void recordingFailed(const QString &message);
 
+private slots:
+    void onMorphFrame(const QImage &img);
+
 private:
     void setError(const QString &e);
+    bool stopCapture();
+    bool promoteTempFile();
     ConfigManager *m_config = nullptr;
     BackendClient *m_backend = nullptr;
     CameraManager *m_camera = nullptr;
+    SessionManager *m_session = nullptr;
+    MorphRecorder *m_morphRec = nullptr;
     bool m_recording = false;
+    bool m_cameraFinalizePending = false; // camera stop is async (QMediaRecorder)
+    enum class CaptureSource { None, Morph, Camera };
+    CaptureSource m_captureSource = CaptureSource::None;
     QString m_outputDir;
     QString m_lastPath;
     QString m_currentPath;
+    QString m_tempPath; // atomic write: record to .part, rename on success
     QString m_lastError;
     QElapsedTimer m_timer;
     QTimer *m_tickTimer = nullptr;
-    QFile m_frameFile;
+    QTimer *m_maxDurationTimer = nullptr;
     QVariantList m_recent;
     QVariantList m_orphans;
 };

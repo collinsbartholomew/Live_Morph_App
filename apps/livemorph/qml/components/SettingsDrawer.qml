@@ -61,6 +61,31 @@ Item {
         border.color: Colors.surfaceBorder
         border.width: 0
 
+        // Panel hairline — accent gradient at top (matches Electron)
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: 1
+            z: 1
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: 0.5; color: Colors.accent60 }
+                GradientStop { position: 1.0; color: "transparent" }
+            }
+        }
+
+        // Panel drawer shadow — layered depth
+        Rectangle {
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            anchors.rightMargin: -8
+            width: 8
+            color: Colors.shadow
+            opacity: 0.35
+        }
+
         // panel-drawer left edge
         Rectangle {
             anchors.left: parent.left
@@ -104,17 +129,46 @@ Item {
                     Text {
                         text: qsTr("Settings")
                         color: Colors.textPrimary
-                        font.pixelSize: 15
+                        font.pixelSize: 16
                         font.weight: Font.DemiBold
                         Layout.fillWidth: true
                     }
-                    Text {
-                        text: "✕"
-                        color: Colors.textMuted
-                        font.pixelSize: 16
+                    // Help button
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: Theme.radiusSm
+                        color: helpHeaderMa.containsMouse ? Colors.surfaceOverlay : "transparent"
+                        Icon {
+                            anchors.centerIn: parent
+                            name: "circle-question-mark"
+                            size: Theme.iconMd
+                            color: Colors.textSecondary
+                        }
                         MouseArea {
+                            id: helpHeaderMa
                             anchors.fill: parent
-                            anchors.margins: -8
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.open = false
+                        }
+                    }
+                    // Close button (icon style)
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: Theme.radiusSm
+                        color: closeHeaderMa.containsMouse ? Colors.surfaceOverlay : "transparent"
+                        Icon {
+                            anchors.centerIn: parent
+                            name: "x"
+                            size: Theme.iconMd
+                            color: Colors.textSecondary
+                        }
+                        MouseArea {
+                            id: closeHeaderMa
+                            anchors.fill: parent
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.open = false
                         }
@@ -122,51 +176,233 @@ Item {
                 }
             }
 
-            // Tabs
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: 16
-                Layout.rightMargin: 16
-                Layout.topMargin: 12
-                spacing: 4
-                Repeater {
-                    model: [
-                        { id: "general", label: qsTr("General") },
-                        { id: "camera", label: qsTr("Camera") },
-                        { id: "stream", label: qsTr("Stream") },
-                        { id: "recording", label: qsTr("Recording") },
-                        { id: "account", label: qsTr("Account") }
-                    ]
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 32
-                        radius: 4
-                        color: root.activeTab === modelData.id ? Colors.accentMuted : "transparent"
-                        border.color: root.activeTab === modelData.id ? Colors.accent : "transparent"
-                        border.width: 1
-                        Text {
-                            anchors.centerIn: parent
-                            text: modelData.label
-                            color: root.activeTab === modelData.id ? Colors.accent : Colors.textMuted
-                            font.pixelSize: 11
-                            font.family: "monospace"
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.activeTab = modelData.id
-                        }
-                    }
-                }
-            }
-
-            Flickable {
+            // Sidebar nav (vertical)
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                contentWidth: width
-                contentHeight: body.implicitHeight + 32
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
+
+                RowLayout {
+                    anchors.fill: parent
+
+                    // Sidebar
+                    Rectangle {
+                        Layout.preferredWidth: 140
+                        Layout.fillHeight: true
+                        color: Qt.rgba(Colors.surfaceBase.r, Colors.surfaceBase.g, Colors.surfaceBase.b, 0.4)
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 1
+                            color: Colors.surfaceBorderSubtle
+                        }
+
+                        ColumnLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.topMargin: 8
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 2
+
+                            // Studio section
+                            Text {
+                                text: qsTr("STUDIO")
+                                color: Colors.textMuted
+                                font.pixelSize: 9
+                                font.family: Theme.fontMono.family
+                                font.letterSpacing: 1.35
+                                Layout.leftMargin: 8
+                                Layout.topMargin: 4
+                                Layout.bottomMargin: 4
+                            }
+
+                            Repeater {
+                                model: [
+                                    { id: "general", label: qsTr("General"), icon: "settings" },
+                                    { id: "camera", label: qsTr("Camera"), icon: "video" },
+                                    { id: "stream", label: qsTr("Stream"), icon: "radio" },
+                                    { id: "recording", label: qsTr("Recording"), icon: "circle-dot" }
+                                ]
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    height: 32
+                                    radius: Theme.radiusSm
+                                    color: root.activeTab === modelData.id ? Colors.surfaceOverlay : "transparent"
+                                    border.color: root.activeTab === modelData.id ? Colors.surfaceBorder : "transparent"
+                                    border.width: 1
+
+                                    // Inset top highlight for active
+                                    Rectangle {
+                                        visible: root.activeTab === modelData.id
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        height: 1
+                                        color: Colors.surfaceBorder
+                                    }
+
+                                    Row {
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 8
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        spacing: 8
+
+                                        Icon {
+                                            name: modelData.icon
+                                            size: 14
+                                            color: root.activeTab === modelData.id ? Colors.textPrimary : Colors.textMuted
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+
+                                        Text {
+                                            text: modelData.label
+                                            color: root.activeTab === modelData.id ? Colors.textPrimary : Colors.textMuted
+                                            font.pixelSize: 12
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.activeTab = modelData.id
+                                    }
+                                }
+                            }
+
+                            // Account section
+                            Item { Layout.preferredHeight: 12 }
+
+                            Text {
+                                text: qsTr("ACCOUNT")
+                                color: Colors.textMuted
+                                font.pixelSize: 9
+                                font.family: Theme.fontMono.family
+                                font.letterSpacing: 1.35
+                                Layout.leftMargin: 8
+                                Layout.bottomMargin: 4
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 32
+                                radius: Theme.radiusSm
+                                color: root.activeTab === "billing" ? Colors.surfaceOverlay : "transparent"
+                                border.color: root.activeTab === "billing" ? Colors.surfaceBorder : "transparent"
+                                border.width: 1
+
+                                Rectangle {
+                                    visible: root.activeTab === "billing"
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    height: 1
+                                    color: Colors.surfaceBorder
+                                }
+
+                                Row {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 8
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 8
+
+                                    Icon {
+                                        name: "coins"
+                                        size: 14
+                                        color: root.activeTab === "billing" ? Colors.textPrimary : Colors.textMuted
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+
+                                    Text {
+                                        text: qsTr("Billing")
+                                        color: root.activeTab === "billing" ? Colors.textPrimary : Colors.textMuted
+                                        font.pixelSize: 12
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.activeTab = "billing"
+                                }
+                            }
+
+                            Item { Layout.fillHeight: true }
+
+                            // About (pinned to bottom)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 32
+                                radius: Theme.radiusSm
+                                color: root.activeTab === "about" ? Colors.surfaceOverlay : "transparent"
+                                border.color: root.activeTab === "about" ? Colors.surfaceBorder : "transparent"
+                                border.width: 1
+
+                                Rectangle {
+                                    visible: root.activeTab === "about"
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    height: 1
+                                    color: Colors.surfaceBorder
+                                }
+
+                                Row {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 8
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 8
+
+                                    Icon {
+                                        name: "info"
+                                        size: 14
+                                        color: root.activeTab === "about" ? Colors.textPrimary : Colors.textMuted
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+
+                                    Text {
+                                        text: qsTr("About")
+                                        color: root.activeTab === "about" ? Colors.textPrimary : Colors.textMuted
+                                        font.pixelSize: 12
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.activeTab = "about"
+                                }
+                            }
+
+                            Item { Layout.preferredHeight: 8 }
+                        }
+                    }
+
+                    // Content area
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        color: "transparent"
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 1
+                            color: Colors.surfaceBorderSubtle
+                        }
+
+                        Flickable {
+                            anchors.fill: parent
+                            contentWidth: width
+                            contentHeight: body.implicitHeight + 32
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
 
                 ColumnLayout {
                     id: body
@@ -186,7 +422,7 @@ Item {
                             text: qsTr("LANGUAGE")
                             color: Colors.textMuted
                             font.pixelSize: 10
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             font.letterSpacing: 1.2
                         }
                         Flow {
@@ -206,7 +442,7 @@ Item {
                                         text: modelData.toUpperCase()
                                         color: I18n.language === modelData ? Colors.white : Colors.textPrimary
                                         font.pixelSize: 11
-                                        font.family: "monospace"
+                                        font.family: Theme.fontMono.family
                                     }
                                     MouseArea {
                                         anchors.fill: parent
@@ -220,7 +456,7 @@ Item {
                             text: qsTr("STARTUP")
                             color: Colors.textMuted
                             font.pixelSize: 10
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             font.letterSpacing: 1.2
                             Layout.topMargin: 8
                         }
@@ -335,6 +571,65 @@ Item {
                                 onToggled: Config.autoRecord = checked
                             }
                         }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                text: qsTr("Smooth output")
+                                color: Colors.textSecondary
+                                font.pixelSize: 13
+                                Layout.fillWidth: true
+                            }
+                            Switch {
+                                checked: Config.smoothOutput
+                                onToggled: Config.smoothOutput = checked
+                            }
+                        }
+                        Text {
+                            text: qsTr("Doubles frame smoothing for more fluid motion (uses slightly more resources).")
+                            color: Colors.textMuted
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
+                        Text {
+                            text: qsTr("PIP VISIBILITY")
+                            color: Colors.textMuted
+                            font.pixelSize: 10
+                            font.family: Theme.fontMono.family
+                            font.letterSpacing: 1.2
+                            Layout.topMargin: 8
+                        }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: [
+                                    { label: "Always", value: "always" },
+                                    { label: "While Swapping", value: "whileSwapping" },
+                                    { label: "Never", value: "never" }
+                                ]
+                                Rectangle {
+                                    width: Math.max(80, pipLabel.implicitWidth + 16)
+                                    height: 28
+                                    radius: 4
+                                    color: Config.pipVisibility === modelData.value ? Colors.accent : Colors.surfaceOverlay
+                                    border.color: Colors.surfaceBorder
+                                    border.width: 1
+                                    Text {
+                                        id: pipLabel
+                                        anchors.centerIn: parent
+                                        text: modelData.label
+                                        color: Config.pipVisibility === modelData.value ? Colors.white : Colors.textPrimary
+                                        font.pixelSize: 11
+                                        font.family: Theme.fontMono.family
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: Config.pipVisibility = modelData.value
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // ── Camera ──
@@ -347,11 +642,11 @@ Item {
                             text: qsTr("DEVICE")
                             color: Colors.textMuted
                             font.pixelSize: 10
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             font.letterSpacing: 1.2
                         }
                         Text {
-                            text: Camera.currentDeviceName || qsTr("Default camera")
+                            text: CameraCtrl.currentDeviceName || qsTr("Default camera")
                             color: Colors.textPrimary
                             font.pixelSize: 13
                             Layout.fillWidth: true
@@ -365,14 +660,27 @@ Item {
                                 Layout.fillWidth: true
                             }
                             Switch {
-                                checked: Camera.mirrored
-                                onToggled: Camera.mirrored = checked
+                                checked: CameraCtrl.mirrored
+                                onToggled: CameraCtrl.mirrored = checked
                             }
                         }
                         PrimaryButton {
-                            text: Camera.isActive ? qsTr("Stop camera") : qsTr("Start camera")
+                            text: CameraCtrl.isActive ? qsTr("Stop camera") : qsTr("Start camera")
                             Layout.fillWidth: true
-                            onClicked: Camera.isActive ? Camera.stop() : Camera.start()
+                            onClicked: CameraCtrl.isActive ? CameraCtrl.stop() : CameraCtrl.start()
+                        }
+                        Text {
+                            text: qsTr("AUDIO INPUT")
+                            color: Colors.textMuted
+                            font.pixelSize: 10
+                            font.family: Theme.fontMono.family
+                            font.letterSpacing: 1.2
+                            Layout.topMargin: 12
+                        }
+                        Text {
+                            text: CameraCtrl.currentMicName || qsTr("Default microphone")
+                            color: Colors.textPrimary
+                            font.pixelSize: 12
                         }
                     }
 
@@ -385,7 +693,7 @@ Item {
                             text: qsTr("OBS / VIRTUAL CAMERA")
                             color: Colors.textMuted
                             font.pixelSize: 10
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             font.letterSpacing: 1.2
                         }
                         Text {
@@ -416,7 +724,7 @@ Item {
                             text: qsTr("Browser Source URL: %1").arg(StreamServer.url || VirtualCamera.obsBrowserSourceUrl)
                             color: Colors.accent
                             font.pixelSize: 11
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
@@ -499,7 +807,7 @@ Item {
                             text: VirtualCamera.statusMessage
                             color: Colors.textMuted
                             font.pixelSize: 10
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
@@ -507,7 +815,7 @@ Item {
                             text: qsTr("REALTIME (via backend proxy)")
                             color: Colors.textMuted
                             font.pixelSize: 10
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             font.letterSpacing: 1.2
                             Layout.topMargin: 12
                         }
@@ -573,17 +881,68 @@ Item {
                         Layout.fillWidth: true
                         spacing: 14
                         Text {
+                            text: qsTr("QUALITY")
+                            color: Colors.textMuted
+                            font.pixelSize: 10
+                            font.family: Theme.fontMono.family
+                            font.letterSpacing: 1.2
+                        }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: [
+                                    { label: "Balanced (2.5 Mbps)", value: "balanced" },
+                                    { label: "High (4 Mbps)", value: "high" }
+                                ]
+                                Rectangle {
+                                    width: Math.max(120, recQualLabel.implicitWidth + 16)
+                                    height: 28
+                                    radius: 4
+                                    color: Config.recordingQuality === modelData.value ? Colors.accent : Colors.surfaceOverlay
+                                    border.color: Colors.surfaceBorder
+                                    border.width: 1
+                                    Text {
+                                        id: recQualLabel
+                                        anchors.centerIn: parent
+                                        text: modelData.label
+                                        color: Config.recordingQuality === modelData.value ? Colors.white : Colors.textPrimary
+                                        font.pixelSize: 11
+                                        font.family: Theme.fontMono.family
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: Config.recordingQuality = modelData.value
+                                    }
+                                }
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                text: qsTr("Include microphone audio")
+                                color: Colors.textSecondary
+                                font.pixelSize: 13
+                                Layout.fillWidth: true
+                            }
+                            Switch {
+                                checked: Config.micAudioEnabled
+                                onToggled: Config.micAudioEnabled = checked
+                            }
+                        }
+                        Text {
                             text: qsTr("OUTPUT")
                             color: Colors.textMuted
                             font.pixelSize: 10
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             font.letterSpacing: 1.2
+                            Layout.topMargin: 8
                         }
                         Text {
                             text: Recording.outputDirectory || qsTr("Default videos folder")
                             color: Colors.textPrimary
                             font.pixelSize: 12
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             wrapMode: Text.WrapAnywhere
                             Layout.fillWidth: true
                         }
@@ -618,7 +977,7 @@ Item {
                                         text: modelData.path || modelData || ""
                                         color: Colors.textSecondary
                                         font.pixelSize: 10
-                                        font.family: "monospace"
+                                        font.family: Theme.fontMono.family
                                         elide: Text.ElideMiddle
                                         Layout.fillWidth: true
                                     }
@@ -643,23 +1002,23 @@ Item {
                         }
                     }
 
-                    // ── Account ──
+                    // ── Billing / Account ──
                     ColumnLayout {
-                        visible: root.activeTab === "account"
+                        visible: root.activeTab === "billing"
                         Layout.fillWidth: true
                         spacing: 14
                         Text {
                             text: qsTr("SESSION")
                             color: Colors.textMuted
                             font.pixelSize: 10
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             font.letterSpacing: 1.2
                         }
                         Text {
                             text: Auth.email || ""
                             color: Colors.textPrimary
                             font.pixelSize: 13
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                         }
                         Text {
                             text: qsTr("%1 credits").arg(Number(Auth.creditBalance + Auth.bonusBalance).toFixed(0))
@@ -688,10 +1047,36 @@ Item {
                             Layout.topMargin: 8
                         }
                         Text {
+                            text: qsTr("DATA")
+                            color: Colors.textMuted
+                            font.pixelSize: 10
+                            font.family: Theme.fontMono.family
+                            font.letterSpacing: 1.2
+                        }
+                        GhostButton {
+                            text: qsTr("Export my data")
+                            Layout.fillWidth: true
+                            onClicked: {
+                                Auth.exportData()
+                                App.notify(qsTr("Preparing data export…"), "info")
+                            }
+                        }
+                        SecondaryButton {
+                            text: qsTr("Delete account")
+                            Layout.fillWidth: true
+                            onClicked: deleteAccountDialog.open()
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 1
+                            color: Colors.surfaceBorder
+                            Layout.topMargin: 8
+                        }
+                        Text {
                             text: qsTr("ABOUT")
                             color: Colors.textMuted
                             font.pixelSize: 10
-                            font.family: "monospace"
+                            font.family: Theme.fontMono.family
                             font.letterSpacing: 1.2
                         }
                         Text {
@@ -714,13 +1099,31 @@ Item {
                         }
                         PrimaryButton {
                             visible: root.updateDownloadUrl.length > 0
-                            text: root.updateDownloadUrl.length > 0
-                                  ? qsTr("Download update %1").arg(root.updateLatestVersion || "")
-                                  : qsTr("Download update")
+                            text: Backend.updateDownloading
+                                  ? qsTr("Downloading… %1%").arg(Backend.updateProgress)
+                                  : (Backend.updateProgress >= 100
+                                     ? qsTr("Install %1").arg(root.updateLatestVersion || "update")
+                                     : qsTr("Download update %1").arg(root.updateLatestVersion || ""))
                             Layout.fillWidth: true
+                            enabled: !Backend.updateDownloading
                             onClicked: {
-                                Backend.installUpdate()
-                                App.notify(qsTr("Opening download…"), "info")
+                                Backend.downloadUpdate()
+                                App.notify(qsTr("Downloading update…"), "info")
+                            }
+                        }
+                        Rectangle {
+                            visible: Backend.updateProgress > 0
+                            Layout.fillWidth: true
+                            height: 6
+                            radius: 3
+                            color: Colors.surfaceBorder
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                width: parent.width * (Backend.updateProgress / 100.0)
+                                height: parent.height
+                                radius: 3
+                                color: Colors.accent
                             }
                         }
                         GhostButton {
@@ -740,9 +1143,151 @@ Item {
                                 App.showTour = true
                             }
                         }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 1
+                            color: Colors.surfaceBorder
+                            Layout.topMargin: 8
+                        }
+                        Text {
+                            text: qsTr("COMMUNITY")
+                            color: Colors.textMuted
+                            font.pixelSize: 10
+                            font.family: Theme.fontMono.family
+                            font.letterSpacing: 1.2
+                        }
+                        GhostButton {
+                            text: qsTr("Join our Discord")
+                            Layout.fillWidth: true
+                            onClicked: Qt.openUrlExternally(Constants.urlDiscord)
+                        }
+                    }
+
+                    // ── About ──
+                    ColumnLayout {
+                        visible: root.activeTab === "about"
+                        Layout.fillWidth: true
+                        spacing: 14
+
+                        // Centered icon
+                        Rectangle {
+                            Layout.preferredWidth: 64
+                            Layout.preferredHeight: 64
+                            Layout.alignment: Qt.AlignHCenter
+                            radius: Theme.radiusMd
+                            color: Colors.surfaceOverlay
+                            border.color: Colors.surfaceBorder
+                            border.width: 1
+                            Image {
+                                anchors.centerIn: parent
+                                source: "qrc:/assets/livemorph-icon.png"
+                                width: 48
+                                height: 48
+                                fillMode: Image.PreserveAspectFit
+                            }
+                        }
+
+                        Text {
+                            text: "LiveMorph"
+                            color: Colors.textPrimary
+                            font.pixelSize: 18
+                            font.weight: Font.DemiBold
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
+                        Text {
+                            text: qsTr("Visit site")
+                            color: Colors.accent
+                            font.pixelSize: 12
+                            Layout.alignment: Qt.AlignHCenter
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Qt.openUrlExternally(Constants.urlWebsite || "https://livemorph.app")
+                            }
+                        }
+
+                        Text {
+                            text: "v" + App.appVersion
+                            color: Colors.textMuted
+                            font.pixelSize: 10
+                            font.family: Theme.fontMono.family
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 1
+                            color: Colors.surfaceBorder
+                            Layout.topMargin: 8
+                        }
+
+                        GhostButton {
+                            text: qsTr("What's new")
+                            Layout.fillWidth: true
+                            onClicked: { root.open = false; App.showWhatsNew = true }
+                        }
+
+                        GhostButton {
+                            text: qsTr("Check for updates")
+                            Layout.fillWidth: true
+                            onClicked: {
+                                Backend.checkUpdates()
+                                App.notify(qsTr("Checking for updates…"), "info")
+                            }
+                        }
+
+                        PrimaryButton {
+                            visible: root.updateDownloadUrl.length > 0
+                            text: Backend.updateDownloading
+                                  ? qsTr("Downloading… %1%").arg(Backend.updateProgress)
+                                  : (Backend.updateProgress >= 100
+                                     ? qsTr("Install %1").arg(root.updateLatestVersion || "update")
+                                     : qsTr("Download update %1").arg(root.updateLatestVersion || ""))
+                            Layout.fillWidth: true
+                            enabled: !Backend.updateDownloading
+                            onClicked: {
+                                Backend.downloadUpdate()
+                                App.notify(qsTr("Downloading update…"), "info")
+                            }
+                        }
+
+                        Rectangle {
+                            visible: Backend.updateProgress > 0
+                            Layout.fillWidth: true
+                            height: 6
+                            radius: 3
+                            color: Colors.surfaceOverlay
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                width: parent.width * (Backend.updateProgress / 100.0)
+                                height: parent.height
+                                radius: 3
+                                color: Colors.accent
+                            }
+                        }
+
+                        GhostButton {
+                            text: qsTr("Replay onboarding tour")
+                            Layout.fillWidth: true
+                            onClicked: {
+                                Config.onboardingDone = false
+                                root.open = false
+                                App.showTour = true
+                            }
+                        }
+
+                        BrandingFooter {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 12
+                        }
                     }
                 }
             }
+        }
+            }
+        }
         }
     }
 
@@ -753,6 +1298,28 @@ Item {
             var path = selectedFolder.toString().replace("file://", "")
             Recording.pickOutputDirectory(path)
             App.notify(qsTr("Output folder updated"), "success")
+        }
+    }
+
+    ConfirmDialog {
+        id: deleteAccountDialog
+        title: qsTr("Delete account")
+        confirmText: qsTr("Delete permanently")
+        cancelText: qsTr("Cancel")
+        message: qsTr("This permanently deletes your account and anonymizes your data. This cannot be undone.")
+        onAccepted: {
+            Auth.deleteAccount()
+            App.notify(qsTr("Account deletion requested"), "warn")
+        }
+    }
+
+    Connections {
+        target: Auth
+        function onDataExported(path) {
+            if (path.length)
+                App.notify(qsTr("Export saved to %1").arg(path), "success")
+            else
+                App.notify(qsTr("Export completed (see secure vault)"), "success")
         }
     }
 

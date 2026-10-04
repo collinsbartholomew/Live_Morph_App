@@ -1,5 +1,6 @@
 use crate::auth::middleware::require_user;
 use crate::error::AppResult;
+use crate::product::ProductId;
 use actix_web::{get, post, web, HttpRequest, HttpResponse};
 use serde::Deserialize;
 use serde_json::json;
@@ -58,13 +59,18 @@ async fn finalize(req: HttpRequest) -> AppResult<HttpResponse> {
 #[get("/recordings/directory")]
 async fn directory(req: HttpRequest) -> AppResult<HttpResponse> {
     let _ = require_user(&req)?;
+    let product = ProductId::from_request(&req);
     Ok(HttpResponse::Ok().json(json!({
-        "directory": dirs_recording_default()
+        "directory": dirs_recording_default(&product)
     })))
 }
 
-fn dirs_recording_default() -> String {
+fn dirs_recording_default(product: &ProductId) -> String {
+    let app_name = match product {
+        ProductId::LiveEscape => "LiveEscape",
+        _ => "LiveMorph",
+    };
     std::env::var("HOME")
-        .map(|h| format!("{h}/Videos/LiveMorph"))
-        .unwrap_or_else(|_| "/tmp/livemorph-recordings".into())
+        .map(|h| format!("{h}/Videos/{app_name}"))
+        .unwrap_or_else(|_| format!("/tmp/{app_name:?}-recording").to_lowercase())
 }
