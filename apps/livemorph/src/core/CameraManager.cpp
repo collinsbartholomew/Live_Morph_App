@@ -358,6 +358,18 @@ QString CameraManager::startLocalRecording(const QString &outputPath)
     const QString home = QFileInfo(QDir::homePath()).canonicalFilePath();
     bool contained = !clean.isEmpty() && QDir(clean).isAbsolute()
                      && !home.isEmpty() && (clean == home || clean.startsWith(home + QLatin1Char('/')));
+    if (contained) {
+        // Reject dot-directories and sensitive dirs under $HOME (~/.ssh etc.).
+        static const QStringList kSensitive = {
+            QStringLiteral(".ssh"), QStringLiteral(".gnupg"), QStringLiteral(".config"),
+            QStringLiteral(".gnome"), QStringLiteral(".local"), QStringLiteral(".cache"),
+            QStringLiteral(".aws"), QStringLiteral(".azure"), QStringLiteral(".kube"),
+        };
+        const QString rel = clean.mid(home.size() + 1);
+        const QString first = rel.section(QLatin1Char('/'), 0, 0);
+        if (first.startsWith(QLatin1Char('.')) || kSensitive.contains(first))
+            contained = false;
+    }
     if (!contained) {
         const QStringList stdDirs = {
             QStandardPaths::writableLocation(QStandardPaths::MoviesLocation),

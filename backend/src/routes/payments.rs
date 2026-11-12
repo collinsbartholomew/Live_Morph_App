@@ -1236,6 +1236,18 @@ async fn refund_order(
         .find_one(doc! { "_id": &auth.user_id })
         .await?
         .ok_or_else(|| AppError::NotFound("user".into()))?;
+    // CAS claim provisioned → "refunding" BEFORE any debit, so two concurrent
+    // refunds of the same order cannot both debit (the loser gets 409 and the
+    // debit never runs).
+    let claim = orders_coll
+        .update_one(
+            doc! { "_id": &order.id, "status": "provisioned" },
+            doc! { "$set": { "status": "refunding" } },
+        )
+        .await?;
+    if claim.matched_count == 0 {
+        return Err(AppError::Conflict("order already refunded".into()));
+    }
     let take = order.credits.min(user.total_credits());
     // Atomic debit + split via a single aggregation-pipeline update (bonus
     // first then credit, clamped at zero) — no stale-read split TOCTOU. The
@@ -1301,15 +1313,14 @@ async fn refund_order(
     };
     ledger_coll.insert_one(&entry).await?;
     order.status = "refunded".into();
-    // CAS the final flip (provisioned → refunded) so two concurrent refunds of
-    // the same order cannot both succeed.
-    let claimed = orders_coll
+    // Final flip refunding → refunded (guarded so it can only happen once).
+    let fin = orders_coll
         .update_one(
-            doc! { "_id": &order.id, "status": "provisioned" },
+            doc! { "_id": &order.id, "status": "refunding" },
             doc! { "$set": { "status": "refunded" } },
         )
         .await?;
-    if claimed.matched_count == 0 {
+    if fin.matched_count == 0 {
         return Err(AppError::Conflict("order already refunded".into()));
     }
     Ok(HttpResponse::Ok().json(json!({

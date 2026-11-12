@@ -660,9 +660,17 @@ void BackendClient::fetchIceServers() {
 		QString turnUser, turnCred;
 		for (const QJsonValue &v : arr) {
 			const QJsonObject e = v.toObject();
-			const QString u = e.value(QStringLiteral("urls")).toString();
+			QString u = e.value(QStringLiteral("urls")).toString();
 			if (u.isEmpty())
 				continue;
+			// Never expose embedded credentials in the QML-visible URL list —
+			// strip any userinfo so turn:user:pass@host becomes turn:host.
+			const QUrl parsed(u);
+			if (parsed.scheme().startsWith(QLatin1String("turn")) && parsed.userInfo().contains(QLatin1Char(':'))) {
+				QUrl clean = parsed;
+				clean.setUserInfo(QString());
+				u = clean.toString();
+			}
 			urls.append(u);
 			if ((u.startsWith(QLatin1String("turn")))
 			    && !e.value(QStringLiteral("username")).toString().isEmpty()) {
@@ -1011,6 +1019,8 @@ void BackendClient::downloadUpdate() {
 			f->deleteLater();
 			return;
 		}
+		// The downloaded update binary must not be world-readable.
+		f->setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
 
 		QNetworkReply *reply = m_downloadReply;
 		// Enforce the byte cap on the raw stream too — downloadProgress can

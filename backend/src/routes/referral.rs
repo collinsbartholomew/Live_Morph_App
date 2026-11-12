@@ -3,10 +3,12 @@
 
 use crate::auth::middleware::require_user;
 use crate::config::Config;
-use crate::db::Db;
+use crate::db::{new_id, Db};
 use crate::error::{AppError, AppResult};
+use crate::models::CreditLedgerEntry;
 use crate::product::ProductId;
 use actix_web::{get, post, web, HttpRequest, HttpResponse};
+use chrono::Utc;
 use mongodb::bson::doc;
 use serde::Deserialize;
 use serde_json::json;
@@ -151,20 +153,43 @@ async fn referral_attach(
         })));
     }
 
-    // Credit the (validated) referrer.
-    let bonus = {
-        let cfg_credits = cfg.referral_credits.unwrap_or(100.0);
-        users_coll(&db, product)
-            .update_one(
-                doc! { "referral_code": &code },
-                doc! {
-                    "$inc": { "referral_earned": cfg_credits, "bonus_balance": cfg_credits },
-                    "$set": { "updated_at": chrono::Utc::now() },
-                },
-            )
-            .await?;
-        cfg_credits
-    };
+    // Credit the (validated) referrer, CAPPED at MAX_REFERRALS successful
+    // attaches per referrer (anti-farming). The conditional update is atomic:
+    // only counts under the cap match, and referral_count is incremented in
+    // the same write. A ledger row is written for audit (every credit path does).
+    const MAX_REFERRALS: i64 = 50;
+    let cfg_credits = cfg.referral_credits.unwrap_or(100.0);
+    let credited = users_coll(&db, product)
+        .update_one(
+            doc! {
+                "referral_code": &code,
+                "$expr": { "$lt": [ { "$ifNull": ["$referral_count", 0] }, MAX_REFERRALS ] },
+            },
+            doc! {
+                "$inc": { "referral_earned": cfg_credits, "bonus_balance": cfg_credits, "referral_count": 1 },
+                "$set": { "updated_at": Utc::now() },
+            },
+        )
+        .await?;
+    let bonus = if credited.matched_count == 1 { cfg_credits } else { 0.0 };
+    if bonus > 0.0 {
+        let ledger = match product {
+            ProductId::Secondary => db.ledger_secondary(),
+            ProductId::LiveMorph => db.ledger(),
+        };
+        let referrer_id = referrer.as_ref().map(|r| r.id.clone()).unwrap_or_default();
+        let entry = CreditLedgerEntry {
+            id: new_id(),
+            user_id: referrer_id,
+            delta: bonus,
+            balance_after: 0.0,
+            kind: "referral".into(),
+            ref_id: Some(auth.user_id.clone()),
+            note: Some(format!("referral bonus for attacher {}", auth.user_id)),
+            created_at: bson::DateTime::from_chrono(Utc::now()),
+        };
+        let _ = ledger.insert_one(&entry).await;
+    }
 
     Ok(HttpResponse::Ok().json(json!({
         "ok": true,

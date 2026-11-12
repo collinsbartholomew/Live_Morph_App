@@ -34,8 +34,21 @@ bool isAcceptableOutputDir(const QString &path)
     const QString canon = QFileInfo(existing).canonicalFilePath();
     const QString resolved = canon.isEmpty() ? clean : canon + clean.mid(existing.size());
     const QString home = QFileInfo(QDir::homePath()).canonicalFilePath();
-    if (!home.isEmpty() && (resolved == home || resolved.startsWith(home + QLatin1Char('/'))))
-        return true;
+    if (!home.isEmpty() && (resolved == home || resolved.startsWith(home + QLatin1Char('/')))) {
+        // Containment is not just "under $HOME": reject dot-directories and
+        // sensitive dirs (e.g. ~/.ssh, ~/.gnupg) so a server-pushed or
+        // hand-edited path cannot redirect recordings into them.
+        static const QStringList kSensitive = {
+            QStringLiteral(".ssh"), QStringLiteral(".gnupg"), QStringLiteral(".config"),
+            QStringLiteral(".gnome"), QStringLiteral(".local"), QStringLiteral(".cache"),
+            QStringLiteral(".aws"), QStringLiteral(".azure"), QStringLiteral(".kube"),
+        };
+        const QString rel = resolved.mid(home.size() + 1);
+        const QString first = rel.section(QLatin1Char('/'), 0, 0);
+        if (!first.startsWith(QLatin1Char('.')) && !kSensitive.contains(first))
+            return true;
+        return false;
+    }
     const QStringList stdDirs = {
         QStandardPaths::writableLocation(QStandardPaths::MoviesLocation),
         QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation),

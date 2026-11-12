@@ -90,6 +90,16 @@ pub fn ws_origin_ok(req: &HttpRequest, cfg: &crate::config::Config) -> bool {
     let Some(ohost) = o.host_str() else {
         return false;
     };
+    // Same-origin as the configured public base URL: scheme AND host AND port
+    // must match (an http:// page on the same host at any port must not pass).
+    if let Ok(base) = url::Url::parse(&cfg.public_base_url) {
+        if o.scheme() == base.scheme()
+            && ohost.eq_ignore_ascii_case(base.host_str().unwrap_or(""))
+            && o.port_or_known_default() == base.port_or_known_default()
+        {
+            return true;
+        }
+    }
     if let Some(host) = req.headers().get("host").and_then(|h| h.to_str().ok()) {
         let host = host.split(':').next().unwrap_or(host);
         if ohost.eq_ignore_ascii_case(host) {

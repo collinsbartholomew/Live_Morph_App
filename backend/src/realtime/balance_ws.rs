@@ -41,6 +41,17 @@ pub async fn balance_ws(
     let claims = decode_access(&cfg, &token)
         .map_err(|e| { tracing::warn!(error = %e, "balance WS token decode failed"); actix_web::error::ErrorUnauthorized("invalid token") })?;
 
+    // Rate-limit balance WS handshakes per (user, ip) before any DB write.
+    {
+        let ip = crate::auth::client_ip(&req);
+        let key = format!("{}:{}", claims.sub, ip);
+        if !crate::auth::check_rate_limit(&key, "ws-balance", 10, 60)
+            || !crate::auth::check_rate_limit(&ip, "ws-balance-ip", 30, 60)
+        {
+            return Err(actix_web::error::ErrorTooManyRequests("too many balance connections"));
+        }
+    }
+
     let product = q
         .get("product")
         .or_else(|| q.get("frontend_id"))

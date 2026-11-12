@@ -381,7 +381,10 @@ impl Db {
                     .build(),
             )
             .build();
-        self.users().create_index(google_sub).await?;
+        self.users().create_index(google_sub.clone()).await?;
+        // Mirror on the secondary DB so a Google subject can never map to two
+        // secondary accounts.
+        self.users_secondary().create_index(google_sub).await?;
 
         // OAuth CSRF state + one-time tickets (TTL)
         let oauth_state_ttl = IndexModel::builder()

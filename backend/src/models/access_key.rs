@@ -47,7 +47,10 @@ impl AccessKey {
 pub fn random_key_part() -> String {
     use rand::RngExt;
     let mut rng = rand::rng();
-    (0..4)
+    // 16 base36 chars ≈ 82 bits per part; a CK- key has 2 parts (~165 bits) and
+    // an SS- license key has 3 (~248 bits) — both well above the 128-bit bar so a
+    // DB dump alone cannot be brute-forced against the rate-limited redemption.
+    (0..16)
         .map(|_| {
             let c: u8 = rng.random_range(0..36);
             if c < 10 {

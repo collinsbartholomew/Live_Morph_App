@@ -1,6 +1,7 @@
 #include "WebRtcSignalingClient.h"
 #include "core/DeviceIdentity.h"
 #include <QDebug>
+#include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -31,7 +32,8 @@ bool isLoopbackHost(const QString &host)
 WebRtcSignalingClient::WebRtcSignalingClient(QObject* parent) : QObject(parent) {
 	m_socket.setReadBufferSize(kMaxSocketBufferBytes);
 	connect(&m_socket, &QWebSocket::connected, this, &WebRtcSignalingClient::onConnected);
-	connect(&m_socket, &QWebSocket::disconnected, this, &WebRtcSignalingClient::onDisconnected);
+	void (QWebSocket::*disconnectedSig)() = &QWebSocket::disconnected;
+	connect(&m_socket, disconnectedSig, this, &WebRtcSignalingClient::onDisconnected);
 	connect(&m_socket, &QWebSocket::textMessageReceived, this,
 	        &WebRtcSignalingClient::onTextMessage);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
@@ -233,6 +235,13 @@ void WebRtcSignalingClient::onDisconnected() {
 	const bool was = m_connected;
 	m_connected = false;
 	m_pingTimer.stop();
+	const quint16 code = m_socket.closeCode();
+	const QString reason = m_socket.closeReason();
+	qWarning() << "WebRtcSignalingClient: WebSocket disconnected code=" << code << "reason=" << reason;
+	// Write close code to file for offline diagnosis (auto-cleaned on next connect).
+	QFile f(QStringLiteral("/tmp/ws_close.log"));
+	if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+		f.write(QStringLiteral("code=%1 reason=%2\n").arg(code).arg(reason).toUtf8());
 	if (was)
 		emit connectedChanged();
 	if (m_generating) {

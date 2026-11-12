@@ -237,7 +237,11 @@ async fn confirm_crypto_impl(
     // Persist manual-review proof artifacts on the order (path or base64 image).
     let mut set = mongodb::bson::doc! { "crypto_status": &status };
     if let Some(path) = body.proof_path.as_deref().filter(|s| !s.trim().is_empty()) {
-        set.insert("proof_path", path.trim());
+        let p = path.trim();
+        // Cap the stored proof path (string field on a shared order doc).
+        if p.chars().count() <= 512 {
+            set.insert("proof_path", p);
+        }
     }
     if let Some(img) = body
         .proof_image

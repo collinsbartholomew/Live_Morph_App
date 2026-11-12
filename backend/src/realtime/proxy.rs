@@ -51,6 +51,19 @@ pub async fn realtime_ws(
         .resolve_model(model_req)
         .map_err(actix_web::error::ErrorBadRequest)?;
 
+    // Rate-limit WS handshakes per (user, ip) BEFORE any DB write: each
+    // handshake inserts a session row, so an unthrottled single credential
+    // could exhaust DB writes/storage.
+    {
+        let ip = crate::auth::client_ip(&req);
+        let key = format!("{}:{}", claims.sub, ip);
+        if !crate::auth::check_rate_limit(&key, "ws-realtime", 10, 60)
+            || !crate::auth::check_rate_limit(&ip, "ws-realtime-ip", 30, 60)
+        {
+            return Err(actix_web::error::ErrorTooManyRequests("too many realtime connections"));
+        }
+    }
+
     // Reject cross-origin WS upgrades (defense-in-depth; desktop client sends
     // no Origin header and is allowed through).
     if !crate::auth::ratelimit::ws_origin_ok(&req, &cfg) {
@@ -119,8 +132,12 @@ pub async fn realtime_ws(
             }
         }
     }
-    let billed_hd = (tier == "hd" || q.get("tier").map(|t| t == "hd").unwrap_or(false))
-        && user.hd_entitled();
+    // Server-authoritative HD billing: an HD-entitled user is ALWAYS billed at
+    // the HD rate (they cannot self-downgrade to standard to underpay), and any
+    // client HD request is billed HD too (you pay for what you ask for). A
+    // non-entitled client claiming standard is billed standard.
+    let client_hd = tier == "hd" || q.get("tier").map(|t| t == "hd").unwrap_or(false);
+    let billed_hd = user.hd_entitled() || client_hd;
     tier = if billed_hd { "hd".into() } else { "standard".into() };
     let tier_multiplier = if tier == "hd" {
         cfg.hd_credit_multiplier
@@ -441,19 +458,21 @@ async fn run_proxy(
     // Bound the upstream dial: while it hangs the claimed slot is held with no
     // stream and no billing (and client Pings keep the 90s silence break from
     // firing), so an unbounded connect would self-lock the user out with 429s.
+    info!(session = %session_id, "run_proxy: connecting to decart upstream");
     let (upstream, _) = tokio::time::timeout(
         std::time::Duration::from_secs(15),
         connect_async(&upstream_url),
     )
     .await
     .map_err(|_| {
-        error!("decart upstream connect timed out after 15s");
+        error!(session = %session_id, "decart upstream connect timed out after 15s");
         std::io::Error::new(std::io::ErrorKind::TimedOut, "upstream connect timed out")
     })?
     .map_err(|e| {
-        error!(error = %e, "decart upstream connect failed");
+        error!(session = %session_id, error = %e, "decart upstream connect failed");
         e
     })?;
+    info!(session = %session_id, "run_proxy: decart upstream connected");
     let (mut up_write, mut up_read) = upstream.split();
 
     let (tx_up, mut rx_up) = mpsc::channel::<String>(256);
@@ -712,12 +731,14 @@ async fn run_proxy(
         }
     };
 
-    tokio::select! {
-        _ = client_to_up => {},
-        _ = upstream_to_client => {},
-        _ = client_writer => {},
-        _ = &mut up_writer => {},
-    }
+    let select_result = tokio::select! {
+        biased;
+        _ = client_to_up => "client_to_up",
+        _ = upstream_to_client => "upstream_to_client",
+        _ = client_writer => "client_writer",
+        _ = &mut up_writer => "up_writer",
+    };
+    info!(session = %session_id, "run_proxy: select! returned, branch={}", select_result);
 
     // Drain queued client-bound messages (e.g. a terminal billing error queued
     // right before teardown) so the client sees why the session ended instead

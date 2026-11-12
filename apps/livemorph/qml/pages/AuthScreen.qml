@@ -689,7 +689,12 @@ Item {
                       "<a href=\"" + Constants.urlPrivacy + "\" style=\"color:" + Colors.accent85 + ";text-decoration:none\">" + qsTr("Privacy Policy") + "</a>, " +
                       qsTr("and ") +
                       "<a href=\"" + Constants.urlAup + "\" style=\"color:" + Colors.accent85 + ";text-decoration:none\">" + qsTr("Acceptable Use Policy") + "</a>."
-                onLinkActivated: function(link) { Qt.openUrlExternally(link) }
+                onLinkActivated: function(link) {
+        // Only open https links (never file:// or registered-handler schemes).
+        const u = String(link)
+        if (u.startsWith("https://"))
+            Qt.openUrlExternally(u)
+    }
             }
 
             RowLayout {

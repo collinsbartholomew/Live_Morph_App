@@ -98,6 +98,18 @@ if(APPLE)
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/Info.plist")
 endif()
 
+# Release hardening (Linux/macOS ELF/Mach-O): PIE + full RELRO + stack
+# protector + fortify. Windows gets equivalent linker flags where supported.
+if(NOT WIN32)
+    target_compile_options(LiveMorph PRIVATE
+        $<$<CONFIG:Release,RelWithDebInfo>:-fstack-protector-strong;-D_FORTIFY_SOURCE=2;-fPIE>)
+    target_link_options(LiveMorph PRIVATE
+        $<$<CONFIG:Release,RelWithDebInfo>:-pie;-Wl,-z,relro,-z,now>)
+else()
+    target_link_options(LiveMorph PRIVATE
+        $<$<CONFIG:Release,RelWithDebInfo>:/DYNAMICBASE;/NXCOMPAT;/HIGHENTROPYVA>)
+endif()
+
 # Mark theme/constants as QML singletons (required for Colors/Theme/Constants)
 set_source_files_properties(
     qml/theme/Colors.qml

@@ -953,6 +953,7 @@ async fn delete_account(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpRe
             purge!(db.db_secondary.collection::<bson::Document>("oauth_results"));
             purge!(db.db_secondary.collection::<bson::Document>("support_tickets"));
             purge!(db.db_secondary.collection::<bson::Document>("creator_payouts"));
+            purge!(db.db_secondary.collection::<bson::Document>("background_selections"));
             let _ = db
                 .db_secondary
                 .collection::<bson::Document>("characters")
@@ -973,6 +974,7 @@ async fn delete_account(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpRe
             purge!(db.db.collection::<bson::Document>("oauth_results"));
             purge!(db.db.collection::<bson::Document>("support_tickets"));
             purge!(db.db.collection::<bson::Document>("creator_payouts"));
+    purge!(db.db.collection::<bson::Document>("background_selections"));
             let _ = db.characters().delete_many(doc! { "user_id": uid }).await;
         }
     }
@@ -1141,7 +1143,16 @@ async fn oauth_google_callback(
     db: web::Data<Db>,
     cfg: web::Data<Arc<Config>>,
     query: web::Query<OAuthCallbackQuery>,
+    req: HttpRequest,
 ) -> AppResult<HttpResponse> {
+    // Throttle the unauthenticated callback (each call costs DB queries on both
+    // product stores and, with a valid state, a Google token exchange + writes).
+    {
+        let ip = crate::auth::client_ip(&req);
+        if !crate::auth::check_rate_limit(&ip, "oauth-callback", 30, 60) {
+            return Err(AppError::RateLimited("too many oauth callbacks".into()));
+        }
+    }
     if let Some(err) = &query.error {
         // Only redirect back to the app for a state we actually issued (checked
         // in both product stores, not consumed) — otherwise reject, so the

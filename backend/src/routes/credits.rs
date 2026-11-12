@@ -176,21 +176,11 @@ async fn admin_add(
     let expected = cfg.admin_secret.as_deref().unwrap_or("");
     let provided = body.admin_secret.as_deref().unwrap_or("");
     let authed = !expected.is_empty() && subtle::ConstantTimeEq::ct_eq(expected.as_bytes(), provided.as_bytes()).into();
+    // Admin secret is ALWAYS required for credit mutations — the
+    // allow_credits_adjust dev flag must never open an admin mint path.
     if !authed {
-        // Admin secret is ALWAYS required for credit grants — the
-        // allow_credits_adjust flag must never open this in production.
-        if !cfg.allow_credits_adjust || cfg.is_production() {
-            return Err(AppError::Forbidden(
-                "admin secret required for credit mutations".into(),
-            ));
-        }
-    }
-    // Granting credits to an ARBITRARY user by email is an admin operation and
-    // must ALWAYS require the admin secret — the allow_credits_adjust dev flag
-    // only ever unlocks the caller's own credit-key redemption path.
-    if body.user_email.is_some() && !authed {
         return Err(AppError::Forbidden(
-            "admin secret required for credit grants to another user".into(),
+            "admin secret required for credit mutations".into(),
         ));
     }
 
