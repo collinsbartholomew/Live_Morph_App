@@ -1,0 +1,11 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/">
+        <file>assets/livemorph-icon.png</file>
+        <file>assets/starters/crimson-knight.webp</file>
+        <file>assets/starters/vampire-lord.webp</file>
+        <file>fonts/MapleMono-Regular.ttf</file>
+        <file>fonts/MapleMono-Light.ttf</file>
+        <file>fonts/MapleMono-Bold.ttf</file>
+    </qresource>
+</RCC>

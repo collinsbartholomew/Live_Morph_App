@@ -1,0 +1,107 @@
+#pragma once
+
+#include <QObject>
+#include <QString>
+#include <QStringList>
+#include <QUrl>
+#include <QElapsedTimer>
+#include <QTimer>
+#include <QVariantList>
+#include <QVariantMap>
+#include <QImage>
+
+class ConfigManager;
+class BackendClient;
+class CameraManager;
+class SessionManager;
+class MorphRecorder;
+
+class RecordingManager : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool isRecording READ isRecording NOTIFY isRecordingChanged)
+    Q_PROPERTY(qint64 elapsedMs READ elapsedMs NOTIFY elapsedChanged)
+    Q_PROPERTY(QString outputDirectory READ outputDirectory WRITE setOutputDirectory NOTIFY outputDirectoryChanged)
+    Q_PROPERTY(QString lastRecordingPath READ lastRecordingPath NOTIFY lastRecordingChanged)
+    Q_PROPERTY(QVariantList recentRecordings READ recentRecordings NOTIFY recentRecordingsChanged)
+    Q_PROPERTY(QVariantList orphanRecordings READ orphanRecordings NOTIFY orphanRecordingsChanged)
+    Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    Q_PROPERTY(bool hasOrphans READ hasOrphans NOTIFY orphanRecordingsChanged)
+    Q_PROPERTY(bool transitioning READ transitioning NOTIFY transitioningChanged)
+
+public:
+    explicit RecordingManager(ConfigManager *config, BackendClient *backend,
+                            CameraManager *camera = nullptr, SessionManager *session = nullptr,
+                            QObject *parent = nullptr);
+    ~RecordingManager() override; // stop+release the morph pipeline if destroyed mid-recording
+
+    bool isRecording() const { return m_recording; }
+    qint64 elapsedMs() const;
+    QString outputDirectory() const { return m_outputDir; }
+    void setOutputDirectory(const QString &dir);
+    QString lastRecordingPath() const { return m_lastPath; }
+    QVariantList recentRecordings() const { return m_recent; }
+    QVariantList orphanRecordings() const { return m_orphans; }
+    QString lastError() const { return m_lastError; }
+    bool hasOrphans() const { return !m_orphans.isEmpty(); }
+    bool transitioning() const { return m_transitioning; }
+
+public slots:
+    bool startRecording(const QString &characterId = {});
+    void stopRecording(const QString &reason = QStringLiteral("user"));
+    void finalizeRecording();
+    void revealLastRecording();
+    void revealPath(const QString &path);
+    void pickOutputDirectory(const QString &path); // set from QML FileDialog
+    // Accepts a QML url string (file://…) and decodes it in C++ (no JS parsing).
+    Q_INVOKABLE void pickOutputDirectoryFromUrl(const QString &url);
+    void scanOrphans();
+    void recoverOrphan(const QString &path);
+    void dismissOrphan(const QString &path);
+    void listRecent();
+    void clearError();
+
+signals:
+    void isRecordingChanged();
+    void elapsedChanged();
+    void outputDirectoryChanged();
+    void lastRecordingChanged();
+    void recentRecordingsChanged();
+    void orphanRecordingsChanged();
+    void transitioningChanged();
+    void lastErrorChanged();
+    void recordingStarted(const QString &path);
+    void recordingStopped(const QString &path);
+    void recordingFinalized(const QString &path);
+    void recordingSaved(const QString &path);   // toast trigger
+    void recordingFailed(const QString &message);
+
+private slots:
+    void onMorphFrame(const QImage &img);
+
+private:
+    void setTransitioning(bool v);
+    void setError(const QString &e);
+    bool stopCapture();
+    bool promoteTempFile();
+    ConfigManager *m_config = nullptr;
+    BackendClient *m_backend = nullptr;
+    CameraManager *m_camera = nullptr;
+    SessionManager *m_session = nullptr;
+    MorphRecorder *m_morphRec = nullptr;
+    bool m_recording = false;
+    bool m_transitioning = false;
+    bool m_cameraFinalizePending = false; // camera stop is async (QMediaRecorder)
+    enum class CaptureSource { None, Morph, Camera };
+    CaptureSource m_captureSource = CaptureSource::None;
+    QString m_outputDir;
+    QString m_lastPath;
+    QString m_currentPath;
+    QString m_tempPath; // atomic write: record to .part, rename on success
+    QString m_lastError;
+    QElapsedTimer m_timer;
+    QTimer *m_tickTimer = nullptr;
+    QTimer *m_maxDurationTimer = nullptr;
+    QVariantList m_recent;
+    QVariantList m_orphans;
+};

@@ -1,0 +1,55 @@
+# Local / staging stack: MongoDB + LiveMorph API
+services:
+  mongo:
+    image: mongo:7
+    # Bind localhost only; set credentials for non-dev:
+    # environment:
+    #   MONGO_INITDB_ROOT_USERNAME: livemorph
+    #   MONGO_INITDB_ROOT_PASSWORD: change-me
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "127.0.0.1:27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      # Local dev stack only — publish on loopback so the API is never exposed
+      # off-host (the container itself still listens on HOST=0.0.0.0 inside).
+      - "127.0.0.1:3874:3874"
+    env_file:
+      # Optional: on a fresh clone without backend/.env the stack still boots
+      # on the `environment:` defaults below (Compose >= 2.24 long syntax).
+      - path: ./backend/.env
+        required: false
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: livemorph
+      SECONDARY_PRODUCT_ID: ${SECONDARY_PRODUCT_ID:-secondary}
+      MONGODB_DB_SECONDARY: ${MONGODB_DB_SECONDARY:-secondary}
+      HOST: 0.0.0.0
+      PORT: 3874
+      # The bundled local mongo has no TLS, and Config::validate() rejects a
+      # non-TLS mongodb:// URI in production — so this local stack must run
+      # in development mode. For a real staging/prod deploy, point
+      # MONGODB_URI at a TLS-enabled Mongo (mongodb+srv:// or ?tls=true) and
+      # set RUST_ENV=production here.
+      RUST_ENV: development
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3874/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo_data:

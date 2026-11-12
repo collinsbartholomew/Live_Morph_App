@@ -1,0 +1,14 @@
+# Keep the build context (and thus the image) free of secrets, build output,
+# and local state. The Dockerfile only needs Cargo.toml/Cargo.lock + src.
+target/
+.env
+.env.*
+!.env.example
+!.env.production.template
+.test.env
+tests/
+scripts/
+docs/
+*.log
+*.md
+rust-toolchain.toml
