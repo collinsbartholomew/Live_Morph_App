@@ -198,6 +198,7 @@ public:
     /// and NOT in the translation catalog, so the stable `error` code is mapped
     /// to tr() strings; the raw message is only a fallback for unknown codes.
     static QString translatedServerError(int status, const QByteArray &body);
+	QString friendlyTransportError(const QString &raw);
 
 private:
     QNetworkRequest makeRequest(const QString &path) const;

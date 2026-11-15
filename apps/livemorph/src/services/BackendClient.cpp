@@ -9,6 +9,9 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QNetworkRequest>
+#include <QCryptographicHash>
+#include <QRegularExpression>
+#include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
@@ -139,6 +142,22 @@ QString BackendClient::translatedServerError(int status, const QByteArray& body)
 	return tr("Request failed — HTTP %1").arg(status);
 }
 
+// Map raw QNetworkReply transport errors to user-friendly text — never show
+// the socket-level string ("Connection refused") or an API path to the user.
+QString BackendClient::friendlyTransportError(const QString &raw) {
+	const QString l = raw.toLower();
+	if (l.contains(QStringLiteral("connection refused")) || l.contains(QStringLiteral("host not found"))
+	     || l.contains(QStringLiteral("network is unreachable")) || l.contains(QStringLiteral("network unreachable")))
+		return tr("Cannot reach the backend — is it running?");
+	if (l.contains(QStringLiteral("timed out")) || l.contains(QStringLiteral("timeout")))
+		return tr("The backend did not respond in time");
+	if (l.contains(QStringLiteral("ssl")) || l.contains(QStringLiteral("tls")))
+		return tr("Secure connection to the backend failed");
+	if (l.contains(QStringLiteral("reset")))
+		return tr("The backend dropped the connection");
+	return tr("Network error — please check your connection");
+}
+
 void BackendClient::setAccessToken(const QString& token) {
 	m_accessToken = token;
 	// Bump on every call with a non-empty token: a refresh that returns the
@@ -200,7 +219,7 @@ void BackendClient::getAuth(const QString& path, const std::function<void(const 
 			if (m_reachable) {
 				setReachable(false);
 			}
-			emit requestFailed(path, reply->errorString());
+			emit requestFailed(path, friendlyTransportError(reply->errorString()));
 			return;
 		}
 		if (status == 401 && !retriedAuth) {
@@ -265,7 +284,7 @@ void BackendClient::postAuth(const QString& path, const QJsonObject& body,
 			if (m_reachable) {
 				setReachable(false);
 			}
-			emit requestFailed(path, reply->errorString());
+			emit requestFailed(path, friendlyTransportError(reply->errorString()));
 			return;
 		}
 		if (status == 401 && !retriedAuth) {
@@ -465,7 +484,7 @@ void BackendClient::putAuth(const QString& path, const QJsonObject& body,
 			if (m_reachable) {
 				setReachable(false);
 			}
-			emit requestFailed(path, reply->errorString());
+			emit requestFailed(path, friendlyTransportError(reply->errorString()));
 			return;
 		}
 		if (status == 401 && !retriedAuth) {
@@ -521,7 +540,7 @@ void BackendClient::delAuth(const QString& path, const std::function<void(const 
 			if (m_reachable) {
 				setReachable(false);
 			}
-			emit requestFailed(path, reply->errorString());
+			emit requestFailed(path, friendlyTransportError(reply->errorString()));
 			return;
 		}
 		if (status == 401 && !retriedAuth) {
@@ -991,15 +1010,25 @@ void BackendClient::downloadUpdate() {
 			return;
 		}
 		constexpr qint64 kMaxUpdateBytes = 512LL * 1024 * 1024; // hard cap: 512 MiB
+		// Manifest sha256 — the client refuses to install an update whose digest
+		// doesn't match. Absent = warn loudly (operator hasn't set APP_UPDATE_SHA256).
+		const QString expectedSha = o.value(QStringLiteral("sha256")).toString().trimmed().toLower();
 		const QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
-		// Sanitize the filename: fileName() can keep backslashes (Windows path
-		// traversal) — reject those and any ".." segment, keep writes inside dir.
-		QString fname = qurl.fileName();
-		if (fname.isEmpty() || fname.contains(QLatin1Char('\\')) || fname.contains(QLatin1String("..")))
-			fname = QStringLiteral("livemorph-update.tmp");
-		m_updateDownloadedPath = dir + QStringLiteral("/") + fname;
-		QFile::remove(m_updateDownloadedPath);
-		const QString outPath = m_updateDownloadedPath; // capture: a newer attempt may overwrite the member
+		// Sanitize the filename: basename only, allowlist charset — never let the
+		// server steer a path, and never remove a pre-existing file up front.
+		QString fname = QUrl::fromPercentEncoding(qurl.fileName().toUtf8());
+		fname = QFileInfo(fname).fileName();
+		static const QRegularExpression fnameRe(QStringLiteral("^[A-Za-z0-9._-]+$"));
+		if (fname.isEmpty() || !fnameRe.match(fname).hasMatch())
+			fname = QStringLiteral("livemorph-update.bin");
+		const QString finalPath = dir + QStringLiteral("/") + fname;
+		// Stage into a .part file; rename over the final name ONLY after the
+		// digest verifies — a kill mid-download never leaves a truncated file
+		// at the final name, and a hostile manifest can't clobber an existing one.
+		const QString partPath = finalPath + QStringLiteral(".part");
+		QFile::remove(partPath);
+		m_updateDownloadedPath = finalPath;
+		const QString outPath = partPath;
 
 		m_updateDownloading = true;
 		m_updateProgress = 0;
@@ -1012,23 +1041,25 @@ void BackendClient::downloadUpdate() {
 		// so never auto-follow on the update download.
 		dlReq.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
 		m_downloadReply = m_nam.get(dlReq);
-		QFile *f = new QFile(outPath, this);
+		QSaveFile *f = new QSaveFile(outPath, this);
 		if (!f->open(QIODevice::WriteOnly)) {
 			emit updateDownloadFailed(tr("Could not open destination file"));
 			cancelUpdateDownload();
 			f->deleteLater();
 			return;
 		}
-		// The downloaded update binary must not be world-readable.
-		f->setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+		// Not executable until the digest verifies and the rename lands.
+		f->setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
 
 		QNetworkReply *reply = m_downloadReply;
 		// Enforce the byte cap on the raw stream too — downloadProgress can
-		// lag readyRead on fast local mirrors.
+		// lag readyRead on fast local mirrors. Hash as we go for the digest check.
 		auto *received = new qint64(0);
-		connect(reply, &QNetworkReply::readyRead, this, [reply, f, received, outPath, this]() {
+		auto *hasher = new QCryptographicHash(QCryptographicHash::Sha256);
+		connect(reply, &QNetworkReply::readyRead, this, [reply, f, received, hasher, outPath, this]() {
 			const QByteArray chunk = reply->readAll();
 			*received += chunk.size();
+			hasher->addData(chunk);
 			if (*received > kMaxUpdateBytes) {
 				emit updateDownloadFailed(tr("Update file exceeds the 512 MiB cap — aborted"));
 				cancelUpdateDownload();
@@ -1054,11 +1085,11 @@ void BackendClient::downloadUpdate() {
 				}
 			}
 		});
-		connect(reply, &QNetworkReply::finished, this, [this, f, reply, outPath, received]() {
-			// One QFile per attempt leaked until app exit — close AND free it
+		connect(reply, &QNetworkReply::finished, this, [this, f, reply, outPath, received, hasher, expectedSha, finalPath]() {
+			// One QSaveFile per attempt leaked until app exit — close AND free it
 			// on every exit path. Capture `reply`: cancelUpdateDownload() nulls
 			// the member, so reading m_downloadReply here could deref null.
-			f->close();
+			f->cancelWriting(); // QSaveFile::close() is private; discard the .part
 			f->deleteLater();
 			delete received;
 			const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -1066,15 +1097,47 @@ void BackendClient::downloadUpdate() {
 				emit updateDownloadFailed(reply->errorString());
 				cancelUpdateDownload();
 				QFile::remove(outPath);
+				delete hasher;
 				return;
 			}
 			if (status >= 300) {
 				emit updateDownloadFailed(tr("HTTP %1").arg(status));
 				cancelUpdateDownload();
 				QFile::remove(outPath);
+				delete hasher;
 				return;
 			}
-			emit updateDownloaded(outPath);
+			// Integrity gate: verify the sha256 from the manifest before the
+			// rename. A missing digest is a config bug — warn, but don't install
+			// an unverifiable binary silently.
+			const QString got = QString::fromLatin1(hasher->result().toHex());
+			delete hasher;
+			if (expectedSha.isEmpty()) {
+				qWarning() << "BackendClient: update manifest has no sha256 — installing unverified (set APP_UPDATE_SHA256 on the backend)";
+			} else if (got != expectedSha) {
+				emit updateDownloadFailed(tr("Update checksum mismatch — download rejected"));
+				cancelUpdateDownload();
+				QFile::remove(outPath);
+				return;
+			}
+			if (!f->commit()) {
+				emit updateDownloadFailed(tr("Could not finalize update file"));
+				cancelUpdateDownload();
+				QFile::remove(outPath);
+				return;
+			}
+			// Digest verified (or manifest had none) — promote .part to the final
+			// name and only now mark it executable.
+			if (QFile::exists(finalPath))
+				QFile::remove(finalPath);
+			if (!QFile::rename(outPath, finalPath)) {
+				emit updateDownloadFailed(tr("Could not move update into place"));
+				cancelUpdateDownload();
+				return;
+			}
+			QFile(finalPath).setPermissions(
+				QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+			emit updateDownloaded(finalPath);
 			cancelUpdateDownload();
 		});
 	});

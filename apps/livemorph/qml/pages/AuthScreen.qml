@@ -667,6 +667,7 @@ Item {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                                 text: Auth.errorMessage
+                                textFormat: Text.PlainText // server-derived — never rich text
                                 color: Colors.statusError
                                 font.pixelSize: 11
                             }

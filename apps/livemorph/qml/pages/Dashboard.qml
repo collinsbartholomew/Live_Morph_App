@@ -371,8 +371,11 @@ Item {
     }
 
     function checkWhatsNew() {
-        var ver = Backend.appVersion || "1.0.0"
-        if (Backend.appVersion.length && Config.whatsNewSeenVersion !== ver) {
+        // Compare AND save the SAME key (the client build version) — mixing
+        // Backend.appVersion (server-advertised) with App.appVersion (build)
+        // made the keys never match, so the modal re-opened on every launch.
+        var ver = App.appVersion || Constants.appVersion
+        if (ver.length && Config.whatsNewSeenVersion !== ver) {
             // Electron marks the version seen on OPEN — scrim-dismiss must
             // not re-show the modal on every launch.
             Config.whatsNewSeenVersion = ver

@@ -119,10 +119,24 @@ async fn password_reset_request(
         return Err(AppError::RateLimited(format!(
             "too many password reset attempts — try again in {} seconds",
             cfg.auth_lockout_secs.max(1)
-        )));
+        ), Some(cfg.auth_lockout_secs.max(1) as u64)));
     }
     validate_email(&body.email)?;
     let email = body.email.trim().to_lowercase();
+    // Per-email cap (in addition to per-IP): without it, an attacker rotating
+    // IPs can still mail-bomb one victim. Mirrors the OTP per-email window.
+    {
+        let since = Utc::now() - Duration::seconds(cfg.auth_lockout_secs.max(1) as i64);
+        let recent = reset_token_store(&db, product)
+            .count_documents(doc! { "email": &email, "created_at": { "$gte": bson::DateTime::from_chrono(since) } })
+            .await?;
+        if recent >= cfg.auth_max_attempts as u64 {
+            return Err(AppError::RateLimited(format!(
+                "too many password reset attempts — try again in {} seconds",
+                cfg.auth_lockout_secs.max(1)
+            ), Some(cfg.auth_lockout_secs.max(1) as u64)));
+        }
+    }
     // Don't leak account existence.
     let exists = user_store(&db, product)
         .find_one(doc! { "email": &email })
@@ -143,6 +157,7 @@ async fn password_reset_request(
         "product": product.as_str(),
         "token_hash": &th,
         "consumed": false,
+        "created_at": bson::DateTime::from_chrono(Utc::now()),
         "expires_at": Utc::now() + Duration::minutes(30),
     })
     .await?;
@@ -153,6 +168,14 @@ async fn password_reset_request(
     match crate::services::mail::send_password_reset_email(&cfg, &email, &token).await {
         Ok(()) => {}
         Err(e) => {
+            // In production with SMTP configured, a failed reset mail must NOT
+            // report success — the user would be locked out with no signal.
+            // Mirror the OTP branch: hard-fail there. In dev (no SMTP) the mail
+            // is skipped by design, so keep the 200.
+            if cfg.is_production() && cfg.smtp_host.is_some() {
+                tracing::error!(error = %e, "password reset email delivery failed in production");
+                return Err(AppError::Internal("email delivery failed".into()));
+            }
             tracing::warn!(error = %e, "password reset email delivery failed");
         }
     }
@@ -174,8 +197,7 @@ async fn password_reset_complete(
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "password-reset-complete", 30, 60) {
         return Err(AppError::RateLimited(
-            "too many attempts — try again in 60 seconds".into(),
-        ));
+            "too many attempts — try again in 60 seconds".into(), None));
     }
     let token = body.token.trim().to_string();
     if token.len() < 16 {
@@ -212,7 +234,9 @@ async fn password_reset_complete(
         .find_one(doc! { "email": &email })
         .await?
         .ok_or_else(|| AppError::NotFound("user".into()))?;
-    let new_hash = hash_password(&body.password)?;
+    // bcrypt-12 is ~250ms CPU — run it on a blocking thread, never the async worker.
+    let pw = body.password.clone();
+    let new_hash = web::block(move || hash_password(&pw)).await.map_err(|e| AppError::Internal(format!("blocking: {e}")))??;
     users
         .update_one(
             doc! { "_id": &user.id },
@@ -315,7 +339,7 @@ async fn request_otp(
 
     // IP rate limits: OTP issuance and verification are the brute-force surface
     if !crate::auth::check_rate_limit(&ip, "otp-request", 10, 60) {
-        return Err(AppError::RateLimited("too many OTP requests".into()));
+        return Err(AppError::RateLimited("too many OTP requests".into(), None));
     }
 
     // Rate limit: count recent challenges
@@ -331,7 +355,7 @@ async fn request_otp(
         return Err(AppError::RateLimited(format!(
             "too many attempts — wait {}s",
             cfg.auth_lockout_secs
-        )));
+        ), None));
     }
 
     // Invalidate any previous unconsumed challenges so only the latest code works
@@ -394,7 +418,7 @@ async fn verify_otp_login(
     let product = ProductId::from_request(&req);
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "otp-verify", 20, 60) {
-        return Err(AppError::RateLimited("too many OTP attempts".into()));
+        return Err(AppError::RateLimited("too many OTP attempts".into(), None));
     }
     validate_email(&body.email)?;
     let email = body.email.trim().to_lowercase();
@@ -432,12 +456,12 @@ async fn verify_otp_login(
             )
             .await?;
         if bumped.matched_count == 0 {
-            return Err(AppError::RateLimited("too many invalid attempts".into()));
+            return Err(AppError::RateLimited("too many invalid attempts".into(), None));
         }
         return Err(AppError::BadRequest("invalid code".into()));
     }
     if challenge.attempts >= challenge.max_attempts {
-        return Err(AppError::RateLimited("too many invalid attempts".into()));
+        return Err(AppError::RateLimited("too many invalid attempts".into(), None));
     }
 
     // Atomic consume — reject if already used (parallel verify race)
@@ -505,7 +529,7 @@ async fn register_password(
         return Err(AppError::RateLimited(format!(
             "too many registration attempts — try again in {} seconds",
             cfg.auth_lockout_secs.max(1)
-        )));
+        ), Some(cfg.auth_lockout_secs.max(1) as u64)));
     }
     validate_email(&body.email)?;
     // Byte range matches the bcrypt 72-byte input cap (see password_reset).
@@ -534,7 +558,9 @@ async fn register_password(
         cfg.signup_bonus_credits,
     );
     user.product = product.as_str().into();
-    user.password_hash = Some(hash_password(&body.password)?);
+    let pw = body.password.clone();
+    let ph = web::block(move || hash_password(&pw)).await.map_err(|e| AppError::Internal(format!("blocking: {e}")))??;
+    user.password_hash = Some(ph);
     if let Some(ref did) = body.device_id {
         let did = did.trim();
         if !did.is_empty() {
@@ -598,7 +624,7 @@ async fn login_password(
         return Err(AppError::RateLimited(format!(
             "too many login attempts — try again in {} seconds",
             cfg.auth_lockout_secs.max(1)
-        )));
+        ), Some(cfg.auth_lockout_secs.max(1) as u64)));
     }
     validate_email(&body.email)?;
     let email = body.email.trim().to_lowercase();
@@ -623,20 +649,29 @@ async fn login_password(
         ),
         None => (DUMMY_HASH.as_str(), false, false),
     };
-    let password_ok = verify_password(&body.password, hash)?; // always pay the cost
+    let pw = body.password.clone();
+    let hash_owned = hash.to_string();
+    let password_ok = web::block(move || verify_password(&pw, &hash_owned)).await.map_err(|e| AppError::Internal(format!("blocking: {e}")))??; // always pay the cost
     if !password_ok || !exists || !active || user.as_ref().and_then(|u| u.password_hash.as_deref()).is_none() {
         return Err(AppError::Unauthorized("invalid credentials".into()));
     }
     let user = user.unwrap(); // safe: exists && active checked above
     let mut set_doc = doc! { "last_login_at": Utc::now() };
+    // device_id is sticky (anti-abuse binding): only set it when the account has
+    // none — a stolen token must not be able to rebind the device.
     if let Some(ref did) = body.device_id {
         let did = did.trim();
         if !did.is_empty() {
             set_doc.insert("device_id", did);
         }
     }
+    let set_filter = if set_doc.contains_key("device_id") {
+        doc! { "_id": &user.id, "device_id": { "$exists": false } }
+    } else {
+        doc! { "_id": &user.id }
+    };
     user_store(&db, product)
-        .update_one(doc! { "_id": &user.id }, doc! { "$set": set_doc })
+        .update_one(set_filter, doc! { "$set": set_doc })
         .await?;
     let tokens = issue_pair_for(&cfg, &user.id, &user.email,
         crate::product::ProductId::from_request(&req).as_str(),
@@ -665,7 +700,7 @@ async fn refresh(
     {
         let ip = crate::auth::client_ip(&req);
         if !crate::auth::check_rate_limit(&ip, "auth-refresh", 30, 60) {
-            return Err(AppError::RateLimited("too many refresh attempts".into()));
+            return Err(AppError::RateLimited("too many refresh attempts".into(), None));
         }
     }
 
@@ -729,8 +764,26 @@ async fn refresh(
         let _ = db.refresh_tokens_secondary().delete_many(doc! { "user_id": &user.id }).await;
         return Err(AppError::Unauthorized("token revoked".into()));
     }
+    // Bind aud to the product: the token must have been issued for the product
+    // the REQUEST claims (X-Frontend-Id) AND for the store it was just claimed
+    // from. Legacy aud-less tokens are allowed through but get the aud derived
+    // from the store, so a secondary token can never mint a livemorph aud.
+    let expected_aud = if is_secondary {
+        crate::product::secondary_id().to_string()
+    } else {
+        "livemorph".to_string()
+    };
+    let req_product = ProductId::from_request(&req);
+    if req_product.as_str() != expected_aud {
+        return Err(AppError::Unauthorized("token product mismatch".into()));
+    }
+    if let Some(a) = &claims.aud {
+        if a != &expected_aud {
+            return Err(AppError::Unauthorized("token product mismatch".into()));
+        }
+    }
     let tokens = issue_pair_for(&cfg, &user.id, &user.email,
-        claims.aud.as_deref().unwrap_or("livemorph"),
+        &expected_aud,
         user.token_version)?;
     if is_secondary {
         // token already claimed (deleted) above; store rotated token in secondary collection
@@ -790,6 +843,19 @@ async fn logout(
         return Err(AppError::BadRequest("invalid refresh token".into()));
     }
     let th = hash_token(&body.refresh_token);
+    // Look up the token's owner BEFORE deleting so logout can also bump
+    // token_version — otherwise the access token stays valid until expiry.
+    let mut owner: Option<(String, ProductId)> = None;
+    for (store, prod) in [
+        (db.refresh_tokens(), ProductId::LiveMorph),
+        (db.refresh_tokens_secondary(), ProductId::Secondary),
+    ] {
+        if let Ok(Some(doc)) = store.find_one(doc! { "token_hash": &th }).await {
+            if let Ok(uid) = doc.get_str("user_id") {
+                owner = Some((uid.to_string(), prod));
+            }
+        }
+    }
     // Try both token stores — the token may belong to either product
     let deleted_lm = db.refresh_tokens()
         .delete_one(doc! { "token_hash": &th })
@@ -801,6 +867,11 @@ async fn logout(
         .deleted_count > 0;
     if !deleted_lm && !deleted_secondary {
         // Token not found in either store — still return OK (idempotent)
+    }
+    if let Some((uid, prod)) = owner {
+        let _ = user_store(&db, prod)
+            .update_one(doc! { "_id": &uid }, doc! { "$inc": { "token_version": 1 } })
+            .await;
     }
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
@@ -1094,7 +1165,7 @@ async fn oauth_google_start(
     {
         let ip = crate::auth::client_ip(&req);
         if !crate::auth::check_rate_limit(&ip, "oauth-start", 20, 60) {
-            return Err(AppError::RateLimited("too many oauth starts".into()));
+            return Err(AppError::RateLimited("too many oauth starts".into(), None));
         }
     }
 
@@ -1150,7 +1221,7 @@ async fn oauth_google_callback(
     {
         let ip = crate::auth::client_ip(&req);
         if !crate::auth::check_rate_limit(&ip, "oauth-callback", 30, 60) {
-            return Err(AppError::RateLimited("too many oauth callbacks".into()));
+            return Err(AppError::RateLimited("too many oauth callbacks".into(), None));
         }
     }
     if let Some(err) = &query.error {
@@ -1333,24 +1404,26 @@ async fn oauth_google_poll(
     {
         let ip = crate::auth::client_ip(&req);
         if !crate::auth::check_rate_limit(&ip, "oauth-poll", 60, 60) {
-            return Err(AppError::RateLimited("too many oauth-poll attempts".into()));
+            return Err(AppError::RateLimited("too many oauth-poll attempts".into(), None));
         }
     }
 
     let state = query
         .get("state")
         .ok_or_else(|| AppError::BadRequest("missing state".into()))?;
-    let product = ProductId::from_request(&req);
-    let results = oauth_store(&db, product, "oauth_results");
-    if let Some(doc) = results
-        .find_one_and_delete(doc! { "_id": state.as_str() })
-        .await?
-    {
-        let ticket = doc.get_str("ticket").unwrap_or("");
-        Ok(HttpResponse::Ok().json(serde_json::json!({ "ticket": ticket })))
-    } else {
-        Ok(HttpResponse::Ok().json(serde_json::json!({ "ticket": null })))
+    // Poll BOTH product stores like the callback does — a client that omits
+    // X-Frontend-Id on the poll must not get stuck with ticket:null forever.
+    for prod in [ProductId::LiveMorph, ProductId::Secondary] {
+        let results = oauth_store(&db, prod, "oauth_results");
+        if let Some(doc) = results
+            .find_one_and_delete(doc! { "_id": state.as_str() })
+            .await?
+        {
+            let ticket = doc.get_str("ticket").unwrap_or("");
+            return Ok(HttpResponse::Ok().json(serde_json::json!({ "ticket": ticket })));
+        }
     }
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "ticket": null })))
 }
 
 #[derive(Deserialize)]
@@ -1373,7 +1446,7 @@ async fn oauth_google_exchange(
     {
         let ip = crate::auth::client_ip(&req);
         if !crate::auth::check_rate_limit(&ip, "oauth-exchange", 20, 60) {
-            return Err(AppError::RateLimited("too many oauth-exchange attempts".into()));
+            return Err(AppError::RateLimited("too many oauth-exchange attempts".into(), None));
         }
     }
 

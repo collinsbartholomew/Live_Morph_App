@@ -8,7 +8,7 @@
 # =============================================================================
 set -uo pipefail
 
-BASE="http://127.0.0.1:3874"
+BASE="${BASE:-http://127.0.0.1:3874}"
 P2_ID="${P2_ID:-secondary}"
 # 30s: register/login pay a bcrypt cost-12 hash; on a loaded dev box the debug
 # backend build can take several seconds per hash, so 10s flakes under load.
@@ -133,7 +133,7 @@ section "3. TOKEN REFRESH"
 # ═══════════════════════════════════════════════════════════════
 if [ -n "$P2_REFRESH" ]; then
     P2_REFRESH_R=$(curl -sf $TIMEOUT -X POST "$BASE/api/v1/auth/refresh" \
-        -H "Content-Type: application/json" \
+        "${P2_HDR[@]}" -H "Content-Type: application/json" \
         -d "{\"refresh_token\":\"$P2_REFRESH\"}" 2>&1)
     check "POST /api/v1/auth/refresh (P2)" '"access_token"' "$P2_REFRESH_R"
     P2_TOKEN=$(echo "$P2_REFRESH_R" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token',''))" 2>/dev/null || echo "$P2_TOKEN")

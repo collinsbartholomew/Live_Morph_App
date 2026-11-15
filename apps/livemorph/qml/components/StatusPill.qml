@@ -65,6 +65,7 @@ Rectangle {
         }
         Text {
             text: root.effectiveText
+            textFormat: Text.PlainText // status text may carry server-derived error prose
             color: root.isError ? Colors.statusError
                  : root.isActive ? Colors.statusSuccess
                  : root.isPending ? Colors.statusWarning

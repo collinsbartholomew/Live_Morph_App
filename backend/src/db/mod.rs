@@ -137,22 +137,29 @@ impl Db {
             tracing::warn!(error = %e, "otps email lookup index create failed (non-fatal)");
         }
 
-        // Credit-key redemption is looked up by key — unique so a key can
-        // never be inserted (or claimed) twice, and indexed for the lookup.
-        let ck_key = IndexModel::builder()
-            .keys(doc! { "key": 1 })
-            .options(IndexOptions::builder().unique(true).build())
-            .build();
-        self.credit_keys().create_index(ck_key).await?;
-        // Secondary credit-key unique index must fail loudly like the primary
-        // above: a silent miss here would let a key row be duplicated and a key
-        // redeemed twice.
-        self.credit_keys_secondary().create_index(
-            IndexModel::builder()
-                .keys(doc! { "key": 1 })
-                .options(IndexOptions::builder().unique(true).build())
-                .build(),
-        ).await?;
+        // Credit-key redemption is looked up by key_hash (keys are stored hashed
+        // at rest since the key_hash change) — unique so a key can never be
+        // inserted (or claimed) twice, and indexed for the lookup.
+        // Sparse: legacy rows created before key-hashing have no key_hash field
+        // (null) — a non-sparse unique index would fail to build on them (E11000
+        // dup null). Sparse skips those rows; they're inert because redemption
+        // now looks up by key_hash.
+        // Drop-then-create: Mongo refuses to change options on an existing index
+        // name (IndexKeySpecsConflict), so drop any prior key_hash_1/key_1 first.
+        for coll in [self.credit_keys(), self.credit_keys_secondary()] {
+            for name in ["key_hash_1", "key_1"] {
+                if let Err(e) = coll.drop_index(name).await {
+                    if !e.to_string().contains("IndexNotFound") {
+                        tracing::warn!(error = %e, index = name, "failed to drop legacy credit_keys index");
+                    }
+                }
+            }
+            let ck_key = IndexModel::builder()
+                .keys(doc! { "key_hash": 1 })
+                .options(IndexOptions::builder().unique(true).sparse(true).build())
+                .build();
+            coll.create_index(ck_key).await?;
+        }
 
         // Access-key lookups by owner (keys/status, claim binding).
         let ak_user = IndexModel::builder().keys(doc! { "user_id": 1 }).build();
@@ -224,6 +231,21 @@ impl Db {
         {
             tracing::warn!(error = %e, "payment_orders user lookup index create failed (non-fatal)");
         }
+
+        // Sweeper index: sweep_pending_orders filters on (status, created_at) —
+        // without this it collscan's every 60s tick.
+        let pay_status = IndexModel::builder()
+            .keys(doc! { "status": 1, "created_at": -1 })
+            .build();
+        if let Err(e) = self
+            .db
+            .collection::<mongodb::bson::Document>("payment_orders")
+            .create_index(pay_status.clone())
+            .await
+        {
+            tracing::warn!(error = %e, "payment_orders status index create failed (non-fatal)");
+        }
+        let _ = self.payment_orders_secondary().create_index(pay_status).await;
 
         // User characters: compound index for user queries
         let uc_user = IndexModel::builder()
@@ -574,6 +596,14 @@ impl Db {
         let _ = self
             .db
             .collection::<mongodb::bson::Document>("admin_directives")
+            .create_index(dir_idx.clone())
+            .await;
+        // Mirror on the secondary product DB — public.rs polls
+        // db_secondary.admin_directives for secondary clients, and without the
+        // index every poll is a collscan.
+        let _ = self
+            .db_secondary
+            .collection::<mongodb::bson::Document>("admin_directives")
             .create_index(dir_idx)
             .await;
         let dir_ttl = IndexModel::builder()
@@ -586,6 +616,11 @@ impl Db {
             .build();
         let _ = self
             .db
+            .collection::<mongodb::bson::Document>("admin_directives")
+            .create_index(dir_ttl.clone())
+            .await;
+        let _ = self
+            .db_secondary
             .collection::<mongodb::bson::Document>("admin_directives")
             .create_index(dir_ttl)
             .await;

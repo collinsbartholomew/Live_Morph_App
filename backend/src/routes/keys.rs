@@ -94,8 +94,7 @@ async fn validate_license_key_inner(
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "sec_key_validate", 10, 60) {
         return Err(AppError::RateLimited(
-            "too many validation attempts — try again in 60 seconds".into(),
-        ));
+            "too many validation attempts — try again in 60 seconds".into(), None));
     }
     let key = resolve_license_key(&body);
     if key.is_empty() {
@@ -299,8 +298,7 @@ async fn keys_lookup(
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "sec_key_lookup", 10, 60) {
         return Err(AppError::RateLimited(
-            "too many lookup attempts — try again in 60 seconds".into(),
-        ));
+            "too many lookup attempts — try again in 60 seconds".into(), None));
     }
     let key = body
         .key
@@ -367,8 +365,7 @@ async fn keys_status(
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "sec_key_status", 10, 60) {
         return Err(AppError::RateLimited(
-            "too many status attempts — try again in 60 seconds".into(),
-        ));
+            "too many status attempts — try again in 60 seconds".into(), None));
     }
     let key = query.get("key").map(|s| s.trim().to_uppercase());
     let key_supplied = key.as_ref().map(|k| !k.is_empty()).unwrap_or(false);
@@ -441,7 +438,7 @@ async fn keys_dev_issue(
     // Rate-limit before the admin-secret compare (no timing/brute-force oracle).
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "dev-issue", 5, 60) {
-        return Err(AppError::RateLimited("too many requests".into()));
+        return Err(AppError::RateLimited("too many requests".into(), None));
     }
     let expected = cfg.admin_secret.as_deref().unwrap_or("");
     let provided = body.admin_secret.as_deref().unwrap_or("");

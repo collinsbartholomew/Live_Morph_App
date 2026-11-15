@@ -227,6 +227,14 @@ void AppController::updateHdAvailability()
     emit hdAvailableChanged();
 }
 
+void AppController::setPendingPaymentOrderId(const QString &v)
+{
+    if (m_pendingPaymentOrderId == v)
+        return;
+    m_pendingPaymentOrderId = v;
+    emit pendingPaymentOrderIdChanged();
+}
+
 void AppController::setShowWhatsNew(bool v)
 {
     if (m_showWhatsNew == v)

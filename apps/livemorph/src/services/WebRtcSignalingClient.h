@@ -61,6 +61,10 @@ public slots:
 signals:
     void connectedChanged();
     void sessionIdChanged();
+    /// Decart's session_id message also carries server_ip/server_port — the
+    /// media server endpoint. Emitted so the peer can add it as a remote ICE
+    /// candidate (TCP fallback when UDP is firewalled, e.g. behind a VPN).
+    void mediaServerReceived(const QString &ip, quint16 port);
     void errorOccurred(const QString &message, const QString &code);
     // Transient auto-reconnect notice (NOT an error) — separate from errorOccurred
     // so views/controllers don't have to sniff the message prose for "reconnect".

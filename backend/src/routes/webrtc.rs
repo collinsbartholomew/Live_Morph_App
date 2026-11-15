@@ -1,7 +1,7 @@
 //! WebRTC helper endpoints (ICE servers for clients).
 
 use crate::config::Config;
-use actix_web::{get, web, HttpResponse};
+use actix_web::{get, web, HttpRequest, HttpResponse};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -9,9 +9,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(ice_servers);
 }
 
-/// Public: STUN/TURN list for Qt WebRtcPeer.
+/// Authenticated: STUN/TURN list for Qt WebRtcPeer. Requires a valid session —
+/// the list may contain paid TURN credentials, so it must never be public.
 #[get("/webrtc/ice-servers")]
-async fn ice_servers(cfg: web::Data<Arc<Config>>) -> HttpResponse {
+async fn ice_servers(cfg: web::Data<Arc<Config>>, req: HttpRequest) -> actix_web::Result<HttpResponse> {
+    use crate::auth::middleware::require_user;
+    let _auth = require_user(&req)?;
     let fallback = json!([
         { "urls": "stun:stun.l.google.com:19302" },
         { "urls": "stun:stun1.l.google.com:19302" }
@@ -32,5 +35,5 @@ async fn ice_servers(cfg: web::Data<Arc<Config>>) -> HttpResponse {
         json!({ "iceServers": fallback })
     };
 
-    HttpResponse::Ok().json(ice)
+    Ok(HttpResponse::Ok().json(ice))
 }

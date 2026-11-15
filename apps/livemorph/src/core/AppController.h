@@ -24,6 +24,9 @@ class AppController : public QObject
     Q_PROPERTY(QString swapTier READ swapTier WRITE setSwapTier NOTIFY swapTierChanged)
     Q_PROPERTY(bool hdAvailable READ hdAvailable NOTIFY hdAvailableChanged)
     Q_PROPERTY(bool showWhatsNew READ showWhatsNew WRITE setShowWhatsNew NOTIFY showWhatsNewChanged)
+    // Order id of the payment currently in flight (written by BuyCreditsDrawer)
+    // so late/stale order callbacks can be ignored instead of clobbering UI.
+    Q_PROPERTY(QString pendingPaymentOrderId READ pendingPaymentOrderId WRITE setPendingPaymentOrderId NOTIFY pendingPaymentOrderIdChanged)
     Q_PROPERTY(bool showSettings READ showSettings WRITE setShowSettings NOTIFY showSettingsChanged)
     Q_PROPERTY(bool showBuyCredits READ showBuyCredits WRITE setShowBuyCredits NOTIFY showBuyCreditsChanged)
     Q_PROPERTY(bool showTour READ showTour WRITE setShowTour NOTIFY showTourChanged)
@@ -70,6 +73,8 @@ public:
     bool hdAvailable() const { return m_hdAvailable; }
     void setHdAvailable(bool available);
     bool showWhatsNew() const { return m_showWhatsNew; }
+    QString pendingPaymentOrderId() const { return m_pendingPaymentOrderId; }
+    void setPendingPaymentOrderId(const QString &v);
     void setShowWhatsNew(bool v);
     bool showSettings() const { return m_showSettings; }
     void setShowSettings(bool v);
@@ -121,6 +126,7 @@ signals:
     void swapTierChanged();
     void hdAvailableChanged();
     void showWhatsNewChanged();
+    void pendingPaymentOrderIdChanged();
     void showSettingsChanged();
     void showBuyCreditsChanged();
     void showTourChanged();
@@ -155,6 +161,7 @@ private:
     QString m_swapTier = QStringLiteral("standard"); // standard | hd
     bool m_hdAvailable = false;
     bool m_showWhatsNew = false;
+    QString m_pendingPaymentOrderId;
     bool m_showSettings = false;
     bool m_showBuyCredits = false;
     bool m_showTour = false;

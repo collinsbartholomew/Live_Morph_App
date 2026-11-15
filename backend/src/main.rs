@@ -231,12 +231,17 @@ async fn main() -> anyhow::Result<()> {
         let sec_coll = db.db_secondary.collection::<mongodb::bson::Document>("sessions");
         // Only rows owned by this instance (or legacy rows with no instance_id)
         // are stale — with >1 replica, other instances' live rows must not be
-        // touched.
+        // touched. Under the documented single-instance assumption every
+        // still-active row predates this process's boot, so also match on
+        // started_at < boot time: the previous process's rows carry a DIFFERENT
+        // instance_id and would otherwise be missed (leaking their slots until
+        // the 10-min reaper).
         let orphan_filter = doc! {
             "status": { "$in": ["connecting", "generating", "live"] },
             "$or": [
                 { "instance_id": instance_id },
                 { "instance_id": { "$exists": false } },
+                { "started_at": { "$lt": now } },
             ],
         };
         for (coll, users) in [
@@ -405,6 +410,7 @@ async fn main() -> anyhow::Result<()> {
                             doc! { "$match": { "status": { "$in": ["connecting", "generating"] } } },
                             doc! { "$group": { "_id": "$user_id", "n": { "$sum": 1 } } },
                         ];
+                        let mut live_uids: Vec<String> = Vec::new();
                         let mut cur = match coll.aggregate(pipeline).await {
                             Ok(c) => c,
                             Err(_) => continue,
@@ -413,11 +419,24 @@ async fn main() -> anyhow::Result<()> {
                             if let (Ok(uid), Some(n)) =
                                 (d.get_str("_id"), d.get("n").and_then(|v| v.as_i64()))
                             {
+                                live_uids.push(uid.to_string());
                                 let _ = users
                                     .update_one(doc! { "_id": uid }, doc! { "$set": { "active_sessions": n } })
                                     .await;
                             }
                         }
+                        // Also zero users whose counter is stuck > 0 but who have
+                        // NO live rows at all — otherwise a leaked counter self-locks
+                        // them (429) forever, even across restarts.
+                        let _ = users
+                            .update_many(
+                                doc! {
+                                    "_id": { "$nin": &live_uids },
+                                    "active_sessions": { "$gt": 0 },
+                                },
+                                doc! { "$set": { "active_sessions": 0 } },
+                            )
+                            .await;
                     }
                 }
                 // Audit reconciler on the same cadence (idempotent, audit-only).

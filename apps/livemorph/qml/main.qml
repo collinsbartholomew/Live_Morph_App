@@ -486,22 +486,40 @@ ApplicationWindow {
 
     Connections {
         function onRequestFailed(ep, err) {
-            // Surface all endpoint failures (credits/catalog/characters were
-            // silently dropped before); /health is covered by the offline banner.
+            // /health is covered by the offline banner; background/startup
+            // polls (catalog, settings, bootstrap, update check, pings) must
+            // never spam toasts — the user didn't ask for them.
             if (ep.indexOf("/health") >= 0)
                 return;
-            Notifier.push(qsTr("Backend: %1").arg(ep), err, "warning");
+            const background = ["/catalog", "/settings/", "/recordings/directory",
+                                "/bootstrap", "/public/", "/payments/packages",
+                                "/update/check", "/auth/oauth"];
+            for (const b of background)
+                if (ep.indexOf(b) >= 0)
+                    return;
+            // Never show the internal API path to the user — just the message.
+            Notifier.push(qsTr("Backend request failed"), err, "warning");
         }
 
         function onUpdateCheckResult(result) {
             var avail = result.available === true || result.update_available === true;
-            if (avail)
+            if (avail) {
                 Notifier.push(qsTr("Update available"), result.latest_version || result.version || result.message || qsTr("A newer version is ready"), "info", "update");
-            else
+                // Actually fetch the update in the background — checkUpdates only
+                // reports availability; without this the "RESTART & UPDATE" pill
+                // dead-ends because nothing was ever downloaded.
+                if (!Backend.updateDownloading && Backend.updateDownloadedPath.length === 0)
+                    Backend.downloadUpdate();
+            } else
                 Notifier.push(qsTr("You're up to date"), result.message || ("v" + (App.appVersion || "")), "success");
         }
 
         function onPaymentOrderVerified(result) {
+            // Ignore results for a different order than the one in flight —
+            // a late poll from a previous order must not clobber the current UI.
+            var oid = String(result.order_id || result.id || "")
+            if (oid && App.pendingPaymentOrderId && oid !== App.pendingPaymentOrderId)
+                return
             if (result.in_flight) {
                 paymentBanner.statusHint = result.crypto_status || "confirming";
                 return;
@@ -514,6 +532,9 @@ ApplicationWindow {
         }
 
         function onPaymentOrderStatusReceived(status) {
+            var oid2 = String(status.order_id || status.id || "")
+            if (oid2 && App.pendingPaymentOrderId && oid2 !== App.pendingPaymentOrderId)
+                return
             if (status.crypto_status)
                 paymentBanner.statusHint = status.crypto_status;
 

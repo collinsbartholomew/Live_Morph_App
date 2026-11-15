@@ -72,7 +72,7 @@ async fn storage_reset_token(db: web::Data<Db>, req: HttpRequest) -> AppResult<H
     let _auth = require_user(&req)?;
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "directive-poll", 10, 60) {
-        return Err(AppError::RateLimited("too many polls".into()));
+        return Err(AppError::RateLimited("too many polls".into(), None));
     }
     let product = ProductId::from_request(&req);
     let coll = directives_coll(&db, product);
@@ -112,7 +112,7 @@ async fn storage_reset_token_issue(
     // as a timing oracle to brute-force the secret.
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "directive-issue", 5, 60) {
-        return Err(AppError::RateLimited("too many requests".into()));
+        return Err(AppError::RateLimited("too many requests".into(), None));
     }
     let expected = cfg.admin_secret.as_deref().unwrap_or("");
     let provided = body.admin_secret.as_deref().unwrap_or("");
@@ -140,7 +140,7 @@ async fn logout_token(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpResp
     let _auth = require_user(&req)?;
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "directive-poll", 10, 60) {
-        return Err(AppError::RateLimited("too many polls".into()));
+        return Err(AppError::RateLimited("too many polls".into(), None));
     }
     let product = ProductId::from_request(&req);
     let coll = directives_coll(&db, product);
@@ -177,7 +177,7 @@ async fn consume_directive(
     // let this be an unthrottled oracle).
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "directive-consume", 10, 60) {
-        return Err(AppError::RateLimited("too many requests".into()));
+        return Err(AppError::RateLimited("too many requests".into(), None));
     }
     let token = body
         .token

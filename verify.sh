@@ -48,9 +48,31 @@ if ( cd "$BACKEND" && cargo build ) >/tmp/verify_build.log 2>&1; then
   fi
   # Test-scale limits so the suites' repeated same-IP calls don't lock out.
   export AUTH_MAX_ATTEMPTS=500
-  pkill -f "target/debug/livemorph-backend" 2>/dev/null; sleep 1
-  GATE_STARTED_BACKEND=1
-  ( cd "$BACKEND" && setsid ./target/debug/livemorph-backend > /tmp/backend.log 2>&1 < /dev/null & disown )
+  # The suites send the test admin secret; .env ships ADMIN_SECRET empty by
+  # design, so take it from backend/.test.env (single source of truth) AFTER
+  # the .env export loop above.
+  if [ -f "$BACKEND/.test.env" ]; then
+    _ts=$(grep -E '^ADMIN_SECRET=' "$BACKEND/.test.env" | head -1 | cut -d= -f2-)
+    [ -n "$_ts" ] && export ADMIN_SECRET="$_ts"
+  fi
+  # Export BASE so the integration suite targets the same host we health-check
+  # (integration_tests.sh honors BASE; endpoint_smoke.sh already does).
+  export BASE
+  # Only boot a local gate backend when BASE is the default; with a remote BASE
+  # we must not kill or replace whatever is running there.
+  if [ "$BASE" = "http://127.0.0.1:3874" ]; then
+    # Kill only a previous GATE-started backend (recorded PID), not a dev
+    # backend the user started themselves.
+    if [ -f /tmp/verify_backend.pid ]; then
+      kill "$(cat /tmp/verify_backend.pid)" 2>/dev/null
+      sleep 1
+    fi
+    pkill -f "target/debug/livemorph-backend" 2>/dev/null; sleep 1
+    GATE_STARTED_BACKEND=1
+    ( cd "$BACKEND" && setsid ./target/debug/livemorph-backend > /tmp/backend.log 2>&1 < /dev/null & echo $! > /tmp/verify_backend.pid; disown )
+  else
+    GATE_STARTED_BACKEND=0
+  fi
   for i in $(seq 1 20); do
     curl -sf --max-time 2 "$BASE/api/v1/health" >/dev/null 2>&1 && break
     sleep 1

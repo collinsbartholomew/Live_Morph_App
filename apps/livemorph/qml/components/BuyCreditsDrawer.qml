@@ -45,6 +45,7 @@ Item {
         return m;
     }
     property string pendingOrderId: ""
+    onPendingOrderIdChanged: App.pendingPaymentOrderId = pendingOrderId
     property string cryptoAddress: ""
     property real cryptoAmount: 0
     property string cryptoCurrency: ""
@@ -881,9 +882,11 @@ Item {
                                 font.pixelSize: 13
                                 font.weight: Font.Bold
                                 font.capitalization: Font.AllUppercase
-                                font.letterSpacing: 1.5
-                                // runtime package name: elide inside the fixed 296px CTA
-                                width: Math.min(implicitWidth, 160)
+                                font.letterSpacing: 1.0
+                                // runtime package name: elide inside the CTA, but give
+                                // the all-caps label enough room — 160px clipped
+                                // "PICK A PAYMENT METHOD ABOVE" to "PICK A PAYMENT M…"
+                                width: Math.min(implicitWidth, 280)
                                 elide: Text.ElideRight
                             }
 

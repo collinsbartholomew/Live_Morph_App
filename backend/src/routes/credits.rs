@@ -1,4 +1,5 @@
 use crate::auth::middleware::require_user;
+use crate::routes::auth::hash_token;
 use crate::config::Config;
 use crate::db::{new_id, Db};
 use crate::error::{AppError, AppResult};
@@ -83,8 +84,7 @@ async fn admin_add(
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "credits-add", 10, 60) {
         return Err(AppError::RateLimited(
-            "too many credit redemption attempts — try again in 60 seconds".into(),
-        ));
+            "too many credit redemption attempts — try again in 60 seconds".into(), None));
     }
 
     // Manual credit-key redemption (no admin secret needed — the key is the credential).
@@ -105,7 +105,7 @@ async fn admin_add(
         // Atomic claim: a key can only be redeemed once, and only by the product it was issued for.
         let claimed = credit_keys_coll(&db, product)
             .find_one_and_update(
-                doc! { "key": &key, "product": product.as_str(), "used": false },
+                doc! { "key_hash": hash_token(&key), "product": product.as_str(), "used": false },
                 doc! {
                     "$set": {
                         "used": true,
@@ -170,8 +170,7 @@ async fn admin_add(
 
     if !crate::auth::check_rate_limit(&ip, "admin-secret", 5, 60) {
         return Err(AppError::RateLimited(
-            "too many admin attempts — try again in 60 seconds".into(),
-        ));
+            "too many admin attempts — try again in 60 seconds".into(), None));
     }
     let expected = cfg.admin_secret.as_deref().unwrap_or("");
     let provided = body.admin_secret.as_deref().unwrap_or("");
@@ -213,7 +212,25 @@ async fn admin_add(
         ));
     };
 
-    if delta != 0.0 {
+    if let Some(total) = body.set_total {
+        // set_total must be a TRUE set, not a stale-delta $inc: compute the
+        // split in-DB so a concurrent purchase/refund between the read and the
+        // write can't make the final balance differ from `total`.
+        let set_pipeline = vec![
+            doc! {
+                "$set": {
+                    // Put the whole total in credit_balance, keep bonus as-is is
+                    // wrong — instead: credit = max(total - bonus, 0), bonus = min(bonus, total)
+                    "bonus_balance": { "$min": [{ "$ifNull": ["$bonus_balance", 0] }, total] },
+                    "credit_balance": { "$max": [{ "$subtract": [total, { "$ifNull": ["$bonus_balance", 0] }] }, 0.0] },
+                    "updated_at": Utc::now(),
+                }
+            }
+        ];
+        users_coll
+            .update_one(doc! { "_id": &target.id }, set_pipeline)
+            .await?;
+    } else if delta != 0.0 {
         if delta > 0.0 {
             users_coll
                 .update_one(
@@ -335,7 +352,7 @@ async fn credits_keys_issue(
     {
         let ip = crate::auth::client_ip(&req);
         if !crate::auth::check_rate_limit(&ip, "admin-secret", 5, 60) {
-            return Err(AppError::RateLimited("too many admin attempts".into()));
+            return Err(AppError::RateLimited("too many admin attempts".into(), None));
         }
     }
     let expected = cfg.admin_secret.as_deref().unwrap_or("");
@@ -353,7 +370,7 @@ async fn credits_keys_issue(
         let full = format!("CK-{}-{}", key, crate::models::access_key::random_key_part());
         let doc = doc! {
             "_id": new_id(),
-            "key": &full,
+            "key_hash": hash_token(&full),
             "credits": credits,
             "product": product.as_str(),
             "used": false,
@@ -462,31 +479,41 @@ async fn adjust_demo(
                 ]
             }
         };
-        // Re-fetch after $expr guard to get fresh bonus/credit split values
-        let fresh_for_split = users_coll
-            .find_one(doc! { "_id": &user.id })
-            .await?
-            .ok_or_else(|| AppError::NotFound("user".into()))?;
-        let bonus_take = need.min(fresh_for_split.bonus_balance.max(0.0));
-        let credit_take = need - bonus_take;
-        let result = users_coll
-            .update_one(
-                filter,
-                doc! {
-                    "$inc": {
-                        "bonus_balance": -bonus_take,
-                        "credit_balance": -credit_take,
+        // Compute the bonus/credit split INSIDE the update (no re-fetch, no
+        // stale-read TOCTOU that could drive bonus_balance negative under a
+        // concurrent burn) — same atomic pipeline pattern as burn_credits.
+        let pipeline = vec![
+            doc! {
+                "$set": {
+                    "bonus_balance": {
+                        "$max": [{ "$subtract": [{ "$ifNull": ["$bonus_balance", 0] }, need] }, 0.0]
                     },
-                    "$set": { "updated_at": Utc::now() },
-                },
-            )
+                    "credit_balance": {
+                        "$max": [
+                            { "$subtract": [
+                                { "$ifNull": ["$credit_balance", 0] },
+                                { "$subtract": [need, { "$min": [{ "$ifNull": ["$bonus_balance", 0] }, need] }] }
+                            ]},
+                            0.0,
+                        ]
+                    },
+                    "updated_at": Utc::now(),
+                }
+            }
+        ];
+        let result = users_coll
+            .update_one(filter, pipeline)
             .await?;
         if result.matched_count == 0 {
             return Err(AppError::InsufficientCredits);
         }
-        let cb = (fresh_for_split.credit_balance - credit_take).max(0.0);
-        let bb = (fresh_for_split.bonus_balance - bonus_take).max(0.0);
-        (cb, bb, cb + bb)
+        // Post-write read for the response view only — the mutation above was
+        // already atomic; this read is not used to compute the debit.
+        let fresh = users_coll
+            .find_one(doc! { "_id": &user.id })
+            .await?
+            .ok_or_else(|| AppError::NotFound("user".into()))?;
+        (fresh.credit_balance, fresh.bonus_balance, fresh.total_credits())
     };
     let entry = CreditLedgerEntry {
         id: new_id(),

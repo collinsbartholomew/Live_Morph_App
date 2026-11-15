@@ -6,6 +6,8 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QNetworkRequest>
+#include <QSaveFile>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
@@ -166,7 +168,22 @@ void WebRtcSignalingClient::setTokenProvider(std::function<QString()> provider) 
 }
 
 void WebRtcSignalingClient::sendOffer(const QString& sdp) {
-	sendJson({{QStringLiteral("type"), QStringLiteral("offer")}, {QStringLiteral("sdp"), sdp}});
+	// Decart expects an options object with video constraints alongside the SDP
+	// (per their WS protocol: 1280x720@30, no audio for the camera-morph flow).
+	QJsonObject videoMandatory{
+	    {QStringLiteral("minWidth"), QStringLiteral("1280")},
+	    {QStringLiteral("minHeight"), QStringLiteral("720")},
+	    {QStringLiteral("maxWidth"), QStringLiteral("1280")},
+	    {QStringLiteral("maxHeight"), QStringLiteral("720")},
+	    {QStringLiteral("maxFrameRate"), QStringLiteral("30")},
+	};
+	QJsonObject options{
+	    {QStringLiteral("audio"), false},
+	    {QStringLiteral("video"), QJsonObject{{QStringLiteral("mandatory"), videoMandatory}}},
+	};
+	sendJson({{QStringLiteral("type"), QStringLiteral("offer")},
+	          {QStringLiteral("sdp"), sdp},
+	          {QStringLiteral("options"), options}});
 }
 
 void WebRtcSignalingClient::sendIceCandidate(const QJsonObject& candidate) {
@@ -194,14 +211,21 @@ void WebRtcSignalingClient::sendSetImage(const QString& base64Image, const QStri
 	QString p = prompt;
 	if (p.length() > 3500)
 		p = p.left(3500);
-	if (base64Image.length() > kMaxImageDataChars) {
+	// Decart expects raw base64 in image_data — strip any "data:image/...;base64,"
+	// prefix a data URL would carry, otherwise the upstream rejects it with
+	// "Invalid set_image image data".
+	QString img = base64Image;
+	const int comma = img.indexOf(QLatin1Char(','));
+	if (img.startsWith(QLatin1String("data:")) && comma > 0)
+		img = img.mid(comma + 1);
+	if (img.length() > kMaxImageDataChars) {
 		m_lastError = tr("Reference image too large — not sent");
 		emit errorOccurred(m_lastError, QString());
 		return;
 	}
 	QJsonObject o{
 	    {QStringLiteral("type"), QStringLiteral("set_image")},
-	    {QStringLiteral("image_data"), base64Image},
+	    {QStringLiteral("image_data"), img},
 	    {QStringLiteral("enhance_prompt"), enhancePrompt},
 	};
 	if (!p.isEmpty())
@@ -238,10 +262,26 @@ void WebRtcSignalingClient::onDisconnected() {
 	const quint16 code = m_socket.closeCode();
 	const QString reason = m_socket.closeReason();
 	qWarning() << "WebRtcSignalingClient: WebSocket disconnected code=" << code << "reason=" << reason;
-	// Write close code to file for offline diagnosis (auto-cleaned on next connect).
-	QFile f(QStringLiteral("/tmp/ws_close.log"));
-	if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
-		f.write(QStringLiteral("code=%1 reason=%2\n").arg(code).arg(reason).toUtf8());
+	// Diagnostic file for offline close-code capture. Never write to a fixed
+	// path in a world-writable dir (/tmp/ws_close.log) — a pre-planted symlink
+	// would be followed and clobbered. Use the app-local data dir via QSaveFile
+	// (atomic, and we chmod it 0600); the reason string is server-controlled so
+	// sanitize it to printable ASCII before writing.
+	{
+		QString safeReason;
+		for (const QChar ch : reason) {
+			if (ch.isPrint() && ch != QChar::fromLatin1('\n') && ch != QChar::fromLatin1('\r'))
+				safeReason += ch;
+		}
+		const QString path = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+		                     + QStringLiteral("/ws_close.log");
+		QSaveFile f(path);
+		if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+			f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+			f.write(QStringLiteral("code=%1 reason=%2\n").arg(code).arg(safeReason).toUtf8());
+			f.commit();
+		}
+	}
 	if (was)
 		emit connectedChanged();
 	if (m_generating) {
@@ -296,6 +336,12 @@ void WebRtcSignalingClient::handleMessage(const QJsonObject& obj) {
 	} else if (type == QLatin1String("session_id")) {
 		m_sessionId = obj.value(QStringLiteral("session_id")).toString();
 		emit sessionIdChanged();
+		// Decart includes the media server endpoint in session_id — surface it
+		// so the peer can add it as a remote ICE candidate (TCP when UDP is blocked).
+		const QString sip = obj.value(QStringLiteral("server_ip")).toString();
+		const quint16 sport = static_cast<quint16>(obj.value(QStringLiteral("server_port")).toInt());
+		if (!sip.isEmpty() && sport > 0)
+			emit mediaServerReceived(sip, sport);
 	} else if (type == QLatin1String("prompt_ack")) {
 		emit promptAck(obj.value(QStringLiteral("success")).toBool(),
 		               obj.value(QStringLiteral("error")).toString());

@@ -108,6 +108,7 @@ Rectangle {
                 Icon { name: "alert-circle"; size: 12; color: Colors.statusError }
                 Text {
                     text: CameraCtrl.lastError
+                    textFormat: Text.PlainText // server-derived — never rich text
                     color: Colors.statusError
                     font.pixelSize: 11
                     elide: Text.ElideRight
@@ -211,7 +212,7 @@ Rectangle {
         Rectangle {
             visible: Session.isActive
             && Session.connectionStatus !== "connecting"
-            && Session.connectionStatus !== "reconnecting"
+            && !Session.reconnecting
             height: 24
             width: swapRow.implicitWidth + 16
             radius: Theme.radiusFull
@@ -336,7 +337,7 @@ Rectangle {
     // ── Double-click hint (hidden while live/warmup; 12px ext glyph) ─
     Row {
         readonly property bool warm: Session.connectionStatus === "connecting"
-                                     || Session.connectionStatus === "reconnecting"
+                                     || Session.reconnecting
         visible: !Session.isActive && !warm
         anchors.top: parent.top
         anchors.right: parent.right
@@ -482,7 +483,7 @@ Rectangle {
     // idle: white/15 · warming: accent/45 · live: accent · error: error/70
     readonly property color bracketColor: Session.connectionStatus === "error" ? Colors.statusError60
         : Session.isActive
-          ? (Session.connectionStatus === "connecting" || Session.connectionStatus === "reconnecting"
+          ? (Session.connectionStatus === "connecting" || Session.reconnecting
              ? Colors.accent45 : Colors.accent)
         : Colors.white15
     CornerTicks {
@@ -500,7 +501,7 @@ Rectangle {
         anchors.fill: parent
         visible: Session.isActive
             && (Session.connectionStatus === "connecting"
-                || Session.connectionStatus === "reconnecting"
+                || Session.reconnecting
                 || ((Session.connectionStatus === "connected"
                      || Session.connectionStatus === "generating")
                     && !Session.hasFrames))
@@ -588,7 +589,7 @@ Rectangle {
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: Session.connectionStatus === "reconnecting"
+                    text: Session.reconnecting
                           ? qsTr("Reconnecting…") : qsTr("Connecting…")
                     color: Colors.textPrimary
                     font.pixelSize: 13
@@ -701,6 +702,7 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
                     text: Session.statusText.length ? Session.statusText : qsTr("Something went wrong. Please try again.")
+                    textFormat: Text.PlainText // Session.statusText can carry server text — never rich text
                     color: Colors.textPrimary
                     font.pixelSize: 14
                     font.weight: Font.Bold

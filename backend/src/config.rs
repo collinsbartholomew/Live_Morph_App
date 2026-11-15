@@ -340,7 +340,22 @@ impl Config {
         pos("CREDITS_PER_SECOND", self.credits_per_second)?;
         pos("DECART_USD_PER_SECOND", self.decart_usd_per_second)?;
         pos("USD_NGN_RATE", self.usd_ngn_rate)?;
+        // Paystack charge currency must match the whitelist used by the order
+        // routes — anything else silently misprices (subunits are computed for
+        // NGN/USD only).
+        let cur = self.paystack_currency.trim().to_uppercase();
+        if cur != "NGN" && cur != "USD" {
+            return Err(format!(
+                "PAYSTACK_CURRENCY must be NGN or USD, got '{}'",
+                self.paystack_currency
+            ));
+        }
         pos("HD_CREDIT_MULTIPLIER", self.hd_credit_multiplier)?;
+        // HD must never bill BELOW standard — a misconfigured multiplier < 1
+        // would let HD sessions underpay.
+        if self.hd_credit_multiplier < 1.0 {
+            return Err("HD_CREDIT_MULTIPLIER must be >= 1.0".into());
+        }
         nonneg("SIGNUP_BONUS_CREDITS", self.signup_bonus_credits)?;
         nonneg("MIN_CREDITS_TO_START", self.min_credits_to_start)?;
         if let Some(r) = self.referral_credits {
@@ -375,8 +390,18 @@ impl Config {
         if self.otp_ttl_secs <= 0 || self.auth_lockout_secs <= 0 {
             return Err("OTP_TTL_SECS and AUTH_LOCKOUT_SECS must be > 0".into());
         }
+        // Upper bounds: a year-long OTP or a year-long lockout is a misconfig,
+        // not a feature — cap them so a bad value can't brick auth.
+        if self.otp_ttl_secs > 3600 {
+            return Err(format!("OTP_TTL_SECS must be <= 3600 (1h), got {}", self.otp_ttl_secs));
+        }
+        if self.auth_lockout_secs > 86_400 {
+            return Err(format!("AUTH_LOCKOUT_SECS must be <= 86400 (1d), got {}", self.auth_lockout_secs));
+        }
         // JWT TTLs: sane bounds; overflow at issue time panics otherwise, and
-        // non-positive TTLs brick auth entirely.
+        // non-positive TTLs brick auth entirely. Access tokens are short-lived
+        // by design — cap at 1 day; revocation is via token_version, so a
+        // longer access TTL is unrevocable for that whole window.
         for (name, v) in [
             ("JWT_ACCESS_TTL_SECS", self.jwt_access_ttl_secs),
             ("JWT_REFRESH_TTL_SECS", self.jwt_refresh_ttl_secs),
@@ -384,6 +409,12 @@ impl Config {
             if !(1..=31_536_000).contains(&v) {
                 return Err(format!("{name} must be in 1..=31536000 (1y), got {v}"));
             }
+        }
+        if self.jwt_access_ttl_secs > 86_400 {
+            return Err(format!(
+                "JWT_ACCESS_TTL_SECS must be <= 86400 (1d), got {}",
+                self.jwt_access_ttl_secs
+            ));
         }
         if self.jwt_refresh_ttl_secs <= self.jwt_access_ttl_secs {
             return Err("JWT_REFRESH_TTL_SECS must be > JWT_ACCESS_TTL_SECS".into());

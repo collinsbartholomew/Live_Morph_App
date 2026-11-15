@@ -208,98 +208,98 @@
         <translation type="unfinished">Morph session started</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="377"/>
+        <location filename="../src/core/AppController.cpp" line="385"/>
         <source>Session locked</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="377"/>
+        <location filename="../src/core/AppController.cpp" line="385"/>
         <source>Unlock the session to start a swap.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="381"/>
+        <location filename="../src/core/AppController.cpp" line="389"/>
         <source>Not signed in</source>
         <translation type="unfinished">Not signed in</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="381"/>
+        <location filename="../src/core/AppController.cpp" line="389"/>
         <source>Please sign in to start morphing.</source>
         <translation type="unfinished">Please sign in to start morphing.</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="387"/>
+        <location filename="../src/core/AppController.cpp" line="395"/>
         <source>Insufficient credits</source>
         <translation type="unfinished">Insufficient credits</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="387"/>
+        <location filename="../src/core/AppController.cpp" line="395"/>
         <source>Buy more credits to continue.</source>
         <translation type="unfinished">Buy more credits to continue.</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="395"/>
+        <location filename="../src/core/AppController.cpp" line="403"/>
         <source>Low credits</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="396"/>
+        <location filename="../src/core/AppController.cpp" line="404"/>
         <source>Need at least %1 credits to start. Buy more credits.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="406"/>
+        <location filename="../src/core/AppController.cpp" line="414"/>
         <source>Pick a character</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="407"/>
+        <location filename="../src/core/AppController.cpp" line="415"/>
         <source>Pick or upload a character before starting your swap.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/core/AppController.cpp" line="93"/>
-        <location filename="../src/core/AppController.cpp" line="499"/>
+        <location filename="../src/core/AppController.cpp" line="507"/>
         <source>Payment return detected — verifying…</source>
         <translation type="unfinished">Payment return detected — verifying…</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="484"/>
+        <location filename="../src/core/AppController.cpp" line="492"/>
         <source>Ignored link (unrecognized origin)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="507"/>
+        <location filename="../src/core/AppController.cpp" line="515"/>
         <source>Payment reference received — will verify after sign-in</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="509"/>
+        <location filename="../src/core/AppController.cpp" line="517"/>
         <source>Payment reference received</source>
         <translation type="unfinished">Payment reference received</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="517"/>
+        <location filename="../src/core/AppController.cpp" line="525"/>
         <source>Google sign-in failed: %1</source>
         <translation type="unfinished">Google sign-in failed: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="526"/>
+        <location filename="../src/core/AppController.cpp" line="534"/>
         <source>Ignored sign-in link (security state mismatch)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="530"/>
+        <location filename="../src/core/AppController.cpp" line="538"/>
         <source>Completing Google sign-in…</source>
         <translation type="unfinished">Completing Google sign-in…</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="535"/>
+        <location filename="../src/core/AppController.cpp" line="543"/>
         <source>OAuth callback missing ticket</source>
         <translation type="unfinished">OAuth callback missing ticket</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="546"/>
+        <location filename="../src/core/AppController.cpp" line="554"/>
         <source>Opened link</source>
         <translation type="unfinished">Opened link</translation>
     </message>
@@ -312,149 +312,149 @@
         <translation type="unfinished">Backend offline — cannot start Google sign-in</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="175"/>
+        <location filename="../src/core/AuthManager.cpp" line="176"/>
         <source>Google sign-in unavailable</source>
         <translation type="unfinished">Google sign-in unavailable</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="185"/>
+        <location filename="../src/core/AuthManager.cpp" line="186"/>
         <source>Refusing to open non-http OAuth URL</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="204"/>
+        <location filename="../src/core/AuthManager.cpp" line="205"/>
         <source>Google sign-in timed out — please try again</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="235"/>
+        <location filename="../src/core/AuthManager.cpp" line="236"/>
         <source>OAuth failed — missing token</source>
         <translation type="unfinished">OAuth failed — missing token</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="261"/>
+        <location filename="../src/core/AuthManager.cpp" line="262"/>
         <source>Missing OAuth ticket</source>
         <translation type="unfinished">Missing OAuth ticket</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="266"/>
+        <location filename="../src/core/AuthManager.cpp" line="267"/>
         <source>Backend not available</source>
         <translation type="unfinished">Backend not available</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="287"/>
+        <location filename="../src/core/AuthManager.cpp" line="291"/>
         <source>OAuth exchange failed</source>
         <translation type="unfinished">OAuth exchange failed</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="358"/>
+        <location filename="../src/core/AuthManager.cpp" line="362"/>
         <source>Enter a valid email address</source>
         <translation type="unfinished">Enter a valid email address</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="362"/>
+        <location filename="../src/core/AuthManager.cpp" line="366"/>
         <source>Too many attempts — wait %1s</source>
         <translation type="unfinished">Too many attempts — wait %1s</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="399"/>
+        <location filename="../src/core/AuthManager.cpp" line="403"/>
         <source>Backend offline — dev mode: any 6–8 digit code works</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="523"/>
+        <location filename="../src/core/AuthManager.cpp" line="527"/>
         <source>Valid email and password (8-72 bytes) required</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1173"/>
+        <location filename="../src/core/AuthManager.cpp" line="1177"/>
         <source>Credits depleted</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1175"/>
+        <location filename="../src/core/AuthManager.cpp" line="1179"/>
         <source>Service capacity exhausted — try again later</source>
         <translation type="unfinished">Service capacity exhausted — try again later</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1177"/>
+        <location filename="../src/core/AuthManager.cpp" line="1181"/>
         <source>Session ended by an administrator</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1178"/>
+        <location filename="../src/core/AuthManager.cpp" line="1182"/>
         <source>Session ended</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="403"/>
+        <location filename="../src/core/AuthManager.cpp" line="407"/>
         <source>Cannot reach authentication server. Check your connection.</source>
         <translation type="unfinished">Cannot reach authentication server. Check your connection.</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="442"/>
+        <location filename="../src/core/AuthManager.cpp" line="446"/>
         <source>Enter the full %1-digit code</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="447"/>
+        <location filename="../src/core/AuthManager.cpp" line="451"/>
         <source>Code must be digits only</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="498"/>
+        <location filename="../src/core/AuthManager.cpp" line="502"/>
         <source>Cannot reach authentication server</source>
         <translation type="unfinished">Cannot reach authentication server</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="293"/>
-        <location filename="../src/core/AuthManager.cpp" line="416"/>
-        <location filename="../src/core/AuthManager.cpp" line="509"/>
-        <location filename="../src/core/AuthManager.cpp" line="558"/>
-        <location filename="../src/core/AuthManager.cpp" line="610"/>
+        <location filename="../src/core/AuthManager.cpp" line="297"/>
+        <location filename="../src/core/AuthManager.cpp" line="420"/>
+        <location filename="../src/core/AuthManager.cpp" line="513"/>
+        <location filename="../src/core/AuthManager.cpp" line="562"/>
+        <location filename="../src/core/AuthManager.cpp" line="614"/>
         <source>Invalid server response</source>
         <translation type="unfinished">Invalid server response</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="550"/>
-        <location filename="../src/core/AuthManager.cpp" line="602"/>
-        <location filename="../src/core/AuthManager.cpp" line="638"/>
-        <location filename="../src/core/AuthManager.cpp" line="668"/>
+        <location filename="../src/core/AuthManager.cpp" line="554"/>
+        <location filename="../src/core/AuthManager.cpp" line="606"/>
+        <location filename="../src/core/AuthManager.cpp" line="642"/>
+        <location filename="../src/core/AuthManager.cpp" line="672"/>
         <source>Cannot reach backend</source>
         <translation type="unfinished">Cannot reach backend</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="569"/>
+        <location filename="../src/core/AuthManager.cpp" line="573"/>
         <source>Valid email and password (8+ chars) required</source>
         <translation type="unfinished">Valid email and password (8+ chars) required</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="621"/>
+        <location filename="../src/core/AuthManager.cpp" line="625"/>
         <source>Enter your account email</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="648"/>
+        <location filename="../src/core/AuthManager.cpp" line="652"/>
         <source>Enter the code from the email and a new password (8+ chars)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="760"/>
+        <location filename="../src/core/AuthManager.cpp" line="764"/>
         <source>Network offline — session kept, will retry</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1009"/>
+        <location filename="../src/core/AuthManager.cpp" line="1013"/>
         <source>Cannot reach backend — session kept</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1038"/>
+        <location filename="../src/core/AuthManager.cpp" line="1042"/>
         <source>Cannot reach backend — account NOT deleted, session kept</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1062"/>
+        <location filename="../src/core/AuthManager.cpp" line="1066"/>
         <source>Export failed</source>
         <translation type="unfinished">Export failed</translation>
     </message>
@@ -557,32 +557,32 @@ Live to OBS.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="687"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="688"/>
         <source>By continuing, you agree to our </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="688"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="689"/>
         <source>Terms of Service</source>
         <translation type="unfinished">Terms of Service</translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="689"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="690"/>
         <source>Privacy Policy</source>
         <translation type="unfinished">Privacy Policy</translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="690"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="691"/>
         <source>and </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="691"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="692"/>
         <source>Acceptable Use Policy</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="734"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="740"/>
         <source>Please enter a valid email address.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -617,12 +617,12 @@ Live to OBS.</source>
         <translation type="unfinished">LIVE</translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="745"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="751"/>
         <source>Missing email — go back and try again</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="766"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="772"/>
         <source>Complete Google sign-in in your browser</source>
         <translation type="unfinished">Complete Google sign-in in your browser</translation>
     </message>
@@ -630,106 +630,146 @@ Live to OBS.</source>
 <context>
     <name>BackendClient</name>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="182"/>
-        <location filename="../src/services/BackendClient.cpp" line="248"/>
+        <location filename="../src/services/BackendClient.cpp" line="201"/>
+        <location filename="../src/services/BackendClient.cpp" line="267"/>
         <source>Too many requests — try again in a moment</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="210"/>
-        <location filename="../src/services/BackendClient.cpp" line="275"/>
-        <location filename="../src/services/BackendClient.cpp" line="475"/>
-        <location filename="../src/services/BackendClient.cpp" line="531"/>
+        <location filename="../src/services/BackendClient.cpp" line="229"/>
+        <location filename="../src/services/BackendClient.cpp" line="294"/>
+        <location filename="../src/services/BackendClient.cpp" line="494"/>
+        <location filename="../src/services/BackendClient.cpp" line="550"/>
         <source>Authentication expired — sign in again</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="796"/>
+        <location filename="../src/services/BackendClient.cpp" line="823"/>
         <source>Refusing untrusted update URL</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="1058"/>
+        <location filename="../src/services/BackendClient.cpp" line="1104"/>
         <source>HTTP %1</source>
         <translation type="unfinished">HTTP %1</translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="231"/>
-        <location filename="../src/services/BackendClient.cpp" line="293"/>
-        <location filename="../src/services/BackendClient.cpp" line="493"/>
-        <location filename="../src/services/BackendClient.cpp" line="549"/>
+        <location filename="../src/services/BackendClient.cpp" line="250"/>
+        <location filename="../src/services/BackendClient.cpp" line="312"/>
+        <location filename="../src/services/BackendClient.cpp" line="512"/>
+        <location filename="../src/services/BackendClient.cpp" line="568"/>
         <source>Malformed response from server</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="122"/>
+        <location filename="../src/services/BackendClient.cpp" line="125"/>
         <source>Too many attempts — please wait</source>
         <translation type="unfinished">Too many attempts — please wait</translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="124"/>
+        <location filename="../src/services/BackendClient.cpp" line="127"/>
         <source>Insufficient credits</source>
         <translation type="unfinished">Insufficient credits</translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="126"/>
+        <location filename="../src/services/BackendClient.cpp" line="129"/>
         <source>Invalid credentials</source>
         <translation type="unfinished">Invalid credentials</translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="128"/>
+        <location filename="../src/services/BackendClient.cpp" line="131"/>
         <source>This action is not allowed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="130"/>
+        <location filename="../src/services/BackendClient.cpp" line="133"/>
         <source>Not found</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="132"/>
+        <location filename="../src/services/BackendClient.cpp" line="135"/>
         <source>Invalid request</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="134"/>
+        <location filename="../src/services/BackendClient.cpp" line="137"/>
         <source>Conflict — please try again</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="136"/>
+        <location filename="../src/services/BackendClient.cpp" line="139"/>
         <source>Server error — please try again later</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="139"/>
+        <location filename="../src/services/BackendClient.cpp" line="142"/>
         <source>Request failed — HTTP %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="194"/>
-        <location filename="../src/services/BackendClient.cpp" line="260"/>
-        <location filename="../src/services/BackendClient.cpp" line="311"/>
-        <location filename="../src/services/BackendClient.cpp" line="460"/>
-        <location filename="../src/services/BackendClient.cpp" line="516"/>
-        <location filename="../src/services/BackendClient.cpp" line="811"/>
+        <location filename="../src/services/BackendClient.cpp" line="151"/>
+        <source>Cannot reach the backend — is it running?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/services/BackendClient.cpp" line="153"/>
+        <source>The backend did not respond in time</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/services/BackendClient.cpp" line="155"/>
+        <source>Secure connection to the backend failed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/services/BackendClient.cpp" line="157"/>
+        <source>The backend dropped the connection</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/services/BackendClient.cpp" line="158"/>
+        <source>Network error — please check your connection</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/services/BackendClient.cpp" line="213"/>
+        <location filename="../src/services/BackendClient.cpp" line="279"/>
+        <location filename="../src/services/BackendClient.cpp" line="330"/>
+        <location filename="../src/services/BackendClient.cpp" line="479"/>
+        <location filename="../src/services/BackendClient.cpp" line="535"/>
+        <location filename="../src/services/BackendClient.cpp" line="838"/>
         <source>Response too large</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="856"/>
+        <location filename="../src/services/BackendClient.cpp" line="883"/>
         <source>Blocked URL scheme: %1</source>
         <translation type="unfinished">Blocked URL scheme: %1</translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="1005"/>
+        <location filename="../src/services/BackendClient.cpp" line="1046"/>
         <source>Could not open destination file</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="1019"/>
-        <location filename="../src/services/BackendClient.cpp" line="1030"/>
+        <location filename="../src/services/BackendClient.cpp" line="1064"/>
+        <location filename="../src/services/BackendClient.cpp" line="1075"/>
         <source>Update file exceeds the 512 MiB cap — aborted</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/services/BackendClient.cpp" line="1118"/>
+        <source>Update checksum mismatch — download rejected</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/services/BackendClient.cpp" line="1124"/>
+        <source>Could not finalize update file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/services/BackendClient.cpp" line="1134"/>
+        <source>Could not move update into place</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -749,12 +789,12 @@ Live to OBS.</source>
 <context>
     <name>BuyCreditsDrawer</name>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1282"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1285"/>
         <source>Address copied</source>
         <translation type="unfinished">Address copied</translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="982"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="985"/>
         <source>Recheck</source>
         <translation type="unfinished">Recheck</translation>
     </message>
@@ -789,67 +829,67 @@ Live to OBS.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="68"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="69"/>
         <source>Most creators land here.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="69"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="70"/>
         <source>For studios and full session days.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="117"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="118"/>
         <source>%1 min</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="120"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="121"/>
         <source>%1h %2m</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="120"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="121"/>
         <source>%1h</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="134"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="135"/>
         <source>Enter a valid credit key</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="138"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="139"/>
         <source>Activating credit key…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="170"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="171"/>
         <source>Payment pending for over 30 min - contact support if this persists</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="172"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="173"/>
         <source>Payment pending - ensure exact amount was sent to the address</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="186"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="187"/>
         <source>Still confirming on the network — you can close this panel; credits land automatically.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="335"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="336"/>
         <source>Buy credits</source>
         <translation type="unfinished">Buy credits</translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="409"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="410"/>
         <source>BALANCE</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="421"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="422"/>
         <source>(%n minute)</source>
         <comment>(%n minutes)</comment>
         <translation type="unfinished">
@@ -858,291 +898,291 @@ Live to OBS.</source>
         </translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="520"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="521"/>
         <source>POPULAR</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="541"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="542"/>
         <source>HD</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="552"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="553"/>
         <source>%1 cr · %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="600"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="601"/>
         <source>Save %1%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="630"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="631"/>
         <source>PAYMENT METHOD</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="638"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="639"/>
         <source>Outside Nigeria? Pick Crypto.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="775"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="776"/>
         <source>We accept fast-settling cryptos only. BTC and Ethereum take 30+ minutes to confirm — use USDT, USDC, SOL, TRX or TON for fast settlement.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="869"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="870"/>
         <source>Try again</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="870"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="871"/>
         <source>Creating order…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="871"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="872"/>
         <source>Pick a payment method above</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="872"/>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="877"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="873"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="878"/>
         <source>Continue</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="878"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="879"/>
         <source>Continue with %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="943"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="946"/>
         <source>Backend offline - cannot create order</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="947"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="950"/>
         <source>Sign in required</source>
         <translation type="unfinished">Sign in required</translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="957"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="960"/>
         <source>Creating order for %1…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="971"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="974"/>
         <source>Pay any supported crypto at the USD equivalent. Works from any country.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="973"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="976"/>
         <source>Charged in NGN at today&apos;s rate. Foreign cards will be declined.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="974"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="977"/>
         <source>Choose a payment method above to continue</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="985"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="988"/>
         <source>Rechecking payment status…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1032"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1035"/>
         <source>Have a manual credit key?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1046"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1049"/>
         <source>CK-XXXX-XXXX</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1061"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1064"/>
         <source>ACTIVATE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1120"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1123"/>
         <source>Payment credited</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1121"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1124"/>
         <source>Crypto payment in progress</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1128"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1131"/>
         <source>Send %1 %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1147"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1150"/>
         <source>WAITING %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1166"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1169"/>
         <source>Payment sent from your wallet</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1168"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1171"/>
         <source>Send exactly the amount above in one transfer.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1169"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1172"/>
         <source>Confirmed on blockchain</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1171"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1174"/>
         <source>Waiting for the network to confirm your transaction.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1172"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1175"/>
         <source>Credited to your account</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1174"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1177"/>
         <source>Credits are added the moment settlement lands.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1303"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1306"/>
         <source>Crypto settlement typically completes within 15 minutes. You can close this panel. Credits land in your account automatically when the network finishes.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1323"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1326"/>
         <source>Still no settlement after 30 minutes. The network can be busy, but credits typically still arrive within an hour. If your payment is missing after an hour, contact support with your transaction hash and we will resolve it manually.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1336"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1339"/>
         <source>Re-checking…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1336"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1339"/>
         <source>Re-check payment status</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1344"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1347"/>
         <source>Still processing — we&apos;ll keep watching.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1349"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1352"/>
         <source>Reopen checkout</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1355"/>
         <location filename="../qml/components/BuyCreditsDrawer.qml" line="1358"/>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1381"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1361"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1384"/>
         <source>Link copied</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1355"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1358"/>
         <source>Copy link</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1365"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1368"/>
         <source>Cancel this payment</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1555"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1558"/>
         <source>Payment %1 — no credits were added. Start a new order.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1556"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1559"/>
         <source>Payment %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1556"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1559"/>
         <source>No credits were added.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1591"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1594"/>
         <source>Order cancelled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1393"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1396"/>
         <source>Your wallet won&apos;t be charged. If you&apos;ve already sent crypto, those credits will still arrive when the network confirms.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1435"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1438"/>
         <source>Payment confirmed</source>
         <translation type="unfinished">Payment confirmed</translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1452"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1455"/>
         <source>+%1 credits added</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1462"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1465"/>
         <source>Done</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1512"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1515"/>
         <source>Complete payment in your browser, then Recheck</source>
         <translation type="unfinished">Complete payment in your browser, then Recheck</translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1518"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1521"/>
         <source>Send exactly the amount shown to the USDT address</source>
         <translation type="unfinished">Send exactly the amount shown to the USDT address</translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1523"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1526"/>
         <source>Order created — use Recheck after paying</source>
         <translation type="unfinished">Order created — use Recheck after paying</translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1595"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1598"/>
         <source>Could not cancel the order (it may already be settled).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1596"/>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1615"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1599"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1618"/>
         <source>Cancel failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1610"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1613"/>
         <source>Payment failed. No funds were charged.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1619"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1622"/>
         <source>Credit key rejected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1631"/>
+        <location filename="../qml/components/BuyCreditsDrawer.qml" line="1634"/>
         <source>Credit key activated - %1 credits added</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1171,12 +1211,12 @@ Live to OBS.</source>
         <translation type="unfinished">No output path</translation>
     </message>
     <message>
-        <location filename="../src/core/CameraManager.cpp" line="369"/>
+        <location filename="../src/core/CameraManager.cpp" line="390"/>
         <source>Refusing to record outside the user&apos;s folders</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/CameraManager.cpp" line="375"/>
+        <location filename="../src/core/CameraManager.cpp" line="396"/>
         <source>Camera not active</source>
         <translation type="unfinished">Camera not active</translation>
     </message>
@@ -2448,50 +2488,50 @@ Sign in again to continue.</source>
 <context>
     <name>RecordingManager</name>
     <message>
-        <location filename="../src/core/RecordingManager.cpp" line="89"/>
-        <location filename="../src/core/RecordingManager.cpp" line="111"/>
-        <location filename="../src/core/RecordingManager.cpp" line="447"/>
-        <location filename="../src/core/RecordingManager.cpp" line="458"/>
+        <location filename="../src/core/RecordingManager.cpp" line="112"/>
+        <location filename="../src/core/RecordingManager.cpp" line="134"/>
+        <location filename="../src/core/RecordingManager.cpp" line="470"/>
+        <location filename="../src/core/RecordingManager.cpp" line="481"/>
         <source>Recording kept as .part — recover it from Settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/RecordingManager.cpp" line="142"/>
+        <location filename="../src/core/RecordingManager.cpp" line="165"/>
         <source>Camera recording failed: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/RecordingManager.cpp" line="248"/>
+        <location filename="../src/core/RecordingManager.cpp" line="271"/>
         <source>Previous recording is still finalizing — try again in a moment</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/RecordingManager.cpp" line="254"/>
+        <location filename="../src/core/RecordingManager.cpp" line="277"/>
         <source>Recording folder is not writable</source>
         <translation type="unfinished">Recording folder is not writable</translation>
     </message>
     <message>
-        <location filename="../src/core/RecordingManager.cpp" line="296"/>
+        <location filename="../src/core/RecordingManager.cpp" line="319"/>
         <source>Recorder pipeline failed to start: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/RecordingManager.cpp" line="310"/>
+        <location filename="../src/core/RecordingManager.cpp" line="333"/>
         <source>Could not start local camera recording</source>
         <translation type="unfinished">Could not start local camera recording</translation>
     </message>
     <message>
-        <location filename="../src/core/RecordingManager.cpp" line="317"/>
+        <location filename="../src/core/RecordingManager.cpp" line="340"/>
         <source>Nothing to record — start a morph session first</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/RecordingManager.cpp" line="355"/>
+        <location filename="../src/core/RecordingManager.cpp" line="378"/>
         <source>Recording stopped — 45 minute limit reached</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/RecordingManager.cpp" line="404"/>
+        <location filename="../src/core/RecordingManager.cpp" line="427"/>
         <source>Could not finalize recording — kept as .part for recovery</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2500,15 +2540,15 @@ Sign in again to continue.</source>
     <name>SessionManager</name>
     <message>
         <location filename="../src/core/SessionManager.cpp" line="88"/>
-        <location filename="../src/core/SessionManager.cpp" line="778"/>
-        <location filename="../src/core/SessionManager.cpp" line="951"/>
+        <location filename="../src/core/SessionManager.cpp" line="840"/>
+        <location filename="../src/core/SessionManager.cpp" line="1013"/>
         <location filename="../src/core/SessionManager.h" line="212"/>
         <source>Ready</source>
         <translation type="unfinished">Ready</translation>
     </message>
     <message>
         <location filename="../src/core/SessionManager.cpp" line="90"/>
-        <location filename="../src/core/SessionManager.cpp" line="810"/>
+        <location filename="../src/core/SessionManager.cpp" line="872"/>
         <source>Cooldown %1s</source>
         <translation type="unfinished">Cooldown %1s</translation>
     </message>
@@ -2518,148 +2558,148 @@ Sign in again to continue.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="142"/>
+        <location filename="../src/core/SessionManager.cpp" line="147"/>
         <source>Reconnection failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="143"/>
+        <location filename="../src/core/SessionManager.cpp" line="148"/>
         <source>Reconnection failed after %1 attempts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="167"/>
+        <location filename="../src/core/SessionManager.cpp" line="175"/>
         <source>Signaling live · %1</source>
         <translation type="unfinished">Signaling live · %1</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="266"/>
+        <location filename="../src/core/SessionManager.cpp" line="289"/>
         <source>Signaling disconnected — reconnecting in %1s…</source>
         <translation type="unfinished">Signaling disconnected — reconnecting in %1s…</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="282"/>
-        <location filename="../src/core/SessionManager.cpp" line="842"/>
+        <location filename="../src/core/SessionManager.cpp" line="305"/>
+        <location filename="../src/core/SessionManager.cpp" line="904"/>
         <source>Out of credits</source>
         <translation type="unfinished">Out of credits</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="284"/>
+        <location filename="../src/core/SessionManager.cpp" line="307"/>
         <source>Service capacity exhausted — try again later</source>
         <translation type="unfinished">Service capacity exhausted — try again later</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="285"/>
+        <location filename="../src/core/SessionManager.cpp" line="308"/>
         <source>Insufficient credits — session ended</source>
         <translation type="unfinished">Insufficient credits — session ended</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="321"/>
+        <location filename="../src/core/SessionManager.cpp" line="364"/>
         <source>Queued: position %1 of %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="326"/>
+        <location filename="../src/core/SessionManager.cpp" line="369"/>
         <source>Morphing…</source>
         <translation type="unfinished">Morphing…</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="434"/>
+        <location filename="../src/core/SessionManager.cpp" line="491"/>
         <source>Media connected · %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="437"/>
+        <location filename="../src/core/SessionManager.cpp" line="494"/>
         <source>WebRTC connection failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="446"/>
+        <location filename="../src/core/SessionManager.cpp" line="503"/>
         <source>WebRTC connection failed — session stopped</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="455"/>
+        <location filename="../src/core/SessionManager.cpp" line="512"/>
         <source>ICE checking…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="468"/>
+        <location filename="../src/core/SessionManager.cpp" line="525"/>
         <source>good</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="468"/>
+        <location filename="../src/core/SessionManager.cpp" line="525"/>
         <source>fair</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="468"/>
+        <location filename="../src/core/SessionManager.cpp" line="525"/>
         <source>poor</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="470"/>
+        <location filename="../src/core/SessionManager.cpp" line="527"/>
         <source>%1 · %2ms</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="478"/>
+        <location filename="../src/core/SessionManager.cpp" line="535"/>
         <source>Media stalled — reconnecting…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="746"/>
+        <location filename="../src/core/SessionManager.cpp" line="808"/>
         <source>Applying scene…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="821"/>
+        <location filename="../src/core/SessionManager.cpp" line="883"/>
         <source>Cooldown — %1s remaining</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="843"/>
+        <location filename="../src/core/SessionManager.cpp" line="905"/>
         <source>You need at least %1 credits (about 1 minute of swap) to start.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="1039"/>
+        <location filename="../src/core/SessionManager.cpp" line="1101"/>
         <source>No video received — session ended</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="1040"/>
+        <location filename="../src/core/SessionManager.cpp" line="1102"/>
         <source>No video received within %1s — ending session</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="848"/>
+        <location filename="../src/core/SessionManager.cpp" line="910"/>
         <source>Sign in required</source>
         <translation type="unfinished">Sign in required</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="873"/>
+        <location filename="../src/core/SessionManager.cpp" line="935"/>
         <source>Connecting to %1…</source>
         <translation type="unfinished">Connecting to %1…</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="855"/>
+        <location filename="../src/core/SessionManager.cpp" line="917"/>
         <source>Signaling unavailable</source>
         <translation type="unfinished">Signaling unavailable</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="856"/>
+        <location filename="../src/core/SessionManager.cpp" line="918"/>
         <source>Realtime signaling client missing</source>
         <translation type="unfinished">Realtime signaling client missing</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="993"/>
+        <location filename="../src/core/SessionManager.cpp" line="1055"/>
         <source>Applying %1…</source>
         <translation type="unfinished">Applying %1…</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="1013"/>
+        <location filename="../src/core/SessionManager.cpp" line="1075"/>
         <source>Updating prompt…</source>
         <translation type="unfinished">Updating prompt…</translation>
     </message>
@@ -3552,93 +3592,93 @@ Sign in again to continue.</source>
 <context>
     <name>StageFrame</name>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="117"/>
-        <location filename="../qml/dashboard/StageFrame.qml" line="751"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="118"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="753"/>
         <source>Try again</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="151"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="152"/>
         <source>STAGE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="233"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="234"/>
         <source>Swap Active</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="294"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="295"/>
         <source>%1 credits · burns %2/sec</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="325"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="326"/>
         <source>OBS Stream Active</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="349"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="350"/>
         <source>Double-click</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="427"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="428"/>
         <source>Ready to stream</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="437"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="438"/>
         <source>Pick a character in the workshop, then start the swap.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="447"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="448"/>
         <source>Press</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="463"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="464"/>
         <source>BEGIN SWAP</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="472"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="473"/>
         <source>to transform</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="592"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="593"/>
         <source>Reconnecting…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="592"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="593"/>
         <source>Connecting…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="609"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="610"/>
         <source>NO CREDITS USED YET</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="703"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="704"/>
         <source>Something went wrong. Please try again.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="716"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="718"/>
         <source>A VPN, firewall, or work/school wifi may be blocking it. Try another network. Or switch to the Standard engine in Settings, which works on most networks.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="736"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="738"/>
         <source>No credits charged</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/dashboard/StageFrame.qml" line="750"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="752"/>
         <source>Try again in %n second</source>
         <comment>Try again in %n seconds</comment>
         <translation type="unfinished">
@@ -3647,12 +3687,12 @@ Sign in again to continue.</source>
         </translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="759"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="761"/>
         <source>Dismiss</source>
         <translation type="unfinished">Dismiss</translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="769"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="771"/>
         <source>Contact support</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3743,7 +3783,7 @@ Sign in again to continue.</source>
         <translation type="unfinished">Insufficient credits</translation>
     </message>
     <message>
-        <location filename="../qml/components/StatusPill.qml" line="91"/>
+        <location filename="../qml/components/StatusPill.qml" line="92"/>
         <source>Session: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4027,27 +4067,27 @@ Sign in again to continue.</source>
 <context>
     <name>WebRtcSignalingClient</name>
     <message>
-        <location filename="../src/services/WebRtcSignalingClient.cpp" line="96"/>
+        <location filename="../src/services/WebRtcSignalingClient.cpp" line="100"/>
         <source>Unsupported signaling URL scheme: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/WebRtcSignalingClient.cpp" line="101"/>
+        <location filename="../src/services/WebRtcSignalingClient.cpp" line="105"/>
         <source>Invalid signaling URL</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/WebRtcSignalingClient.cpp" line="108"/>
+        <location filename="../src/services/WebRtcSignalingClient.cpp" line="112"/>
         <source>Refusing plaintext signaling to non-loopback host %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/WebRtcSignalingClient.cpp" line="196"/>
+        <location filename="../src/services/WebRtcSignalingClient.cpp" line="222"/>
         <source>Reference image too large — not sent</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/WebRtcSignalingClient.cpp" line="253"/>
+        <location filename="../src/services/WebRtcSignalingClient.cpp" line="302"/>
         <source>Signaling disconnected — reconnecting in %1s…</source>
         <translation type="unfinished">Signaling disconnected — reconnecting in %1s…</translation>
     </message>
@@ -4162,48 +4202,48 @@ Sign in again to continue.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="493"/>
-        <source>Backend: %1</source>
+        <location filename="../qml/main.qml" line="501"/>
+        <source>Backend request failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="499"/>
+        <location filename="../qml/main.qml" line="507"/>
         <source>Update available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="499"/>
+        <location filename="../qml/main.qml" line="507"/>
         <source>A newer version is ready</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="501"/>
+        <location filename="../qml/main.qml" line="514"/>
         <source>You&apos;re up to date</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="510"/>
-        <location filename="../qml/main.qml" line="512"/>
+        <location filename="../qml/main.qml" line="528"/>
+        <location filename="../qml/main.qml" line="530"/>
         <source>Payment confirmed</source>
         <translation type="unfinished">Payment confirmed</translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="512"/>
+        <location filename="../qml/main.qml" line="530"/>
         <source>Balance updated</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="534"/>
+        <location filename="../qml/main.qml" line="555"/>
         <source>Virtual camera started</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="538"/>
+        <location filename="../qml/main.qml" line="559"/>
         <source>Virtual camera stopped</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="553"/>
+        <location filename="../qml/main.qml" line="574"/>
         <source>Verifying payment…</source>
         <translation type="unfinished">Verifying payment…</translation>
     </message>

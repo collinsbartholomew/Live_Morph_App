@@ -133,6 +133,11 @@ void SessionManager::scheduleReconnect()
 {
     if (!m_active || !m_wantReconnect)
         return;
+    // One failure can produce both connectedChanged(false) AND errorOccurred,
+    // which would each call this — without the guard a single drop burns 2 of
+    // the 5 attempt budget and restarts the timer.
+    if (m_reconnectTimer.isActive())
+        return;
     // Per-session cap: m_reconnectAttempts resets on every successful WS
     // connect, so it alone would let a persistently stalling engine loop
     // forever. m_sessionReconnects only resets in startSession().
@@ -146,7 +151,10 @@ void SessionManager::scheduleReconnect()
     }
     ++m_reconnectAttempts;
     ++m_sessionReconnects;
-    const int base = qMin(10000, 1000 << (m_reconnectAttempts - 1));
+    // Start at 3s (not 1s): every successful handshake opens a new upstream
+    // connection, so a tight first retry hammers the provider and trips its
+    // rate limiter. Exponential 3s×2^(n-1) + 0–30% jitter, cap 30s.
+    const int base = qMin(30000, 3000 << (m_reconnectAttempts - 1));
     const int jitter = QRandomGenerator::global()->bounded(qMax(1, int(base * 0.3)));
     qInfo() << "SessionManager: reconnect attempt" << m_reconnectAttempts << "in" << base + jitter << "ms";
     m_reconnectTimer.start(base + jitter);
@@ -198,6 +206,21 @@ void SessionManager::wireSignaling()
     connect(m_signaling, &WebRtcSignalingClient::sessionIdChanged, this, [this]() {
         m_realtimeSessionId = m_signaling->sessionId();
         emit realtimeSessionIdChanged();
+    });
+
+    // Decart's session_id carries the media server endpoint (server_ip:server_port).
+    // Add it as a remote TCP ICE candidate — when UDP to high ports is firewalled
+    // (VPN, CGNAT, corporate NAT), TCP is the fallback that still reaches the server.
+    connect(m_signaling, &WebRtcSignalingClient::mediaServerReceived, this,
+            [this](const QString &ip, quint16 port) {
+        qInfo() << "SessionManager: media server" << ip << ":" << port << "— adding TCP ICE candidate";
+        if (m_peer) {
+            // TCP passive candidate at the media server endpoint
+            const QString cand = QStringLiteral(
+                "candidate:mediaserver 1 TCP 1518280447 %1 %2 typ host tcptype passive")
+                .arg(ip).arg(port);
+            m_peer->addRemoteIce(0, cand);
+        }
     });
 
     connect(m_signaling, &WebRtcSignalingClient::answerReceived, this, [this](const QString &sdp) {
@@ -285,6 +308,22 @@ void SessionManager::wireSignaling()
                               : tr("Insufficient credits — session ended"));
             return;
         }
+        // Terminal upstream/rate-limit errors: the session is dead server-side.
+        // Reconnecting here would open another upstream connection per retry and
+        // trip the rate limiter ("too many requests" storm), so stop instead.
+        const bool terminal = msg.contains(QStringLiteral("video_input_timeout"), Qt::CaseInsensitive)
+            || msg.contains(QStringLiteral("moderation_violation"), Qt::CaseInsensitive)
+            || msg.contains(QStringLiteral("too many requests"), Qt::CaseInsensitive)
+            || msg.contains(QStringLiteral("rate limit"), Qt::CaseInsensitive)
+            || msg.contains(QStringLiteral("rate_limit"), Qt::CaseInsensitive)
+            || msg.contains(QStringLiteral("429"));
+        if (terminal && m_active) {
+            m_wantReconnect = false;
+            setStatus(Status::Error, msg, ErrorKind::Connection);
+            emit error(msg);
+            stopSession();
+            return;
+        }
         // Transient reconnect notices — do not tear down the session
         if (msg.contains(QStringLiteral("reconnect"), Qt::CaseInsensitive)) {
             setStatus(Status::Connecting, msg);
@@ -304,6 +343,10 @@ void SessionManager::wireSignaling()
         if (m_active && !m_signalingConnected) {
             m_connectingProactively = false;
             setStatus(Status::Connecting, msg);
+            // A 429/rate-limited handshake must back off hard, not retry in ~1s.
+            if (msg.contains(QStringLiteral("429")) || msg.contains(QStringLiteral("too many"), Qt::CaseInsensitive)) {
+                m_reconnectAttempts = qMax(m_reconnectAttempts, 4); // force near-cap backoff
+            }
             scheduleReconnect();
             return;
         }
@@ -362,14 +405,28 @@ void SessionManager::createNativePeer()
     // rotate TURN credentials server-side; fall back to public STUN + env TURN.
     // webrtcbin wants "stun://host:port" / "turn://user:pass@host" URI forms,
     // so normalize the RFC 7064 ICE urls ("stun:host:port", "turn:host?...").
+    // Each backend-supplied URL is validated against a strict host charset
+    // before use — a compromised backend must not be able to inject pipeline
+    // syntax or redirect media to an arbitrary host.
+    static const QRegularExpression iceUriRe(
+        QStringLiteral("^(stun|turn|turns)://[A-Za-z0-9.\\-\\[\\]:@/?&=%~+]+$"),
+        QRegularExpression::CaseInsensitiveOption);
     QString stun;
     QString turn;
     const QStringList ice = m_backend ? m_backend->iceServerUrls() : QStringList();
     for (const QString &u : ice) {
-        if (u.startsWith(QLatin1String("stun:")))
-            stun = QStringLiteral("stun://") + u.mid(5);
-        else if (u.startsWith(QLatin1String("turn")))
-            turn = u;
+        if (u.startsWith(QLatin1String("stun:"))) {
+            const QString normalized = QStringLiteral("stun://") + u.mid(5);
+            if (iceUriRe.match(normalized).hasMatch())
+                stun = normalized;
+            else
+                qWarning() << "SessionManager: rejecting malformed STUN URL from backend";
+        } else if (u.startsWith(QLatin1String("turn"))) {
+            if (iceUriRe.match(u).hasMatch())
+                turn = u;
+            else
+                qWarning() << "SessionManager: rejecting malformed TURN URL from backend";
+        }
     }
     if (stun.isEmpty())
         stun = QStringLiteral("stun://stun.l.google.com:19302");
@@ -531,7 +588,12 @@ void SessionManager::destroyNativePeer()
     if (m_popoutWindowSink) m_peer->removeAuxSink(m_popoutWindowSink);
     if (m_previewWindowSink) m_peer->removeAuxSink(m_previewWindowSink);
     m_peer->stop();
-    m_peer->deleteLater();
+    // Synchronous delete, not deleteLater(): on the quit path the event loop
+    // never spins again, so a DeferredDelete would run ~GstRtcPeer during
+    // ~QApplication — after QCoreApplication is gone (queued emissions then
+    // dereference freed state). ~GstRtcPeer joins its worker thread, so a
+    // direct delete here is safe and quiesces the media plane before exit.
+    delete m_peer;
     m_peer = nullptr;
     emit peerVideoSinkChanged();
 }

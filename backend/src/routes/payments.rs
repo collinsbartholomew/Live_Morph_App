@@ -154,7 +154,7 @@ async fn create_order(
         if !crate::auth::check_rate_limit(&key, "order-create", 10, 60)
             || !crate::auth::check_rate_limit(&ip, "order-create-ip", 20, 60)
         {
-            return Err(AppError::RateLimited("too many order creations".into()));
+            return Err(AppError::RateLimited("too many order creations".into(), None));
         }
     }
     let pack = TokenPackage::by_key(&body.package_key)
@@ -440,7 +440,7 @@ pub async fn verify_order_impl(
     {
         let ip = crate::auth::client_ip(&req);
         if !crate::auth::check_rate_limit(&ip, "order-verify", 30, 60) {
-            return Err(AppError::RateLimited("too many verify attempts".into()));
+            return Err(AppError::RateLimited("too many verify attempts".into(), None));
         }
     }
 
@@ -749,7 +749,7 @@ async fn order_status(
         if !crate::auth::check_rate_limit(&key, "order-status", 20, 60)
             || !crate::auth::check_rate_limit(&ip, "order-status-ip", 40, 60)
         {
-            return Err(AppError::RateLimited("too many status polls".into()));
+            return Err(AppError::RateLimited("too many status polls".into(), None));
         }
     }
 
@@ -1196,7 +1196,7 @@ async fn refund_order(
     {
         let ip = crate::auth::client_ip(&req);
         if !crate::auth::check_rate_limit(&ip, "order-refund", 5, 60) {
-            return Err(AppError::RateLimited("too many refund attempts".into()));
+            return Err(AppError::RateLimited("too many refund attempts".into(), None));
         }
         let expected = cfg.admin_secret.as_deref().unwrap_or("");
         let provided = body.admin_secret.as_deref().unwrap_or("");
@@ -1291,15 +1291,45 @@ async fn refund_order(
         )
         .await?;
     if refund_result.matched_count == 0 {
+        // Roll the order back to provisioned so the refund can be retried —
+        // otherwise the order is stranded in "refunding" forever.
+        let _ = orders_coll
+            .update_one(
+                doc! { "_id": &order.id, "status": "refunding" },
+                doc! { "$set": { "status": "provisioned", "refund_error": "insufficient balance" } },
+            )
+            .await;
         return Err(AppError::BadRequest(
             "insufficient balance for refund".into(),
         ));
     }
     // Re-fetch to get actual post-refund balance (pre-update read may be stale)
-    let fresh_user = users_coll
+    let fresh_user = match users_coll
         .find_one(doc! { "_id": &user.id })
-        .await?
-        .ok_or_else(|| AppError::NotFound("user".into()))?;
+        .await
+    {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            let _ = orders_coll
+                .update_one(
+                    doc! { "_id": &order.id, "status": "refunding" },
+                    doc! { "$set": { "status": "provisioned", "refund_error": "user missing" } },
+                )
+                .await;
+            return Err(AppError::NotFound("user".into()));
+        }
+        Err(e) => {
+            // Debit succeeded but the re-fetch failed — do NOT leave the order in
+            // "refunding"; roll back so the operation is retryable.
+            let _ = orders_coll
+                .update_one(
+                    doc! { "_id": &order.id, "status": "refunding" },
+                    doc! { "$set": { "status": "provisioned", "refund_error": "re-fetch failed" } },
+                )
+                .await;
+            return Err(e.into());
+        }
+    };
     let balance_after = fresh_user.total_credits();
     let entry = crate::models::CreditLedgerEntry {
         id: new_id(),
@@ -1311,7 +1341,18 @@ async fn refund_order(
         note: body.reason.clone(),
         created_at: bson::DateTime::from_chrono(Utc::now()),
     };
-    ledger_coll.insert_one(&entry).await?;
+    if let Err(e) = ledger_coll.insert_one(&entry).await {
+        // Ledger insert failed AFTER the debit — roll back the order so the
+        // refund can be retried, and log loudly (audit gap otherwise).
+        tracing::error!(error = %e, order = %order.id, "refund ledger insert failed after debit");
+        let _ = orders_coll
+            .update_one(
+                doc! { "_id": &order.id, "status": "refunding" },
+                doc! { "$set": { "status": "provisioned", "refund_error": "ledger insert failed" } },
+            )
+            .await;
+        return Err(e.into());
+    }
     order.status = "refunded".into();
     // Final flip refunding → refunded (guarded so it can only happen once).
     let fin = orders_coll
@@ -1485,6 +1526,9 @@ pub async fn sweep_pending_orders(db: &Db, cfg: &Arc<Config>) -> AppResult<usize
                 "status": { "$in": ["pending", "creating"] },
                 "created_at": { "$lt": bson::DateTime::from_chrono(cutoff) },
             })
+            // Bound each tick so a large backlog can't pin a worker or make an
+            // unbounded burst of upstream provider calls.
+            .with_options(mongodb::options::FindOptions::builder().limit(200).build())
             .await?;
         while let Some(mut order) = cur.try_next().await? {
             let Some(pref) = order.provider_ref.clone() else { continue };

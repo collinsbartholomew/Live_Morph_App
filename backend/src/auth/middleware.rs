@@ -179,11 +179,18 @@ where
                                             .await
                                             .ok()
                                             .flatten();
-                                        let a = user
-                                            .map(|u| u.is_active && u.token_version == claims.ver)
-                                            .unwrap_or(false);
-                                        put_user_active(key_product, &claims.sub, claims.ver, a);
-                                        Some(a)
+                                        // Only cache a DEFINITIVE answer. A DB miss
+                                        // means "unknown user" — do NOT cache false:
+                                        // the user may register within the TTL and
+                                        // then be spuriously 401'd until it expires.
+                                        match user {
+                                            Some(u) => {
+                                                let a = u.is_active && u.token_version == claims.ver;
+                                                put_user_active(key_product, &claims.sub, claims.ver, a);
+                                                Some(a)
+                                            }
+                                            None => None,
+                                        }
                                     }
                                 };
                                 match active {

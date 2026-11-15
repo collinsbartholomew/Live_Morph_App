@@ -63,7 +63,7 @@ async fn metrics(
     // Rate-limit BEFORE the secret compare (no timing oracle on the secret).
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "metrics", 10, 60) {
-        return Err(AppError::RateLimited("too many metrics requests".into()));
+        return Err(AppError::RateLimited("too many metrics requests".into(), None));
     }
     let expected = cfg.admin_secret.as_deref().unwrap_or("");
     let provided = req

@@ -96,7 +96,7 @@ async fn referral_attach(
 ) -> AppResult<HttpResponse> {
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "referral-attach", 5, 60) {
-        return Err(AppError::RateLimited("too many referral attempts".into()));
+        return Err(AppError::RateLimited("too many referral attempts".into(), None));
     }
     let auth = require_user(&req)?;
     let product = ProductId::from_request(&req);

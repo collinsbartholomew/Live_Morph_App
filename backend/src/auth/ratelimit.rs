@@ -100,12 +100,10 @@ pub fn ws_origin_ok(req: &HttpRequest, cfg: &crate::config::Config) -> bool {
             return true;
         }
     }
-    if let Some(host) = req.headers().get("host").and_then(|h| h.to_str().ok()) {
-        let host = host.split(':').next().unwrap_or(host);
-        if ohost.eq_ignore_ascii_case(host) {
-            return true;
-        }
-    }
+    // Do NOT trust the client-supplied Host header as an origin fallback: a
+    // raw-socket client can set Origin and Host to the same attacker domain and
+    // pass. Only the configured public base URL (scheme+host+port) and explicit
+    // CORS origins are accepted.
     if let Some(cors) = &cfg.cors_origins {
         if cors
             .split(',')
@@ -241,5 +239,73 @@ mod tests {
         assert!(!check_rate_limit("10.2.0.1", "expire", 5, 1));
         thread::sleep(Duration::from_millis(1100));
         assert!(check_rate_limit("10.2.0.1", "expire", 5, 1));
+    }
+}
+
+#[cfg(test)]
+mod header_security_tests {
+    use super::*;
+    use actix_web::test::TestRequest;
+
+    // Default config: TRUSTED_PROXY_IPS empty → X-Forwarded-For must be IGNORED
+    // (otherwise any client rotates IPs to defeat every rate limit).
+    #[test]
+    fn xff_ignored_when_no_trusted_proxies() {
+        let req = TestRequest::default()
+            .peer_addr("203.0.113.9:5555".parse().unwrap())
+            .insert_header(("x-forwarded-for", "1.2.3.4, 5.6.7.8"))
+            .to_http_request();
+        assert_eq!(client_ip(&req), "203.0.113.9");
+    }
+
+    #[test]
+    fn no_xff_uses_peer_addr() {
+        let req = TestRequest::default()
+            .peer_addr("198.51.100.7:1234".parse().unwrap())
+            .to_http_request();
+        assert_eq!(client_ip(&req), "198.51.100.7");
+    }
+
+    fn cfg_with(base: &str, cors: Option<&str>) -> crate::config::Config {
+        let mut c = crate::config::Config::from_env().expect("test env loads");
+        c.public_base_url = base.to_string();
+        c.cors_origins = cors.map(String::from);
+        c
+    }
+
+    #[test]
+    fn ws_origin_matches_base_url_exact() {
+        let cfg = cfg_with("https://api.example.com", None);
+        let ok = TestRequest::default()
+            .insert_header(("origin", "https://api.example.com"))
+            .to_http_request();
+        assert!(ws_origin_ok(&ok, &cfg));
+        // wrong scheme must fail
+        let bad_scheme = TestRequest::default()
+            .insert_header(("origin", "http://api.example.com"))
+            .to_http_request();
+        assert!(!ws_origin_ok(&bad_scheme, &cfg));
+        // wrong host must fail
+        let bad_host = TestRequest::default()
+            .insert_header(("origin", "https://evil.com"))
+            .to_http_request();
+        assert!(!ws_origin_ok(&bad_host, &cfg));
+        // client-controlled Host header must NOT be a fallback
+        let spoofed = TestRequest::default()
+            .insert_header(("origin", "https://evil.com"))
+            .insert_header(("host", "evil.com"))
+            .to_http_request();
+        assert!(!ws_origin_ok(&spoofed, &cfg));
+    }
+
+    #[test]
+    fn ws_origin_allows_cors_list_and_no_origin() {
+        let cfg = cfg_with("https://api.example.com", Some("https://app.example.com"));
+        let cors_ok = TestRequest::default()
+            .insert_header(("origin", "https://app.example.com"))
+            .to_http_request();
+        assert!(ws_origin_ok(&cors_ok, &cfg));
+        let no_origin = TestRequest::default().to_http_request();
+        assert!(ws_origin_ok(&no_origin, &cfg));
     }
 }

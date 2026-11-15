@@ -77,12 +77,30 @@ async fn pay_kind(
     {
         let ip = crate::auth::client_ip(&req);
         if !crate::auth::check_rate_limit(&ip, "order-create", 10, 60) {
-            return Err(AppError::RateLimited("too many order attempts".into()));
+            return Err(AppError::RateLimited("too many order attempts".into(), None));
         }
     }
 
     let _ = product(&req);
     let auth = require_user(&req)?;
+    // Starter pack is single-claim: a user who already has it must not be able
+    // to buy the cheapest pack repeatedly.
+    if kind == "starter_pack" {
+        let users = match ProductId::from_request(&req) {
+            ProductId::Secondary => db.users_secondary(),
+            ProductId::LiveMorph => db.users(),
+        };
+        // starter_pack is a raw field (not on the typed User struct) — match it
+        // in the query itself.
+        let already = users
+            .count_documents(doc! { "_id": &auth.user_id, "starter_pack": true })
+            .await?;
+        if already > 0 {
+            return Err(AppError::Conflict(
+                "starter pack already claimed — pick an upgrade plan".into(),
+            ));
+        }
+    }
     let created = orders::create_plan_order(&db, &cfg, &req, &auth, kind, plan, provider).await?;
     Ok(HttpResponse::Ok().json(orders::created_order_json(&created)))
 }
@@ -206,8 +224,7 @@ async fn confirm_crypto_impl(
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "confirm-crypto", 10, 60) {
         return Err(AppError::RateLimited(
-            "too many confirm attempts — try again in 60 seconds".into(),
-        ));
+            "too many confirm attempts — try again in 60 seconds".into(), None));
     }
     let payment_id = body
         .payment_id
@@ -314,8 +331,7 @@ async fn activation_nowpayments_status(
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "nowpayments-status", 20, 60) {
         return Err(AppError::RateLimited(
-            "too many status polls — try again in 60 seconds".into(),
-        ));
+            "too many status polls — try again in 60 seconds".into(), None));
     }
     let payment_id = path.into_inner();
     // Ownership: the payment_id must belong to one of the caller's own orders,

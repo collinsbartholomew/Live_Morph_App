@@ -211,6 +211,10 @@ bool I18nManager::loadFromCache(const QString &lang)
     QFile file(cachePath(lang));
     if (!file.exists() || !file.open(QIODevice::ReadOnly))
         return false;
+    // Cap the read (like the catalog's 4 MiB cap) so a tampered/huge cache
+    // file isn't parsed wholesale.
+    if (file.size() > 4 * 1024 * 1024)
+        return false;
 
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
     if (doc.isNull() || !doc.isObject())

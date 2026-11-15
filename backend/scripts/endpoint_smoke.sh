@@ -36,7 +36,6 @@ check "P2 crypto config" "${HDR_P2[@]}" "$BASE/api/v1/settings/crypto"
 check "P2 streaming availability" "${HDR_P2[@]}" "$BASE/api/v1/settings/streaming-availability"
 check "P2 credit burn rate" "${HDR_P2[@]}" "$BASE/api/v1/settings/credit-burn-rate"
 check "P2 background presets" "${HDR_P2[@]}" "$BASE/api/v1/streaming/background-presets"
-check "ICE servers" "${HDR_LM[@]}" "$BASE/api/v1/webrtc/ice-servers"
 check "LM packages" "${HDR_LM[@]}" "$BASE/api/v1/payments/packages"
 check "LM catalog" "${HDR_LM[@]}" "$BASE/api/v1/catalog"
 check "Google oauth status" "${HDR_LM[@]}" "$BASE/api/v1/auth/oauth/google/status"
@@ -58,6 +57,7 @@ else
 fi
 if [[ -n "${AT:-}" ]]; then
   AUTH=(-H "Authorization: Bearer $AT" "${HDR_LM[@]}")
+  check "ICE servers (authed)" "${AUTH[@]}" "$BASE/api/v1/webrtc/ice-servers"
   check "LM me" "${AUTH[@]}" "$BASE/api/v1/auth/me"
   check "LM credits balance" "${AUTH[@]}" "$BASE/api/v1/credits/balance"
   check "LM credits ledger" "${AUTH[@]}" "$BASE/api/v1/credits/ledger"

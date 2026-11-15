@@ -57,8 +57,8 @@ pub async fn realtime_ws(
     {
         let ip = crate::auth::client_ip(&req);
         let key = format!("{}:{}", claims.sub, ip);
-        if !crate::auth::check_rate_limit(&key, "ws-realtime", 10, 60)
-            || !crate::auth::check_rate_limit(&ip, "ws-realtime-ip", 30, 60)
+        if !crate::auth::check_rate_limit(&key, "ws-realtime", 20, 60)
+            || !crate::auth::check_rate_limit(&ip, "ws-realtime-ip", 40, 60)
         {
             return Err(actix_web::error::ErrorTooManyRequests("too many realtime connections"));
         }
@@ -293,13 +293,21 @@ pub async fn realtime_ws(
     // Upgrade to actix websocket. A plain GET (no upgrade headers) with a
     // valid token would claim the slot above and then fail here — release the
     // slot and end the session row on that path instead of leaking them.
-    let (res, mut session, mut msg_stream) = match actix_ws::handle(&req, stream) {
+    let (res, mut session, msg_stream) = match actix_ws::handle(&req, stream) {
         Ok(v) => v,
         Err(e) => {
             mark_session_ended(&db, &claims.sub, &session_id, "upgrade_failed", product).await;
             return Err(e);
         }
     };
+    // Raise the per-frame cap to MAX_BODY_BYTES (actix-ws defaults to 64 KiB,
+    // which would kill the session on a large set_image) and aggregate
+    // continuation frames so fragmented messages are reassembled.
+    let max_frame = cfg.max_body_bytes as usize;
+    let mut msg_stream = msg_stream
+        .max_frame_size(max_frame)
+        .aggregate_continuations()
+        .max_continuation_size(max_frame);
 
     let cfg = cfg.clone();
     let db = db.clone();
@@ -438,7 +446,7 @@ async fn run_proxy(
     db: &Db,
     ctx: ProxySessionCtx<'_>,
     client: &mut actix_ws::Session,
-    client_stream: &mut actix_ws::MessageStream,
+    client_stream: &mut actix_ws::AggregatedMessageStream,
 ) -> anyhow::Result<()> {
     let ProxySessionCtx {
         user_id,
@@ -447,6 +455,9 @@ async fn run_proxy(
         product,
         tier_multiplier,
     } = ctx;
+    // Clone the session handle up front so the Ping handler can pong without
+    // holding a borrow on `client` across the async blocks.
+    let mut session_ping = client.clone();
     // API key must be query-encoded (keys can contain + / =)
     let upstream_url = format!(
         "{}?api_key={}&model={}",
@@ -454,6 +465,9 @@ async fn run_proxy(
         urlencoding::encode(&cfg.decart_api_key),
         urlencoding::encode(model)
     );
+    // Never log the full URL: tungstenite error variants can embed the request
+    // URI, which carries ?api_key=… — strip the query for any log output.
+    let upstream_log = upstream_url.split('?').next().unwrap_or(&upstream_url).to_string();
 
     // Bound the upstream dial: while it hangs the claimed slot is held with no
     // stream and no billing (and client Pings keep the 90s silence break from
@@ -469,7 +483,13 @@ async fn run_proxy(
         std::io::Error::new(std::io::ErrorKind::TimedOut, "upstream connect timed out")
     })?
     .map_err(|e| {
-        error!(session = %session_id, error = %e, "decart upstream connect failed");
+        // Log only the error KIND plus the query-stripped URL — never the raw
+        // Display, which can contain the api_key query parameter.
+        let kind = match &e {
+            tokio_tungstenite::tungstenite::Error::Io(ioe) => format!("io:{:?}", ioe.kind()),
+            other => format!("{:?}", std::mem::discriminant(other)),
+        };
+        error!(session = %session_id, url = %upstream_log, error_kind = %kind, "decart upstream connect failed");
         e
     })?;
     info!(session = %session_id, "run_proxy: decart upstream connected");
@@ -502,7 +522,18 @@ async fn run_proxy(
                 Ok(m) => m,
                 Err(_) => break, // 90s silence — dead connection
             };
-            let Some(Ok(msg)) = msg else { break };
+            let msg = match msg {
+                Some(Ok(m)) => m,
+                Some(Err(e)) => {
+                    // Frame-level error (e.g. overflow past the configured cap):
+                    // tell the client why, then end — don't silently kill a
+                    // healthy billing session.
+                    warn!(error = %e, "client WS frame error — ending session");
+                    let _ = tx_client.try_send(json!({ "type": "error", "error": "frame_too_large" }).to_string());
+                    break;
+                }
+                None => break,
+            };
             if last_touch.elapsed() >= std::time::Duration::from_secs(1) {
                 last_touch = std::time::Instant::now();
                 let _ = session_coll(&db_touch, product)
@@ -513,7 +544,7 @@ async fn run_proxy(
                     .await;
             }
             match msg {
-                actix_ws::Message::Text(t) => {
+                actix_ws::AggregatedMessage::Text(t) => {
                     // Cap inbound control frames (set_image base64 can be huge) —
                     // anything past the API body limit is rejected, not forwarded.
                     if t.len() > cfg.max_body_bytes {
@@ -535,10 +566,25 @@ async fn run_proxy(
                                         continue;
                                     }
                                 }
-                                let _ = tx_up_c.try_send(t.to_string());
+                                // Bounded send: a full upstream channel must not
+                                // silently drop an SDP/offer or image — wait briefly,
+                                // and if still full, fail the session loudly.
+                                if tokio::time::timeout(
+                                    std::time::Duration::from_secs(5),
+                                    tx_up_c.send(t.to_string()),
+                                ).await.is_err() {
+                                    warn!("upstream channel full — dropping signaling frame");
+                                    let _ = tx_client.try_send(json!({ "type": "error", "error": "upstream_backpressure" }).to_string());
+                                }
                             }
                             "offer" | "ice-candidate" => {
-                                let _ = tx_up_c.try_send(t.to_string());
+                                if tokio::time::timeout(
+                                    std::time::Duration::from_secs(5),
+                                    tx_up_c.send(t.to_string()),
+                                ).await.is_err() {
+                                    warn!("upstream channel full — offer/ICE dropped");
+                                    let _ = tx_client.try_send(json!({ "type": "error", "error": "upstream_backpressure" }).to_string());
+                                }
                             }
                             "ping" => {
                                 let _ = tx_client.try_send(json!({ "type": "pong" }).to_string());
@@ -552,11 +598,13 @@ async fn run_proxy(
                         }
                     }
                 }
-                actix_ws::Message::Close(_) => break,
-                // Ping: client keepalive — QWebSocket auto-replies Pong at the
-                // protocol level; just keep the loop alive.
-                actix_ws::Message::Ping(_) => {}
-                actix_ws::Message::Pong(_) => {}
+                actix_ws::AggregatedMessage::Close(_) => break,
+                // Protocol-level keepalive: answer Ping with Pong so clients
+                // that rely on transport pings don't drop the connection.
+                actix_ws::AggregatedMessage::Ping(p) => {
+                    let _ = session_ping.pong(&p).await;
+                }
+                actix_ws::AggregatedMessage::Pong(_) => {}
                 _ => {}
             }
         }
@@ -611,40 +659,55 @@ async fn run_proxy(
                             }
                             "generation_tick" => {
                                 let secs = v.get("seconds").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                                // Only advance the billing watermark — an upstream
-                                // counter reset must never re-bill the same seconds.
+                                // Billing watermark: delta never re-bills paid seconds
+                                // even if the upstream counter resets. Advance it ONLY
+                                // after a successful charge — a failed charge must be
+                                // retried on the next tick, not silently forgiven.
                                 let delta_secs = (secs - last_billed_seconds).max(0.0);
-                                if secs > last_billed_seconds {
-                                    last_billed_seconds = secs;
-                                }
                                 if delta_secs > 0.0 {
                                     let charge = delta_secs * effective_cps;
-                                    if let Err(e) = charge_user(
+                                    match charge_user(
                                         &db_bill, &cfg_bill, &uid, charge, delta_secs, &sid,
                                         product,
                                     )
                                     .await
                                     {
-                                        warn!(error = %e, "billing failed — forcing disconnect");
-                                        let err_msg = e.to_string();
-                                        let code = if err_msg.contains("decart")
-                                            || err_msg.contains("budget")
-                                        {
-                                            "platform_budget_exhausted"
-                                        } else {
-                                            "insufficient_credits"
-                                        };
-                                        let _ = tokio::time::timeout(
-                                            std::time::Duration::from_secs(2),
-                                            tx_client.send(json!({
-                                                "type": "error",
-                                                "error": code,
-                                                "code": code
-                                            })
-                                            .to_string()),
-                                        )
-                                        .await;
-                                        break;
+                                        Ok(()) => {
+                                            // Charge succeeded — now commit the watermark.
+                                            if secs > last_billed_seconds {
+                                                last_billed_seconds = secs;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            let err_msg = e.to_string();
+                                            // Classify by stable machine-readable prefixes,
+                                            // never by prose substring.
+                                            let (code, terminal) = if err_msg == "insufficient_credits" {
+                                                ("insufficient_credits", true)
+                                            } else if err_msg.starts_with("platform_budget_exhausted") {
+                                                ("platform_budget_exhausted", true)
+                                            } else {
+                                                // Transient (DB/IO) — do NOT advance the
+                                                // watermark and do NOT kill the session;
+                                                // the next tick retries the same delta.
+                                                warn!(error = %e, "billing transient error — will retry next tick");
+                                                ("billing_error", false)
+                                            };
+                                            if terminal {
+                                                warn!(error = %e, "billing failed — forcing disconnect");
+                                                let _ = tokio::time::timeout(
+                                                    std::time::Duration::from_secs(2),
+                                                    tx_client.send(json!({
+                                                        "type": "error",
+                                                        "error": code,
+                                                        "code": code
+                                                    })
+                                                    .to_string()),
+                                                )
+                                                .await;
+                                                break;
+                                            }
+                                        }
                                     }
                                     let _ = if last_bill_write.elapsed() >= std::time::Duration::from_secs(5) {
                                         last_bill_write = std::time::Instant::now();
@@ -670,12 +733,6 @@ async fn run_proxy(
                                 // Final charge for any remainder — surface failures so the
                                 // tail usage is never silently granted.
                                 let delta_secs = (secs - last_billed_seconds).max(0.0);
-                                // Advance the watermark on the terminal message too:
-                                // a late tick after generation_ended must never
-                                // re-bill the same tail.
-                                if secs > last_billed_seconds {
-                                    last_billed_seconds = secs;
-                                }
                                 if delta_secs > 0.0 {
                                     let charge = delta_secs * effective_cps;
                                     if let Err(e) = charge_user(
@@ -693,6 +750,10 @@ async fn run_proxy(
                                                 doc! { "$set": { "billing_tail_error": true } },
                                             )
                                             .await;
+                                    } else if secs > last_billed_seconds {
+                                        // Advance the terminal watermark only after the
+                                        // charge succeeded, so a late tick never re-bills.
+                                        last_billed_seconds = secs;
                                     }
                                 }
                                 // Record billing tail only — do NOT flip status
@@ -712,7 +773,14 @@ async fn run_proxy(
                             _ => {}
                         }
                     }
-                    if tx_client.try_send(text_str).is_err() {
+                    // Bounded send: a full client channel means a stalled client —
+                    // apply brief backpressure instead of tearing down a healthy,
+                    // billing session. Only give up if the client is truly stuck.
+                    if tokio::time::timeout(
+                        std::time::Duration::from_secs(10),
+                        tx_client.send(text_str),
+                    ).await.is_err() {
+                        warn!("client channel full for 10s — ending session");
                         break;
                     }
                 }
@@ -846,24 +914,45 @@ async fn charge_user(
 
     // 2) Platform pays Decart on the shared API key
     if let Err(e) = crate::services::billing::debit_decart_budget(db, cfg, delta_secs).await {
-        // Refund the exact amount back to the platform (credit) balance. The
-        // debit was bonus-first, but both balances are interchangeable spendable
-        // credits, so a single credit-balance refund preserves the user's total.
+        // Refund the exact amount back to the credit balance. The debit was
+        // bonus-first, but both balances are interchangeable spendable credits,
+        // so a single credit-balance refund preserves the user's total.
+        // Bounded retry: a swallowed failure here leaves the user debited with
+        // no audit trail, so never give up silently.
         let refund = doc! {
             "$inc": { "credit_balance": amount },
             "$set": { "updated_at": chrono::Utc::now() },
         };
-        let _ = match product {
-            crate::product::ProductId::Secondary => {
-                db.users_secondary()
-                    .update_one(doc! { "_id": user_id }, refund)
-                    .await
-            }
-            crate::product::ProductId::LiveMorph => {
-                db.users().update_one(doc! { "_id": user_id }, refund).await
-            }
+        let users_coll = match product {
+            crate::product::ProductId::Secondary => db.users_secondary(),
+            crate::product::ProductId::LiveMorph => db.users(),
         };
-        anyhow::bail!("{e}");
+        let mut refunded = false;
+        for attempt in 0..3 {
+            match users_coll
+                .update_one(doc! { "_id": user_id }, refund.clone())
+                .await
+            {
+                Ok(_) => {
+                    refunded = true;
+                    break;
+                }
+                Err(re) => {
+                    tracing::warn!(error = %re, attempt, "billing refund attempt failed");
+                    tokio::time::sleep(std::time::Duration::from_millis(50u64 << attempt)).await;
+                }
+            }
+        }
+        if !refunded {
+            tracing::error!(
+                amount,
+                session = %session_id,
+                "billing refund FAILED after retries — user debited without budget burn; reconcile manually"
+            );
+        }
+        // Stable machine-readable prefix so callers classify by prefix, not
+        // by fragile substring matching on the human message.
+        anyhow::bail!("platform_budget_exhausted: {e}");
     }
 
     let balance_after = updated.total_credits();

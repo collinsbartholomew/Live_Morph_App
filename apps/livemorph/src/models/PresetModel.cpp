@@ -69,6 +69,8 @@ void PresetModel::load()
     };
     QFile f(presetStorePath());
     if (f.open(QIODevice::ReadOnly)) {
+        if (f.size() > 4 * 1024 * 1024)
+            return; // cap: don't parse a tampered/huge cache wholesale
         const auto doc = QJsonDocument::fromJson(f.readAll());
         if (doc.isArray()) {
             const auto arr = doc.array();

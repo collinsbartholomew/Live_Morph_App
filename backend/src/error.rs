@@ -19,7 +19,7 @@ pub enum AppError {
     #[error("conflict: {0}")]
     Conflict(String),
     #[error("rate limited: {0}")]
-    RateLimited(String),
+    RateLimited(String, Option<u64>),
     #[error("insufficient credits")]
     InsufficientCredits,
     #[error("internal: {0}")]
@@ -41,7 +41,7 @@ impl ResponseError for AppError {
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::Conflict(_) => StatusCode::CONFLICT,
-            AppError::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
+            AppError::RateLimited(..) => StatusCode::TOO_MANY_REQUESTS,
             AppError::InsufficientCredits => StatusCode::PAYMENT_REQUIRED,
             AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -55,14 +55,15 @@ impl ResponseError for AppError {
             AppError::NotFound(_) => "not_found",
             AppError::BadRequest(_) => "bad_request",
             AppError::Conflict(_) => "conflict",
-            AppError::RateLimited(_) => "rate_limited",
+            AppError::RateLimited(..) => "rate_limited",
             AppError::InsufficientCredits => "insufficient_credits",
             AppError::Internal(_) => "internal",
         };
         let mut builder = HttpResponse::build(self.status_code());
-        if matches!(self, AppError::RateLimited(_)) {
-            builder.insert_header(("Retry-After", "60"));
-            builder.insert_header(("X-RateLimit-Reset", "60"));
+        if let AppError::RateLimited(_, retry) = self {
+            let secs = retry.unwrap_or(60).to_string();
+            builder.insert_header(("Retry-After", secs.as_str()));
+            builder.insert_header(("X-RateLimit-Reset", secs.as_str()));
         }
         // Avoid caching error payloads
         builder.insert_header(("Cache-Control", "no-store"));

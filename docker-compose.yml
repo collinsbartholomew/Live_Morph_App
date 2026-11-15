@@ -28,8 +28,10 @@ services:
       # off-host (the container itself still listens on HOST=0.0.0.0 inside).
       - "127.0.0.1:3874:3874"
     env_file:
-      # Optional: on a fresh clone without backend/.env the stack still boots
-      # on the `environment:` defaults below (Compose >= 2.24 long syntax).
+      # Optional: when ./backend/.env is missing the api container still needs
+      # JWT_SECRET and DECART_API_KEY (they have no defaults) — provide them
+      # via the environment: section below or a shell env var. Compose >= 2.24
+      # long syntax.
       - path: ./backend/.env
         required: false
     environment:
@@ -39,6 +41,9 @@ services:
       MONGODB_DB_SECONDARY: ${MONGODB_DB_SECONDARY:-secondary}
       HOST: 0.0.0.0
       PORT: 3874
+      # Required, no defaults — supply real values for a real deploy:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the shell env or backend/.env}
+      DECART_API_KEY: ${DECART_API_KEY:?set DECART_API_KEY in the shell env or backend/.env}
       # The bundled local mongo has no TLS, and Config::validate() rejects a
       # non-TLS mongodb:// URI in production — so this local stack must run
       # in development mode. For a real staging/prod deploy, point

@@ -19,6 +19,9 @@ fn update_payload(_cfg: &Config) -> serde_json::Value {
     let current = env!("CARGO_PKG_VERSION");
     let download = std::env::var("APP_DOWNLOAD_URL").unwrap_or_default();
     let notes = std::env::var("APP_UPDATE_NOTES").unwrap_or_default();
+    // sha256 of the download artifact — the client refuses to install an update
+    // whose digest doesn't match (or isn't provided) when a URL is set.
+    let sha256 = std::env::var("APP_UPDATE_SHA256").unwrap_or_default();
     let force = std::env::var("APP_FORCE_UPDATE")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
@@ -32,6 +35,7 @@ fn update_payload(_cfg: &Config) -> serde_json::Value {
         "latest": latest,
         "download_url": download,
         "url": download,
+        "sha256": sha256,
         "notes": notes,
         "products": [ProductId::LiveMorph.as_str(), ProductId::Secondary.as_str()],
     })

@@ -107,3 +107,67 @@ pub fn decode_refresh(cfg: &Config, token: &str) -> AppResult<Claims> {
     }
     Ok(data.claims)
 }
+
+#[cfg(test)]
+mod alg_confusion_tests {
+    use super::*;
+    use crate::config::Config;
+
+    fn test_cfg() -> Config {
+        let mut c = Config::from_env().expect("test env loads");
+        c.jwt_secret = "test-secret-test-secret-test-secret-32".to_string();
+        c
+    }
+
+    #[test]
+    fn alg_none_token_is_rejected() {
+        let cfg = test_cfg();
+        // Hand-crafted alg:none token (unsigned) — must never validate.
+        let header = base64_url(b"{\"alg\":\"none\",\"typ\":\"JWT\"}");
+        let payload = base64_url(br#"{"sub":"u","typ":"access","iss":"livemorph","aud":"livemorph","exp":9999999999,"iat":0,"jti":"x","ver":0}"#);
+        let token = format!("{header}.{payload}.");
+        assert!(decode_access(&cfg, &token).is_err(), "alg:none must be rejected");
+    }
+
+    #[test]
+    fn wrong_alg_rs256_rejected() {
+        let cfg = test_cfg();
+        let header = base64_url(b"{\"alg\":\"RS256\",\"typ\":\"JWT\"}");
+        let payload = base64_url(br#"{"sub":"u","typ":"access","iss":"livemorph","aud":"livemorph","exp":9999999999,"iat":0,"jti":"x","ver":0}"#);
+        let token = format!("{header}.{payload}.fakesig");
+        assert!(decode_access(&cfg, &token).is_err(), "RS256 must be rejected (HS256 pinned)");
+    }
+
+    #[test]
+    fn wrong_secret_rejected() {
+        let cfg = test_cfg();
+        let pair = issue_pair_for(&cfg, "u1", "u@x.test", "livemorph", 0).unwrap();
+        let mut other = test_cfg();
+        other.jwt_secret = "a-completely-different-secret-32chars!!".to_string();
+        assert!(decode_access(&other, &pair.access_token).is_err());
+    }
+
+    #[test]
+    fn refresh_token_rejected_by_access_decoder() {
+        let cfg = test_cfg();
+        let pair = issue_pair_for(&cfg, "u1", "u@x.test", "livemorph", 0).unwrap();
+        assert!(decode_access(&cfg, &pair.refresh_token).is_err(), "typ=refresh must not decode as access");
+        assert!(decode_refresh(&cfg, &pair.access_token).is_err(), "typ=access must not decode as refresh");
+        assert!(decode_refresh(&cfg, &pair.refresh_token).is_ok());
+    }
+
+    fn base64_url(data: &[u8]) -> String {
+        // minimal base64url encoder for tests
+        const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut out = String::new();
+        for chunk in data.chunks(3) {
+            let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+            let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+            out.push(T[(n >> 18) as usize & 63] as char);
+            out.push(T[(n >> 12) as usize & 63] as char);
+            if chunk.len() > 1 { out.push(T[(n >> 6) as usize & 63] as char); }
+            if chunk.len() > 2 { out.push(T[n as usize & 63] as char); }
+        }
+        out
+    }
+}

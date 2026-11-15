@@ -63,7 +63,7 @@ async fn session_start(
     {
         let ip = crate::auth::client_ip(&req);
         if !crate::auth::check_rate_limit(&ip, "session-start", 10, 60) {
-            return Err(AppError::RateLimited("too many session starts".into()));
+            return Err(AppError::RateLimited("too many session starts".into(), None));
         }
     }
     let sid = new_id();

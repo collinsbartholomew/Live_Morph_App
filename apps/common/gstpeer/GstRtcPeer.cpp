@@ -37,15 +37,16 @@ struct PendingFrame
     QVideoFrame frame; // implicit shared w/ the source camera frame
 };
 
-// webrtcbin's stun-server/turn-server values are interpolated into a
-// gst_parse_launch pipeline string, where whitespace separates elements —
-// reject anything that isn't a plain ICE URI (printable ASCII, no spaces,
-// stun/turn/turns scheme only) so a crafted server URL can't inject
-// pipeline elements.
+// ICE server URIs are set via g_object_set AFTER pipeline creation, never
+// interpolated into the gst_parse_launch string — the URI regex below is a
+// second line of defense, but property-setting removes the injection surface
+// entirely (gst_parse_launch treats `!`, quotes and parens as syntax).
 bool isValidIceServerUri(const QString &uri)
 {
+    // Allow only stun/turn/turns schemes with a conservative host charset —
+    // explicitly EXCLUDES gst_parse_launch syntax tokens: ! " ( ) , ; and whitespace.
     static const QRegularExpression re(
-        QStringLiteral("^(stun|turn|turns)://[!-~]+$"),
+        QStringLiteral("^(stun|turn|turns)://[A-Za-z0-9.\\-\\[\\]:@/?&=%~+]+$"),
         QRegularExpression::CaseInsensitiveOption);
     return re.match(uri).hasMatch();
 }
@@ -74,6 +75,7 @@ struct GstRtcPeerImpl
     bool recvVideo = true;
     bool offerCreated = false;
     bool remoteDescriptionSet = false;
+    guint offerFallbackId = 0;
 
     QString stun;
     QString turn;
@@ -183,6 +185,10 @@ void onOfferCreated(GstPromise *promise, gpointer userData)
         g_free(text);
     }
     im->offerCreated = true;
+    if (im->offerFallbackId) {
+        g_source_remove(im->offerFallbackId);
+        im->offerFallbackId = 0;
+    }
     gst_webrtc_session_description_free(offer);
 }
 
@@ -524,10 +530,16 @@ gboolean workerStart(gpointer userData)
         sendVideo = im->sendVideo;
         recvVideo = im->recvVideo;
     }
-    QString stunPart = !stun.isEmpty() ? QStringLiteral(" stun-server=%1").arg(stun)
-                                       : QString();
-    QString turnPart = !turn.isEmpty() ? QStringLiteral(" turn-server=%1").arg(turn)
-                                       : QString();
+    // Validate the ICE URIs (defense in depth) but do NOT interpolate them into
+    // the pipeline string — they are set as webrtcbin properties after creation.
+    if (!stun.isEmpty() && !isValidIceServerUri(stun)) {
+        im->emitError(QStringLiteral("Rejected malformed STUN server URL"));
+        return G_SOURCE_REMOVE;
+    }
+    if (!turn.isEmpty() && !isValidIceServerUri(turn)) {
+        im->emitError(QStringLiteral("Rejected malformed TURN server URL"));
+        return G_SOURCE_REMOVE;
+    }
 
     QString desc;
     if (sendVideo) {
@@ -537,7 +549,7 @@ gboolean workerStart(gpointer userData)
         // webrtcbin advertises them in the SDP — remote peers then send PLI
         // keyframe requests after packet loss, which vp8enc honors via the
         // forwarding rtcp-fb caps: recovery without our intervention.
-        desc = QStringLiteral("webrtcbin name=webrtc") + stunPart + turnPart
+        desc = QStringLiteral("webrtcbin name=webrtc")
             + QStringLiteral(
             " appsrc name=appsrc is-live=true format=time do-timestamp=true "
             "! queue max-size-buffers=2 leaky=downstream "
@@ -553,7 +565,7 @@ gboolean workerStart(gpointer userData)
             "! webrtc. ")
             .arg(im->qBitrateKbps.load() * 1000);
     } else {
-        desc = QStringLiteral("webrtcbin name=webrtc") + stunPart + turnPart;
+        desc = QStringLiteral("webrtcbin name=webrtc");
     }
 
     GError *parseErr = nullptr;
@@ -570,6 +582,12 @@ gboolean workerStart(gpointer userData)
     g_clear_error(&parseErr);
 
     im->webrtc = gst_bin_get_by_name(GST_BIN(im->pipeline), "webrtc");
+    // Set ICE servers as webrtcbin PROPERTIES (never interpolated into the
+    // gst_parse_launch string) — removes the pipeline-injection surface.
+    if (!stun.isEmpty())
+        g_object_set(im->webrtc, "stun-server", stun.toUtf8().constData(), nullptr);
+    if (!turn.isEmpty())
+        g_object_set(im->webrtc, "turn-server", turn.toUtf8().constData(), nullptr);
     if (sendVideo) {
         im->appsrc = gst_bin_get_by_name(GST_BIN(im->pipeline), "appsrc");
         im->capsFilter = gst_bin_get_by_name(GST_BIN(im->pipeline), "prefilter");
@@ -592,19 +610,27 @@ gboolean workerStart(gpointer userData)
         gst_caps_unref(fpsCaps);
     }
 
-    if (!sendVideo && recvVideo) {
-        GstCaps *caps = gst_caps_from_string(
-            "application/x-rtp,media=video,encoding-name=VP8,clock-rate=90000");
-        g_signal_emit_by_name(im->webrtc, "add-transceiver",
-                              GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, caps);
-        gst_caps_unref(caps);
-    }
-
+    // Connect webrtcbin signals BEFORE adding transceivers so we don't miss
+    // a synchronous on-negotiation-needed emitted during add-transceiver.
     g_signal_connect(im->webrtc, "on-negotiation-needed", G_CALLBACK(onNegotiationNeeded), im);
     g_signal_connect(im->webrtc, "on-ice-candidate", G_CALLBACK(onLocalIceCandidate), im);
     g_signal_connect(im->webrtc, "pad-added", G_CALLBACK(onPadAdded), im);
     g_signal_connect(im->webrtc, "notify::connection-state", G_CALLBACK(onConnectionStateNotify), im);
     g_signal_connect(im->webrtc, "notify::ice-connection-state", G_CALLBACK(onIceStateNotify), im);
+
+    if (sendVideo || recvVideo) {
+        GstCaps *caps = gst_caps_from_string(
+            "application/x-rtp,media=video,encoding-name=VP8,clock-rate=90000");
+        GstWebRTCRTPTransceiverDirection dir;
+        if (sendVideo && recvVideo)
+            dir = GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV;
+        else if (sendVideo)
+            dir = GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY;
+        else
+            dir = GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY;
+        g_signal_emit_by_name(im->webrtc, "add-transceiver", dir, caps);
+        gst_caps_unref(caps);
+    }
 
     GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(im->pipeline));
     im->busWatch = gst_bus_create_watch(bus);
@@ -664,6 +690,27 @@ gboolean workerStart(gpointer userData)
 
     im->running.store(true);
     im->emitRunningChanged();
+
+    // Fallback: if on-negotiation-needed hasn't fired within ~100ms, explicitly
+    // create an offer so we don't stall waiting for a signal that webrtcbin may
+    // not emit in all pipeline configurations. Decart's video_input_timeout is
+    // aggressive, so we want the offer out as early as possible.
+    if (!im->offerCreated) {
+        GSource *offerSrc = g_timeout_source_new(100);
+        g_source_set_callback(offerSrc, [](gpointer data) -> gboolean {
+            auto *im = static_cast<GstRtcPeerImpl *>(data);
+            im->offerFallbackId = 0;  // this source is removing itself — don't let
+                                      // onOfferCreated g_source_remove a dead id
+            if (!im->offerCreated && im->webrtc) {
+                GstPromise *promise = gst_promise_new_with_change_func(onOfferCreated, im, nullptr);
+                g_signal_emit_by_name(im->webrtc, "create-offer", nullptr, promise);
+            }
+            return G_SOURCE_REMOVE;
+        }, im, nullptr);
+        im->offerFallbackId = g_source_attach(offerSrc, im->ctx);
+        g_source_unref(offerSrc);
+    }
+
     return G_SOURCE_REMOVE;
 }
 
@@ -712,6 +759,10 @@ gboolean workerStop(gpointer userData)
         im->vp8enc = nullptr;
         im->offerCreated = false;
         im->remoteDescriptionSet = false;
+        if (im->offerFallbackId) {
+            g_source_remove(im->offerFallbackId);
+            im->offerFallbackId = 0;
+        }
         im->stallTicks = 0;
         im->stallEmitted = false;
         im->lastDecodedProbe.store(0);
