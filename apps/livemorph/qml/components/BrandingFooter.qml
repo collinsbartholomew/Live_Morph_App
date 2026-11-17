@@ -20,11 +20,11 @@ Item {
         Text {
             text: qsTr("Built by")
             color: Colors.textMuted
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontMonoTiny.pixelSize
             anchors.verticalCenter: parent.verticalCenter
         }
 
-        // 14px hex logo mark (opacity .5)
+        // 16px hex logo mark (opacity .5)
         Hexagon {
             size: 16
             lineWidth: 1.5
@@ -36,7 +36,7 @@ Item {
                 anchors.centerIn: parent
                 text: "T"
                 color: Colors.textOnAccent
-                font.pixelSize: 9
+                font.pixelSize: Theme.fontMicro.pixelSize
                 font.bold: true
             }
         }
@@ -44,7 +44,7 @@ Item {
         Text {
             text: qsTr("TheTools Hub")
             color: brandMa.containsMouse ? Colors.accent : Colors.textMuted
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontMonoTiny.pixelSize
             anchors.verticalCenter: parent.verticalCenter
 
             MouseArea {

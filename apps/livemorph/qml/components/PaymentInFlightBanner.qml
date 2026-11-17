@@ -39,9 +39,9 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 16
-        anchors.rightMargin: 12
-        spacing: 10
+        anchors.leftMargin: Theme.spacingLg
+        anchors.rightMargin: Theme.spacingMd
+        spacing: Theme.gapCard
 
         // Mode hex badge
         HexBadge {
@@ -62,7 +62,7 @@ Rectangle {
                      ? qsTr("Confirming on blockchain")
                      : qsTr("Payment in progress"))
             color: Colors.textPrimary
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontMono.pixelSize
             font.weight: Font.Bold
             Layout.fillWidth: true
             elide: Text.ElideRight
@@ -86,7 +86,7 @@ Rectangle {
                     return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s
                 }
                 color: Colors.textMuted
-                font.pixelSize: 10
+                font.pixelSize: Theme.fontMonoTiny.pixelSize
                 font.family: Theme.fontMono.family
             }
         }
@@ -95,7 +95,7 @@ Rectangle {
             visible: root.orderId.length
             text: qsTr("Order %1").arg(root.orderId)
             color: Colors.textMuted
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontMonoTiny.pixelSize
             font.family: Theme.fontMono.family
             Layout.fillWidth: true
             elide: Text.ElideMiddle
@@ -116,7 +116,7 @@ Rectangle {
                 anchors.centerIn: parent
                 text: qsTr("RESUME")
                 color: Colors.accentHover
-                font.pixelSize: 9
+                font.pixelSize: Theme.fontMicro.pixelSize
                 font.family: Theme.fontMono.family
                 font.weight: Font.Bold
                 font.letterSpacing: 1.0

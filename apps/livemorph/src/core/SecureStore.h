@@ -8,11 +8,12 @@
  *
  * Priority:
  *  1. OS credential store when available (Windows DPAPI, macOS Keychain via Security)
- *  2. Local file under AppLocalData/secure (0700 dir, 0600 files) obfuscated with a
- *     key stretched from a random per-install 0600 key file (Linux/macOS fallback).
- *     Note: on Linux this is keyed obfuscation, not OS-keyring encryption — the key
- *     file lives next to the blobs, so same-user processes can recover it. A libsecret
- *     integration would be the proper upgrade path.
+ *  2. Local file under AppLocalData/secure (0700 dir, 0600 files). On Linux with
+ *     OpenSSL available this is AES-256-GCM (authenticated) keyed by a stretched
+ *     random per-install 0600 key file; without OpenSSL it falls back to keyed
+ *     obfuscation (legacy v4 blobs remain readable). Same-user processes can
+ *     still read the key file — a libsecret/keyring integration is the proper
+ *     OS-backed upgrade path.
  *
  * Never stores Decart API keys — those belong only on the backend proxy.
  */

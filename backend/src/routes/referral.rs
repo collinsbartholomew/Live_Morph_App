@@ -159,8 +159,11 @@ async fn referral_attach(
     // the same write. A ledger row is written for audit (every credit path does).
     const MAX_REFERRALS: i64 = 50;
     let cfg_credits = cfg.referral_credits.unwrap_or(100.0);
+    // find_one_and_update (return-after) so the ledger row can record the real
+    // post-credit balance instead of a bogus 0.0.
+    use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
     let credited = users_coll(&db, product)
-        .update_one(
+        .find_one_and_update(
             doc! {
                 "referral_code": &code,
                 "$expr": { "$lt": [ { "$ifNull": ["$referral_count", 0] }, MAX_REFERRALS ] },
@@ -170,8 +173,13 @@ async fn referral_attach(
                 "$set": { "updated_at": Utc::now() },
             },
         )
+        .with_options(
+            FindOneAndUpdateOptions::builder()
+                .return_document(ReturnDocument::After)
+                .build(),
+        )
         .await?;
-    let bonus = if credited.matched_count == 1 { cfg_credits } else { 0.0 };
+    let bonus = if credited.is_some() { cfg_credits } else { 0.0 };
     if bonus > 0.0 {
         let ledger = match product {
             ProductId::Secondary => db.ledger_secondary(),
@@ -182,7 +190,7 @@ async fn referral_attach(
             id: new_id(),
             user_id: referrer_id,
             delta: bonus,
-            balance_after: 0.0,
+            balance_after: credited.as_ref().map(|u| u.total_credits()).unwrap_or(0.0),
             kind: "referral".into(),
             ref_id: Some(auth.user_id.clone()),
             note: Some(format!("referral bonus for attacher {}", auth.user_id)),

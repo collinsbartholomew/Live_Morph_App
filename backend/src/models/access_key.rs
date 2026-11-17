@@ -6,7 +6,14 @@ use uuid::Uuid;
 pub struct AccessKey {
     #[serde(rename = "_id")]
     pub id: String,
+    /// Plaintext key — held in memory only at mint time (returned once to the
+    /// issuer). Never serialized to the DB (skip_serializing) so a database
+    /// dump cannot reveal redeemable license keys.
+    #[serde(default, skip_serializing)]
     pub key: String,
+    /// HMAC-SHA256(pepper, key) — the stored and lookup form of the key.
+    #[serde(default)]
+    pub key_hash: String,
     #[serde(default)]
     pub user_id: String,
     /// First device that successfully activated this key (SHA-stable machine id).
@@ -26,9 +33,12 @@ pub struct AccessKey {
 impl AccessKey {
     pub fn new(plan: &str, credits: f64) -> Self {
         let now = chrono::Utc::now();
+        let key = gen_key();
+        let key_hash = crate::routes::auth::hash_token(&key);
         Self {
             id: Uuid::new_v4().to_string(),
-            key: gen_key(),
+            key,
+            key_hash,
             user_id: String::new(),
             device_id: None,
             plan: plan.into(),

@@ -10,7 +10,6 @@ import LiveMorph
  * Premium depth layers:
  *  - dual scale: a second, larger hex lattice (cellSize2) sits under the main
  *    one at lower alpha — a deep layered field instead of a flat mesh
- *  - radial glow: a soft canvas-painted light pool at (focusX,focusY)
  *  - radial fade: main cells dim quadratically with distance from the focus
  *  - sparkle: deterministic sparse filled cells
  *  - emphasis lattice: 1-in-N cells get a heavier stroke
@@ -19,7 +18,7 @@ import LiveMorph
  *    outline (bind to real state, e.g. the selected catalog index)
  *  - featureHex: large hex outline frame at the focus point
  *
- * Usage: Honeycomb { anchors.fill: parent; cellSize: Theme.honeycombCellLg; fadeRadius: 900; cellSize2: 90; glowAlpha: 0.05 }
+ * Usage: Honeycomb { anchors.fill: parent; cellSize: Theme.honeycombCellLg; fadeRadius: 900; cellSize2: 90 }
  */
 Item {
     id: root
@@ -36,9 +35,6 @@ Item {
     property real focusX: -1
     property real focusY: -1
     property real fadeRadius: 0                        // 0 = uniform field
-    // Soft light pool at the focus (canvas radial fill, alpha 0..1)
-    property real glowAlpha: 0
-    property color glowColor: Colors.white
     // Secondary larger lattice (0 = off), its own alpha multiplier
     property int cellSize2: 0
     property real cellSize2Alpha: 0.5
@@ -62,8 +58,6 @@ Item {
     onFocusXChanged: canvas.requestPaint()
     onFocusYChanged: canvas.requestPaint()
     onFadeRadiusChanged: canvas.requestPaint()
-    onGlowAlphaChanged: canvas.requestPaint()
-    onGlowColorChanged: canvas.requestPaint()
     onCellSize2Changed: canvas.requestPaint()
     onCellSize2AlphaChanged: canvas.requestPaint()
     onSparkleEveryChanged: canvas.requestPaint()
@@ -172,10 +166,6 @@ Item {
             var fx = root.focusX >= 0 ? root.focusX : width / 2
             var fy = root.focusY >= 0 ? root.focusY : height / 2
             var fade = root.fadeRadius > 0
-
-            // (The old canvas radial-gradient light pool was removed: the
-            // project directive bans gradients/glows project-wide. glowAlpha
-            // remains as an inert API property.)
 
             // 2) secondary large lattice (under everything)
             if (root.cellSize2 > 0)

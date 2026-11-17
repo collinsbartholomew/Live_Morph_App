@@ -1,6 +1,8 @@
 #include "StreamServer.h"
 
 #include <QBuffer>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QHostAddress>
 #include <QImageWriter>
 #include <QPointer>
@@ -58,6 +60,27 @@ QString StreamServer::url() const
     const quint16 actual = m_server.serverPort();
     return QStringLiteral("http://127.0.0.1:%1/stream?token=%2")
         .arg(QString::number(actual > 0 ? actual : quint16(m_port)), m_authToken);
+}
+
+QString StreamServer::urlDisplay() const
+{
+    // Masked form for QML display — never exposes the auth token to the QML
+    // layer (the token gates the loopback MJPEG feed of the morphed video).
+    const QString full = url();
+    if (full.isEmpty())
+        return {};
+    const int eq = full.lastIndexOf(QLatin1Char('='));
+    if (eq < 0)
+        return full;
+    return full.left(eq + 1) + QStringLiteral("••••");
+}
+
+void StreamServer::copyStreamUrl()
+{
+    const QString full = url();
+    if (full.isEmpty())
+        return;
+    QGuiApplication::clipboard()->setText(full);
 }
 
 void StreamServer::setPort(int p)
@@ -221,7 +244,7 @@ void StreamServer::onNewConnection()
                 && !m_clients.contains(guard)
                 && !guard->property("handshakeDone").toBool()) {
                 guard->setProperty("handshakeDone", true);
-                --m_handshaking;
+                m_handshaking = qMax(0, m_handshaking - 1);
                 guard->disconnectFromHost();
                 guard->deleteLater();
             }

@@ -1064,7 +1064,6 @@ GstRtcPeer::GstRtcPeer(QObject *parent)
 
 GstRtcPeer::~GstRtcPeer()
 {
-    m_stopping.store(true);
     if (m_impl->ctx) {
         g_main_context_invoke(m_impl->ctx, workerShutdown, m_impl.get());
         g_main_context_wakeup(m_impl->ctx);
@@ -1212,7 +1211,6 @@ void GstRtcPeer::start()
 
 void GstRtcPeer::stop()
 {
-    m_stopping.store(true);
     m_impl->stopping.store(true);
     runOnWorker(workerStop, m_impl.get());
 }

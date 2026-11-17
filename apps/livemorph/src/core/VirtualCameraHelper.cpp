@@ -89,10 +89,19 @@ void VirtualCameraHelper::detectObs()
                << QStringLiteral("/usr/local/bin/obs")
                << QStringLiteral("/snap/bin/obs")
                << QStringLiteral("/var/lib/flatpak/exports/bin/com.obsproject.Studio");
-    // PATH lookup
+    // PATH lookup is a LAST resort only — a user-writable dir earlier in PATH
+    // would run an arbitrary binary. Fixed system locations are checked first,
+    // and a PATH-resolved binary is only trusted when it lives OUTSIDE any
+    // user-writable location (home dir, /tmp).
     const QString which = QStandardPaths::findExecutable(QStringLiteral("obs"));
-    if (!which.isEmpty())
-        candidates.prepend(which);
+    if (!which.isEmpty()) {
+        const QString canonical = QFileInfo(which).canonicalFilePath();
+        const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+        const bool inUserSpace = (!home.isEmpty() && canonical.startsWith(home + QLatin1Char('/')))
+                                 || canonical.startsWith(QStringLiteral("/tmp/"));
+        if (!inUserSpace)
+            candidates.append(which); // append, never prepend
+    }
 #endif
 
     for (const QString &c : candidates) {

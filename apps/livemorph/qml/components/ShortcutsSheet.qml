@@ -18,7 +18,7 @@ Rectangle {
     Rectangle {
         anchors.centerIn: parent
         width: Math.min(parent.width - 48, 420)
-        height: col.implicitHeight + 32
+        height: Math.min(parent.height - 48, col.implicitHeight + 32)
         radius: Theme.radiusLg
         color: Colors.surfaceGlassStrong
         border.color: Colors.surfaceBorder
@@ -54,15 +54,15 @@ Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 20
-            spacing: 12
+            anchors.margins: Theme.padSection
+            spacing: Theme.spacingMd
 
             RowLayout {
                 Layout.fillWidth: true
                 Text {
                     text: qsTr("Keyboard shortcuts")
                     color: Colors.textPrimary
-                    font.pixelSize: 16
+                    font.pixelSize: Theme.fontTitle.pixelSize
                     font.weight: Font.Bold
                     Layout.fillWidth: true
                 }
@@ -85,7 +85,7 @@ Rectangle {
                 ]
                 delegate: RowLayout {
                     Layout.fillWidth: true
-                    spacing: 12
+                    spacing: Theme.spacingMd
                     required property var modelData
                     Rectangle {
                         radius: Theme.radiusXs
@@ -99,7 +99,7 @@ Rectangle {
                             anchors.centerIn: parent
                             text: modelData.keys
                             color: Colors.accentHover
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontLabel.pixelSize
                             font.weight: Font.Bold
                             font.family: Theme.fontMono.family
                         }
@@ -107,17 +107,17 @@ Rectangle {
                     Text {
                         text: modelData.desc
                         color: Colors.textSecondary
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSmall.pixelSize
                         Layout.fillWidth: true
                     }
                 }
             }
 
             Text {
-                Layout.topMargin: 4
+                Layout.topMargin: Theme.spacingXs
                 text: qsTr("Tip: buy credits from the top bar when estimated time turns amber or red.")
                 color: Colors.textMuted
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontLabel.pixelSize
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }

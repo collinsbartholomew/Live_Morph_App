@@ -70,6 +70,13 @@ public:
     void setServerDefaultModel(const QString &m);
     QString apiBaseUrl() const;
     void setApiBaseUrl(const QString &u);
+    /// True when LIVEMORPH_API_URL is set to a value that survives the same
+    /// normalization as apiBaseUrl() — a set-but-invalid value must NOT count
+    /// as an override (single source of truth for the env check).
+    static bool envApiUrlOverrideActive();
+    /// Raw LIVEMORPH_TURN_URLS value (validated downstream by GstRtcPeer's
+    /// ICE-URI check before it reaches webrtcbin).
+    static QByteArray turnUrlsEnv();
 
     bool showBuiltinCharacters() const;
     void setShowBuiltinCharacters(bool v);

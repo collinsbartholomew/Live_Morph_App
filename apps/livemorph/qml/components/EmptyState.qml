@@ -38,7 +38,7 @@ Item {
         id: col
         anchors.centerIn: parent
         width: Math.min(300, parent.width - 48)
-        spacing: 10
+        spacing: Theme.gapCard
 
         HexBadge {
             size: root.badgeSize
@@ -57,7 +57,7 @@ Item {
             wrapMode: Text.WordWrap
             text: root.title
             color: Colors.textSecondary
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSmall.pixelSize
             font.weight: Font.Bold
         }
 
@@ -68,7 +68,7 @@ Item {
             wrapMode: Text.WordWrap
             text: root.body
             color: Colors.textMuted
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontLabel.pixelSize
             lineHeight: 1.45
         }
 

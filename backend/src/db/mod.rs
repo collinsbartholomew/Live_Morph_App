@@ -120,11 +120,79 @@ impl Db {
         // secondary unique email index must fail loudly like the LM one — a silent
         // failure here would allow duplicate accounts in the secondary DB.
         self.users_secondary().create_index(email_idx_secondary).await?;
-        let key_idx = IndexModel::builder()
-            .keys(doc! { "key": 1 })
-            .options(IndexOptions::builder().unique(true).build())
-            .build();
-        self.access_keys_secondary().create_index(key_idx).await?;
+        // Access keys are stored HASHED at rest: lookups go through
+        // key_hash = HMAC(pepper, key) and the plaintext `key` field is never
+        // serialized (see models::AccessKey). Migrate legacy rows that still
+        // carry a plaintext key before building the unique key_hash index,
+        // then drop the legacy plaintext key_1 index.
+        {
+            use futures_util::TryStreamExt;
+            let ak_docs = self
+                .db_secondary
+                .collection::<mongodb::bson::Document>("access_keys");
+            let mut legacy = ak_docs
+                .find(doc! { "key": { "$exists": true }, "key_hash": { "$exists": false } })
+                .await?;
+            while let Some(d) = legacy.try_next().await? {
+                if let (Some(id), Some(key)) = (d.get_str("_id").ok(), d.get_str("key").ok()) {
+                    let res = ak_docs
+                        .update_one(
+                            doc! { "_id": id },
+                            doc! {
+                                "$set": { "key_hash": crate::routes::auth::hash_token(key) },
+                                "$unset": { "key": "" },
+                            },
+                        )
+                        .await;
+                    if let Err(e) = res {
+                        tracing::warn!(error = %e, "access_keys legacy key_hash migration failed for one row");
+                    }
+                }
+            }
+            for name in ["key_1", "key_hash_1"] {
+                if let Err(e) = ak_docs.drop_index(name).await {
+                    if !e.to_string().contains("IndexNotFound") {
+                        tracing::warn!(error = %e, index = name, "failed to drop legacy access_keys index");
+                    }
+                }
+            }
+            let key_hash_idx = IndexModel::builder()
+                .keys(doc! { "key_hash": 1 })
+                .options(IndexOptions::builder().unique(true).sparse(true).build())
+                .build();
+            ak_docs.create_index(key_hash_idx).await?;
+        }
+        // User and order rows historically cached the plaintext license key in
+        // `access_key`; migrate to `access_key_hash` and unset the plaintext.
+        {
+            use futures_util::TryStreamExt;
+            for coll in [
+                self.db.collection::<mongodb::bson::Document>("users"),
+                self.db_secondary.collection::<mongodb::bson::Document>("users"),
+                self.db.collection::<mongodb::bson::Document>("payment_orders"),
+                self.db_secondary.collection::<mongodb::bson::Document>("payment_orders"),
+            ] {
+                let mut legacy = coll
+                    .find(doc! { "access_key": { "$exists": true }, "access_key_hash": { "$exists": false } })
+                    .await?;
+                while let Some(d) = legacy.try_next().await? {
+                    if let (Some(id), Some(key)) = (d.get_str("_id").ok(), d.get_str("access_key").ok()) {
+                        let res = coll
+                            .update_one(
+                                doc! { "_id": id },
+                                doc! {
+                                    "$set": { "access_key_hash": crate::routes::auth::hash_token(key) },
+                                    "$unset": { "access_key": "" },
+                                },
+                            )
+                            .await;
+                        if let Err(e) = res {
+                            tracing::warn!(error = %e, "access_key hash migration failed for one row");
+                        }
+                    }
+                }
+            }
+        }
         let device_idx = IndexModel::builder().keys(doc! { "device_id": 1 }).build();
         if let Err(e) = self.access_keys_secondary().create_index(device_idx).await {
             tracing::warn!(error = %e, "access_keys device_id index create failed (non-fatal lookup index)");

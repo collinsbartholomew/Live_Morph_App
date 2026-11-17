@@ -8,7 +8,12 @@ import QtQuick.Window
 ApplicationWindow {
     id: root
 
+    font: Theme.fontUi
+
     property bool cleanMode: false
+    // Single source for the chrome bar height — the VideoOutput bottom margin
+    // and the bar itself must never drift apart.
+    readonly property int chromeBarHeight: 32
 
     // Qt 6.12: VideoOutput.videoSink is read-only and each VideoOutput owns
     // its internal sink — feed the output's OWN sink from the peer.
@@ -76,9 +81,9 @@ ApplicationWindow {
             id: videoOut
 
             anchors.fill: parent
-            anchors.bottomMargin: !root.cleanMode ? 32 : 0
+            anchors.bottomMargin: !root.cleanMode ? root.chromeBarHeight : 0
             fillMode: VideoOutput.PreserveAspectFit
-            visible: Session.isActive && Session.peerVideoSink !== null
+            visible: Session.isActive && Session.previewVideoSink !== null
 
         }
 
@@ -88,8 +93,8 @@ ApplicationWindow {
         // Empty state
         Column {
             anchors.centerIn: parent
-            spacing: 8
-            visible: !(Session.isActive && Session.peerVideoSink !== null)
+            spacing: Theme.spacingSm
+            visible: !(Session.isActive && Session.previewVideoSink !== null)
 
             Item {
                 width: 72; height: 72
@@ -115,7 +120,7 @@ ApplicationWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: qsTr("LiveMorph Live Preview")
                 color: Colors.textPrimary
-                font.pixelSize: 18
+                font.pixelSize: Theme.fontXl.pixelSize
                 font.weight: Font.Bold
                 opacity: 0.6
             }
@@ -124,7 +129,7 @@ ApplicationWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: qsTr("Waiting for first frame…")
                 color: Colors.textSecondary
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSmall.pixelSize
                 opacity: 0.5
             }
 
@@ -132,7 +137,7 @@ ApplicationWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: qsTr("Start OBS Stream in the main window")
                 color: Colors.textSecondary
-                font.pixelSize: 10
+                font.pixelSize: Theme.fontMonoTiny.pixelSize
                 opacity: 0.3
             }
 
@@ -148,12 +153,12 @@ ApplicationWindow {
                 ColumnLayout {
                     id: obsInfoCol
                     anchors.centerIn: parent
-                    spacing: 4
+                    spacing: Theme.spacingXs
 
                     Text {
                         text: qsTr("Capture this window in OBS using Window Capture")
                         color: Colors.textSecondary
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontLabel.pixelSize
                         font.family: Theme.fontMono.family
                         opacity: 0.6
                         Layout.alignment: Qt.AlignHCenter
@@ -162,7 +167,7 @@ ApplicationWindow {
                     Text {
                         text: qsTr("Window title: %1").arg(root.title)
                         color: Colors.textMuted
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                         font.family: Theme.fontMono.family
                         Layout.alignment: Qt.AlignHCenter
                     }
@@ -176,7 +181,7 @@ ApplicationWindow {
             visible: !root.cleanMode && hoverArea.containsMouse
             anchors.top: parent.top
             anchors.right: parent.right
-            anchors.margins: 12
+            anchors.margins: Theme.spacingMd
             width: hoverRow.implicitWidth + 16
             height: 32
             radius: Theme.radiusSm
@@ -188,7 +193,7 @@ ApplicationWindow {
             Row {
                 id: hoverRow
                 anchors.centerIn: parent
-                spacing: 4
+                spacing: Theme.spacingXs
 
                 Rectangle {
                     width: cleanModeBtn.implicitWidth + 16
@@ -203,7 +208,7 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         text: root.cleanMode ? qsTr("Show Footer") : qsTr("Clean Mode")
                         color: root.cleanMode ? Colors.accent : Colors.textSecondary
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                         font.family: Theme.fontMono.family
                     }
 
@@ -225,7 +230,7 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         text: root.visibility === Window.FullScreen ? qsTr("Exit Fullscreen") : qsTr("Fullscreen")
                         color: Colors.textSecondary
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                         font.family: Theme.fontMono.family
                     }
 
@@ -243,7 +248,7 @@ ApplicationWindow {
             id: hoverArea
             anchors.top: parent.top
             anchors.right: parent.right
-            anchors.margins: 4
+            anchors.margins: Theme.spacingXs
             width: 200
             height: 50
             hoverEnabled: true
@@ -255,7 +260,7 @@ ApplicationWindow {
             visible: root.cleanMode
             anchors.top: parent.top
             anchors.right: parent.right
-            anchors.margins: 8
+            anchors.margins: Theme.spacingSm
             width: 28
             height: 28
             radius: Theme.radiusSm
@@ -281,7 +286,7 @@ ApplicationWindow {
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            height: 32
+            height: root.chromeBarHeight
             color: Colors.surfaceRaised
             border.color: Colors.surfaceBorder
             border.width: 1
@@ -289,8 +294,8 @@ ApplicationWindow {
             Row {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.left: parent.left
-                anchors.leftMargin: 16
-                spacing: 12
+                anchors.leftMargin: Theme.spacingLg
+                spacing: Theme.spacingMd
 
                 Text {
                     text: qsTr("LiveMorph Live Preview — %1×%2").arg(root.width).arg(root.height)
@@ -303,8 +308,8 @@ ApplicationWindow {
             Row {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: parent.right
-                anchors.rightMargin: 16
-                spacing: 12
+                anchors.rightMargin: Theme.spacingLg
+                spacing: Theme.spacingMd
 
                 Text {
                     text: qsTr("A product of TheTools Hub")

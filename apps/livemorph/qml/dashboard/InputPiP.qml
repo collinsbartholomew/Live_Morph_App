@@ -20,7 +20,7 @@ Rectangle {
     clip: true
     border.color: root.inputLost ? Colors.statusError : Colors.surfaceBorder
     border.width: root.inputLost ? 2 : 1
-    z: Theme.zCatcher
+    z: Theme.zPip
 
     // (Shadow layers removed project-wide — flat design; the PiP reads via
     // its 1px border only.)
@@ -63,8 +63,6 @@ Rectangle {
     }
 
     opacity: visible ? 1 : 0
-    scale: visible ? 1 : 1.4 // pip-enter: 1.4→1
-    transform: Translate { x: visible ? 0 : -root.width * 0.1 }
 
     // Input-lost watchdog: no live frames for 1.5s (or camera off) → lost state
     property bool inputLost: false
@@ -156,7 +154,7 @@ Rectangle {
             anchors.centerIn: parent
             text: qsTr("INPUT")
             color: Colors.textSecondary
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontMonoTiny.pixelSize
             font.family: Theme.fontMono.family
             font.letterSpacing: 1.2
         }
@@ -179,7 +177,7 @@ Rectangle {
         Row {
             id: camChipRow
             anchors.centerIn: parent
-            spacing: 4
+            spacing: Theme.spacingXs
             Icon {
                 name: "video"
                 size: 11
@@ -191,7 +189,7 @@ Rectangle {
                 width: 72 // Electron max-w — keeps the chip inside the PiP at min width
                 elide: Text.ElideRight
                 color: chipMa.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                font.pixelSize: 10
+                font.pixelSize: Theme.fontMonoTiny.pixelSize
                 font.family: Theme.fontMono.family
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -217,15 +215,17 @@ Rectangle {
 
         Popup {
             id: pipCamPopup
-            // The PiP is docked at the stage's BOTTOM corner — the picker must
-            // open UPWARD or it renders under the stage-controls strip.
-            y: -height - 8
+            // Open away from the nearest stage edge: if the PiP is docked at a
+            // TOP corner the picker must open DOWNWARD, otherwise it renders
+            // above the window's top edge and is clipped/unusable.
+            y: (root.y + root.height / 2 < root.parent.height / 2)
+               ? root.height + 8 : -height - 8
             x: 0
             width: 260
             // Count-based height: ColumnLayout+Repeater implicitHeight is 0.
             height: Math.min(300, 26 + CameraCtrl.availableDevices.length * 34
                              + Math.max(0, CameraCtrl.availableDevices.length - 1) * 2 + 16)
-            padding: 8
+            padding: Theme.spacingSm
             closePolicy: Popup.CloseOnEscape
             background: Rectangle {
                 color: Colors.surfaceOverlay
@@ -264,13 +264,13 @@ Rectangle {
 
                 // Header eyebrow
                 Text {
-                    Layout.leftMargin: 4
+                    Layout.leftMargin: Theme.spacingXs
                     Layout.topMargin: 2
                     Layout.bottomMargin: 2
                     text: qsTr("CAMERA SOURCE")
                     color: Colors.textMuted
                     font.family: Theme.fontMono.family
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.fontMicro.pixelSize
                     font.weight: Font.Bold
                     font.letterSpacing: 1.2
                 }
@@ -298,8 +298,8 @@ Rectangle {
                              : (CameraCtrl.currentDeviceName === modelData ? Colors.accent10 : Colors.transparent)
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 8
-                            spacing: 8
+                            anchors.leftMargin: Theme.spacingSm
+                            spacing: Theme.spacingSm
                             Hexagon {
                                 size: 7
                                 lineWidth: 0
@@ -310,7 +310,7 @@ Rectangle {
                                 text: modelData
                                 color: CameraCtrl.currentDeviceName === modelData ? Colors.textPrimary
                                              : (pdMa.containsMouse ? Colors.textPrimary : Colors.textSecondary)
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -361,7 +361,7 @@ Rectangle {
             Column {
                 id: lostCol
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: Theme.spacingSm
                 Item {
                     width: 48; height: 48
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -384,7 +384,7 @@ Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: qsTr("INPUT LOST")
                     color: Colors.statusError
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     font.weight: Font.Bold
                     font.family: Theme.fontMono.family
                     font.letterSpacing: 1.0
@@ -393,7 +393,7 @@ Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: qsTr("Check your camera in Settings")
                     color: Colors.textSecondary
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontLabel.pixelSize
                 }
             }
         }

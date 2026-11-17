@@ -14,6 +14,7 @@ import LiveMorph
  */
 Dialog {
     id: root
+    property string modalId: "upload-consent"
     modal: true
     // Center on the window overlay — callers embed this dialog inside narrow
     // panels (workshop), where centerIn: parent would misplace/shrink it.
@@ -27,8 +28,8 @@ Dialog {
     // (merged with the checkbox-reset onOpened below)
     Connections {
         target: App
-        function onModalEscapeRequested() {
-            if (root.visible)
+        function onModalEscapeRequested(id) {
+            if (root.visible && id === root.modalId)
                 root.reject()
         }
     }
@@ -70,13 +71,13 @@ Dialog {
         // Header (Electron): icon BESIDE title on one row, intro underneath
         ColumnLayout {
             Layout.fillWidth: true
-            Layout.margins: 24
-            Layout.bottomMargin: 16
-            spacing: 12
+            Layout.margins: Theme.spacingXl
+            Layout.bottomMargin: Theme.spacingLg
+            spacing: Theme.spacingMd
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 12
+                spacing: Theme.spacingMd
                 HexBadge {
                     size: 42
                     iconName: "shield"
@@ -90,7 +91,7 @@ Dialog {
                 Text {
                     text: qsTr("Before you upload, read this")
                     color: Colors.textPrimary
-                    font.pixelSize: 16
+                    font.pixelSize: Theme.fontTitle.pixelSize
                     font.weight: Font.Bold
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
@@ -101,7 +102,7 @@ Dialog {
             Text {
                 text: qsTr("LiveMorph is powered by Decart Lucy 2. Decart's Acceptable Use Policy and ours both require you to attest to a few things on every reference image. Take a moment to check each one.")
                 color: Colors.textMuted
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontMono.pixelSize
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
                 lineHeight: 1.625
@@ -127,13 +128,13 @@ Dialog {
             id: checksCol
             width: parent.width - 48
             x: 24
-            spacing: 8
+            spacing: Theme.spacingSm
 
             // Check 1: likeness consent
             RowLayout {
                 id: row1
                 Layout.fillWidth: true
-                spacing: 12
+                spacing: Theme.spacingMd
                 // Keyboard accessible: focusable row, Space/Enter toggles.
                 // main.qml's global Space shortcut defers to spaceToggles items.
                 focus: true
@@ -162,7 +163,7 @@ Dialog {
                     Layout.fillWidth: true
                     text: qsTr("This image is either a fictional character, OR I have explicit, documented consent from the real person it depicts. I will not use LiveMorph to impersonate anyone without their consent.")
                     color: row1Ma.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     wrapMode: Text.WordWrap
                     lineHeight: 1.625
                     MouseArea {
@@ -179,7 +180,7 @@ Dialog {
             RowLayout {
                 id: row2
                 Layout.fillWidth: true
-                spacing: 12
+                spacing: Theme.spacingMd
                 focus: true
                 property bool spaceToggles: true
                 Keys.onSpacePressed: (e) => { chk2Label.checked = !chk2Label.checked; e.accepted = true }
@@ -205,7 +206,7 @@ Dialog {
                     Layout.fillWidth: true
                     text: qsTr("I will disclose to my viewers that my stream is AI-generated (stream title, panel, or scene overlay) and will not present this output as authentic news, real events, or testimony of a real person.")
                     color: row2Ma.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     wrapMode: Text.WordWrap
                     lineHeight: 1.625
                     MouseArea {
@@ -222,7 +223,7 @@ Dialog {
             RowLayout {
                 id: row3
                 Layout.fillWidth: true
-                spacing: 12
+                spacing: Theme.spacingMd
                 focus: true
                 property bool spaceToggles: true
                 Keys.onSpacePressed: (e) => { chk3Label.checked = !chk3Label.checked; e.accepted = true }
@@ -252,7 +253,7 @@ Dialog {
                     textFormat: Text.RichText
                     linkColor: Colors.accent;
                     color: row3Ma.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     wrapMode: Text.WordWrap
                     onLinkActivated: (link) => {
                         if (link.indexOf("https://") === 0)
@@ -292,8 +293,8 @@ Dialog {
             }
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 24
-                anchors.rightMargin: 24
+                anchors.leftMargin: Theme.spacingXl
+                anchors.rightMargin: Theme.spacingXl
                 Item { Layout.fillWidth: true }
                 GhostButton {
                     text: qsTr("Cancel")
@@ -312,11 +313,11 @@ Dialog {
     }
 
     onOpened: {
-        App.modalOpened()
+        App.modalOpened(root.modalId)
         chk1Label.checked = false
         chk2Label.checked = false
         chk3Label.checked = false
         row1.forceActiveFocus()
     }
-    onClosed: App.modalClosed()
+    onClosed: App.modalClosed(root.modalId)
 }

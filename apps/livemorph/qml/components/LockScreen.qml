@@ -29,7 +29,6 @@ Item {
             focusX: width / 2
             focusY: height / 2
             fadeRadius: Math.max(width, height) * 0.8
-            glowAlpha: 0.045
             sparkleEvery: 23
             sparkleAlpha: 0.07
             constellationEvery: 53
@@ -107,7 +106,7 @@ Item {
                       ? App.lockMessage
                       : qsTr("This session was locked for security.\nSign in again to continue.")
                 color: Colors.textSecondary
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontMono.pixelSize
                 lineHeight: 1.4
             }
 

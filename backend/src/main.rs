@@ -14,9 +14,12 @@ mod services;
 
 use actix_cors::Cors;
 use actix_web::{
+    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    http::header,
     middleware::{DefaultHeaders, Logger},
     web, App, HttpServer,
 };
+use futures_util::future::{ready, LocalBoxFuture, Ready};
 use config::Config;
 use db::Db;
 use std::sync::{Arc, LazyLock};
@@ -230,19 +233,26 @@ async fn main() -> anyhow::Result<()> {
         let main_coll = db.db.collection::<mongodb::bson::Document>("morph_sessions");
         let sec_coll = db.db_secondary.collection::<mongodb::bson::Document>("sessions");
         // Only rows owned by this instance (or legacy rows with no instance_id)
-        // are stale — with >1 replica, other instances' live rows must not be
-        // touched. Under the documented single-instance assumption every
+        // are stale. Under the documented single-instance assumption every
         // still-active row predates this process's boot, so also match on
         // started_at < boot time: the previous process's rows carry a DIFFERENT
         // instance_id and would otherwise be missed (leaking their slots until
-        // the 10-min reaper).
+        // the 10-min reaper). That clause is ONLY valid single-instance — with
+        // >1 replica it would kill the other replica's live rows, so it is
+        // gated behind MULTI_INSTANCE=1 being UNSET (default = single instance).
+        let single_instance = std::env::var("MULTI_INSTANCE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false) == false;
+        let mut orphan_or = vec![
+            doc! { "instance_id": instance_id },
+            doc! { "instance_id": { "$exists": false } },
+        ];
+        if single_instance {
+            orphan_or.push(doc! { "started_at": { "$lt": now } });
+        }
         let orphan_filter = doc! {
             "status": { "$in": ["connecting", "generating", "live"] },
-            "$or": [
-                { "instance_id": instance_id },
-                { "instance_id": { "$exists": false } },
-                { "started_at": { "$lt": now } },
-            ],
+            "$or": orphan_or,
         };
         for (coll, users) in [
             (&main_coll, db.users()),
@@ -512,10 +522,6 @@ async fn main() -> anyhow::Result<()> {
                     .add(("X-Content-Type-Options", "nosniff"))
                     .add(("X-Frame-Options", "DENY"))
                     .add(("Referrer-Policy", "no-referrer"))
-                    .add((
-                        "Content-Security-Policy",
-                        "default-src 'none'; frame-ancestors 'none'",
-                    ))
                     .add(("Cache-Control", "no-store"))
                     .add((
                         "Permissions-Policy",
@@ -523,6 +529,9 @@ async fn main() -> anyhow::Result<()> {
                     ))
                     .add(("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")),
             )
+            // CSP is set per response by HtmlCsp (registered after
+            // DefaultHeaders so it sees the handler's Content-Type).
+            .wrap(HtmlCsp)
             // %U is path-only (no query string) — WS endpoints accept
             // ?token=<jwt> in dev and %r would log those tokens verbatim.
             .wrap(Logger::new(r#"%a "%m %U" %s %b "%{User-Agent}i" %T"#))
@@ -631,5 +640,70 @@ fn build_cors(cfg: &Config) -> Cors {
             .allow_any_method()
             .allow_any_header()
             .max_age(3600)
+    }
+}
+
+/// Content-type-aware CSP. API/JSON responses get the strict policy
+/// (`default-src 'none'`). The two HTML fallback pages (OAuth browser return
+/// and the Paystack payment return) redirect with an inline
+/// `<script>location.href=…</script>` and use an inline `<style>` block, so
+/// text/html responses get inline script/style allowed. Everything else
+/// stays locked down.
+struct HtmlCsp;
+
+impl<S, B> Transform<S, ServiceRequest> for HtmlCsp
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
+    S::Future: 'static,
+    B: 'static,
+{
+    type Response = ServiceResponse<B>;
+    type Error = actix_web::Error;
+    type InitError = ();
+    type Transform = HtmlCspMiddleware<S>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
+
+    fn new_transform(&self, service: S) -> Self::Future {
+        ready(Ok(HtmlCspMiddleware { service }))
+    }
+}
+
+struct HtmlCspMiddleware<S> {
+    service: S,
+}
+
+impl<S, B> Service<ServiceRequest> for HtmlCspMiddleware<S>
+where
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
+    S::Future: 'static,
+    B: 'static,
+{
+    type Response = ServiceResponse<B>;
+    type Error = actix_web::Error;
+    type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    forward_ready!(service);
+
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        let fut = self.service.call(req);
+        Box::pin(async move {
+            let mut res = fut.await?;
+            let is_html = res
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .map(|ct| ct.starts_with("text/html"))
+                .unwrap_or(false);
+            let csp = if is_html {
+                "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'"
+            } else {
+                "default-src 'none'; frame-ancestors 'none'"
+            };
+            res.headers_mut().insert(
+                header::CONTENT_SECURITY_POLICY,
+                header::HeaderValue::from_static(csp),
+            );
+            Ok(res)
+        })
     }
 }

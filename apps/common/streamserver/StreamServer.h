@@ -37,7 +37,10 @@ class StreamServer : public QObject
     Q_PROPERTY(bool running READ running NOTIFY runningChanged)
     Q_PROPERTY(bool paused READ paused NOTIFY pausedChanged)
     Q_PROPERTY(int port READ port WRITE setPort NOTIFY portChanged)
-    Q_PROPERTY(QString url READ url NOTIFY urlChanged)
+    // Display-only URL with the token masked — the real token (which gates the
+    // loopback MJPEG feed of the user's morphed video) is NOT exposed to QML;
+    // copyStreamUrl() copies the full URL to the clipboard from C++.
+    Q_PROPERTY(QString urlDisplay READ urlDisplay NOTIFY urlChanged)
     Q_PROPERTY(int clientCount READ clientCount NOTIFY clientCountChanged)
     Q_PROPERTY(QString mode READ mode NOTIFY modeChanged)
     Q_PROPERTY(bool virtualCameraActive READ virtualCameraActive NOTIFY modeChanged) // re-emits runningChanged via modeChanged alias in stop()
@@ -51,6 +54,8 @@ public:
     int port() const { return m_port; }
     void setPort(int p);
     QString url() const;
+    QString urlDisplay() const;
+    Q_INVOKABLE void copyStreamUrl();
     int clientCount() const { return m_clients.size(); }
     QString mode() const { return m_mode; }
 

@@ -63,13 +63,13 @@ Item {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 24
+            anchors.margins: Theme.spacingXl
             spacing: 0
 
             // Header (hex eyebrow + close)
             RowLayout {
                 Layout.fillWidth: true
-                Layout.bottomMargin: 12
+                Layout.bottomMargin: Theme.spacingMd
                 SectionHeader {
                     text: qsTr("DOWNLOADS")
                     Layout.fillWidth: true
@@ -93,7 +93,7 @@ Item {
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBorderSubtle; Layout.bottomMargin: 12 }
+            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBorderSubtle; Layout.bottomMargin: Theme.spacingMd }
 
             // Rows (panel family — no zebra)
             ListView {
@@ -102,7 +102,7 @@ Item {
                 Layout.fillHeight: true
                 visible: !Backend.downloadsLoading && Backend.downloadsModel && Backend.downloadsModel.length > 0
                 clip: true
-                spacing: 4
+                spacing: Theme.spacingXs
                 ScrollBar.vertical: StyledScrollBar { thin: true }
                 model: Backend.downloadsModel || []
                 delegate: Rectangle {
@@ -122,13 +122,13 @@ Item {
                     }
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 10
+                        anchors.leftMargin: Theme.spacingMd
+                        anchors.rightMargin: Theme.spacingMd
+                        spacing: Theme.gapCard
                         Text {
                             text: modelData.name || modelData.filename || qsTr("File")
                             color: Colors.textSecondary
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontMono.pixelSize
                             elide: Text.ElideMiddle
                             Layout.fillWidth: true
                         }
@@ -136,33 +136,52 @@ Item {
                             text: modelData.size || ""
                             color: Colors.textMuted
                             font.family: Theme.fontMono.family
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontMonoTiny.pixelSize
                         }
                         SecondaryButton {
                             compact: true
                             text: qsTr("DOWNLOAD")
-                            onClicked: { var u = modelData.url || ""; if (u.indexOf("https://") === 0) Backend.openExternal(u) }
+                            onClicked: {
+                                var u = modelData.url || ""
+                                if (u.indexOf("https://") === 0)
+                                    Backend.openExternal(u)
+                                else
+                                    Notifier.push(qsTr("Download link unavailable"), qsTr("Only https links can be opened."), "warning")
+                            }
                         }
                     }
                 }
             }
 
-            Text {
+            ColumnLayout {
                 visible: Backend.downloadsLoading
-                text: qsTr("Loading downloads…")
-                color: Colors.textMuted
-                font.pixelSize: 12
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.topMargin: 16
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignHCenter
+                Layout.topMargin: Theme.spacingLg
+                spacing: Theme.spacingMd
+                HexBadge {
+                    Layout.alignment: Qt.AlignHCenter
+                    size: 40
+                    iconName: "download"
+                    iconSize: Theme.iconLg
+                }
+                Spinner {
+                    Layout.alignment: Qt.AlignHCenter
+                    running: true
+                }
+                Text {
+                    text: qsTr("Loading downloads…")
+                    color: Colors.textMuted
+                    font.pixelSize: Theme.fontMono.pixelSize
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                }
             }
             EmptyState {
                 visible: !Backend.downloadsLoading && (!Backend.downloadsModel || Backend.downloadsModel.length === 0)
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.topMargin: 16
+                Layout.topMargin: Theme.spacingLg
                 iconName: "download"
                 badgeSize: 40
                 body: qsTr("Nothing here yet — finished recordings and exports appear here.")

@@ -347,22 +347,25 @@ void AppController::requestEscape()
     emit escapeRequested();
 }
 
-void AppController::modalOpened()
+void AppController::modalOpened(const QString &id)
 {
-    ++m_openModals;
+    // Ordered stack so Escape closes only the TOPMOST modal, not all of them.
+    m_modalStack.push_back(id);
+    m_openModals = m_modalStack.size();
     emit openModalsChanged();
 }
 
-void AppController::modalClosed()
+void AppController::modalClosed(const QString &id)
 {
-    if (m_openModals > 0)
-        --m_openModals;
+    m_modalStack.removeAll(id);
+    m_openModals = m_modalStack.size();
     emit openModalsChanged();
 }
 
 void AppController::requestModalEscape()
 {
-    emit modalEscapeRequested();
+    // Signal carries the topmost modal's id; only that modal should close.
+    emit modalEscapeRequested(m_modalStack.isEmpty() ? QString() : m_modalStack.last());
 }
 
 void AppController::requestOpenNotifications()

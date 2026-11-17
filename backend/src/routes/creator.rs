@@ -73,24 +73,40 @@ async fn payout_post(
     let auth = require_user(&req)?;
     let product = ProductId::from_request(&req);
 
-    let account_name = body
-        .account_name
+    // Cap every field by chars — the body is bounded by MAX_BODY_BYTES (8 MiB),
+    // but unbounded strings still bloat the DB; owner-only readback, so this
+    // is storage hygiene, not exposure.
+    let cap_field = |v: &Option<String>, name: &str, max: usize| -> AppResult<String> {
+        let s = v
+            .clone()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| AppError::BadRequest(format!("{name} required")))?;
+        if s.chars().count() > max {
+            return Err(AppError::BadRequest(format!(
+                "{name} too long (max {max} chars)"
+            )));
+        }
+        Ok(s)
+    };
+    let account_name = cap_field(&body.account_name, "account_name", 120)?;
+    let bank_name = cap_field(&body.bank_name, "bank_name", 120)?;
+    let account_number = cap_field(&body.account_number, "account_number", 34)?;
+    let routing_number = body
+        .routing_number
         .clone()
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| AppError::BadRequest("account_name required".into()))?;
-    let bank_name = body
-        .bank_name
-        .clone()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| AppError::BadRequest("bank_name required".into()))?;
-    let account_number = body
-        .account_number
-        .clone()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| AppError::BadRequest("account_number required".into()))?;
+        .filter(|s| !s.is_empty());
+    if let Some(ref r) = routing_number {
+        if r.chars().count() > 20 {
+            return Err(AppError::BadRequest("routing_number too long (max 20 chars)".into()));
+        }
+    }
+    if let Some(ref c) = body.country {
+        if c.chars().count() > 64 {
+            return Err(AppError::BadRequest("country too long (max 64 chars)".into()));
+        }
+    }
 
     let coll = match product {
         ProductId::Secondary => db.db_secondary.collection::<PayoutDetails>("creator_payouts"),

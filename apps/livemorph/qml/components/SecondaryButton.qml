@@ -3,7 +3,7 @@ import QtQuick.Controls as Controls
 import LiveMorph
 
 /**
- * Nocturne secondary button: outline style. Hover = soft wash + primary text,
+ * Obsidian Hex secondary button: outline style. Hover = soft wash + primary text,
  * pressed = deeper wash. Destructive variant uses the error ramp.
  */
 Controls.Button {
@@ -43,6 +43,7 @@ Controls.Button {
         font.letterSpacing: control.compact ? 1.0 : 0
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
+        width: Math.min(implicitWidth, Math.max(0, control.width - control.leftPadding - control.rightPadding))
         elide: Text.ElideRight
     }
 

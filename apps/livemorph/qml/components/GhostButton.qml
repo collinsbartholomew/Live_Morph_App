@@ -3,7 +3,7 @@ import QtQuick.Controls as Controls
 import LiveMorph
 
 /**
- * Nocturne ghost button: text-only, soft wash on hover, opacity dip on press.
+ * Obsidian Hex ghost button: text-only, soft wash on hover, opacity dip on press.
  */
 Controls.Button {
     id: control
@@ -27,6 +27,9 @@ Controls.Button {
              : control.hovered || control.pressed ? Colors.textPrimary
              : Colors.textSecondary
         font: Theme.fontSmall
+        // Bind width so elide actually engages (width == implicitWidth would
+        // make elide a no-op and the label would overflow the button).
+        width: Math.min(implicitWidth, Math.max(0, control.width - control.leftPadding - control.rightPadding))
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter

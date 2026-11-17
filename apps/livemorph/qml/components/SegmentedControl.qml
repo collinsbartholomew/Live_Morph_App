@@ -92,7 +92,7 @@ Rectangle {
                         color: seg.active ? Colors.textOnAccent
                             : (segMa.containsMouse ? Colors.textSecondary : Colors.textMuted)
                         font.family: Theme.fontLabel.family
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontLabel.pixelSize
                         font.weight: Font.Bold
                         elide: Text.ElideRight
                         // Content-sized by default; only elides when the parent

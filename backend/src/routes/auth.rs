@@ -656,23 +656,27 @@ async fn login_password(
         return Err(AppError::Unauthorized("invalid credentials".into()));
     }
     let user = user.unwrap(); // safe: exists && active checked above
-    let mut set_doc = doc! { "last_login_at": Utc::now() };
+    // last_login_at must update on EVERY login — the previous combined update
+    // matched 0 rows once a device_id was bound, silently skipping this field.
+    user_store(&db, product)
+        .update_one(
+            doc! { "_id": &user.id },
+            doc! { "$set": { "last_login_at": Utc::now() } },
+        )
+        .await?;
     // device_id is sticky (anti-abuse binding): only set it when the account has
     // none — a stolen token must not be able to rebind the device.
     if let Some(ref did) = body.device_id {
         let did = did.trim();
         if !did.is_empty() {
-            set_doc.insert("device_id", did);
+            user_store(&db, product)
+                .update_one(
+                    doc! { "_id": &user.id, "device_id": { "$exists": false } },
+                    doc! { "$set": { "device_id": did } },
+                )
+                .await?;
         }
     }
-    let set_filter = if set_doc.contains_key("device_id") {
-        doc! { "_id": &user.id, "device_id": { "$exists": false } }
-    } else {
-        doc! { "_id": &user.id }
-    };
-    user_store(&db, product)
-        .update_one(set_filter, doc! { "$set": set_doc })
-        .await?;
     let tokens = issue_pair_for(&cfg, &user.id, &user.email,
         crate::product::ProductId::from_request(&req).as_str(),
         user.token_version)?;
@@ -838,41 +842,28 @@ async fn logout(
     req: HttpRequest,
     body: web::Json<RefreshBody>,
 ) -> AppResult<HttpResponse> {
-    let _ = &req;
+    // This endpoint is unauthenticated by design (it consumes a refresh token),
+    // so rate-limit it like every sibling auth endpoint — an anonymous flood
+    // would otherwise cost 4 DB ops per request.
+    let ip = crate::auth::client_ip(&req);
+    if !crate::auth::check_rate_limit(&ip, "logout", 30, 60) {
+        return Err(AppError::RateLimited("too many logout attempts".into(), None));
+    }
     if body.refresh_token.trim().len() < 16 {
         return Err(AppError::BadRequest("invalid refresh token".into()));
     }
     let th = hash_token(&body.refresh_token);
-    // Look up the token's owner BEFORE deleting so logout can also bump
-    // token_version — otherwise the access token stays valid until expiry.
-    let mut owner: Option<(String, ProductId)> = None;
-    for (store, prod) in [
-        (db.refresh_tokens(), ProductId::LiveMorph),
-        (db.refresh_tokens_secondary(), ProductId::Secondary),
-    ] {
-        if let Ok(Some(doc)) = store.find_one(doc! { "token_hash": &th }).await {
-            if let Ok(uid) = doc.get_str("user_id") {
-                owner = Some((uid.to_string(), prod));
-            }
-        }
-    }
     // Try both token stores — the token may belong to either product
-    let deleted_lm = db.refresh_tokens()
+    db.refresh_tokens()
         .delete_one(doc! { "token_hash": &th })
-        .await?
-        .deleted_count > 0;
-    let deleted_secondary = db.refresh_tokens_secondary()
+        .await?;
+    db.refresh_tokens_secondary()
         .delete_one(doc! { "token_hash": &th })
-        .await?
-        .deleted_count > 0;
-    if !deleted_lm && !deleted_secondary {
-        // Token not found in either store — still return OK (idempotent)
-    }
-    if let Some((uid, prod)) = owner {
-        let _ = user_store(&db, prod)
-            .update_one(doc! { "_id": &uid }, doc! { "$inc": { "token_version": 1 } })
-            .await;
-    }
+        .await?;
+    // Single-device logout intentionally does NOT bump token_version: one
+    // presented refresh token must not kill the user's access tokens on every
+    // other device. logout_all is the all-devices kill switch. The remaining
+    // access token of this device expires with its short TTL (~15 min).
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }
 

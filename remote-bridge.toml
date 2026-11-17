@@ -1,0 +1,17 @@
+# Remote Bridge project config — drive a Kaggle notebook kernel from this
+# machine. Fill in `notebook` with your own "<kaggle-user>/<notebook-slug>",
+# then:
+#   remote-bridge login kaggle            # one-time browser sign-in
+#   remote-bridge doctor project
+#   remote-bridge run                     # syncs this repo, runs tools/kaggle_demo.py
+#   remote-bridge shell                   # interactive shell on the Kaggle runtime
+notebook = "YOUR_KAGGLE_USER/YOUR_NOTEBOOK"
+remote_dir = "/kaggle/working/livemorph-demo"
+entrypoint = "tools/kaggle_demo.py"
+install = false
+pull = ["/tmp/livemorph_url.txt"]
+pull_dir = "remote-bridge"
+
+[runtime]
+provider = "kaggle"
+secrets = ["NGROK_AUTH_TOKEN", "DECART_API_KEY"]

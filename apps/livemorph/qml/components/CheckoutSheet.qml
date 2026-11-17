@@ -6,8 +6,8 @@ import LiveMorph
 /**
  * Checkout sheet — hands off to the system browser via Backend.openExternal
  * (HTTPS-only URLs), then the footer Recheck verifies the order.
- * Nocturne redesign: icon-tile header + status pill, centered body with the
- * order chip, gradient CTA to reopen, Recheck as the primary footer action.
+ * Obsidian Hex redesign: icon-tile header + status pill, centered body with the
+ * order chip, solid CTA to reopen, Recheck as the primary footer action.
  */
 Item {
     id: root
@@ -113,7 +113,7 @@ Item {
             anchors.left: parent.left
             anchors.leftMargin: 14
             anchors.top: parent.top
-            anchors.topMargin: 4
+            anchors.topMargin: Theme.spacingXs
             z: Theme.zLocal1
         }
         Hexagon {
@@ -123,7 +123,7 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: 14
             anchors.top: parent.top
-            anchors.topMargin: 4
+            anchors.topMargin: Theme.spacingXs
             z: Theme.zLocal1
         }
         CornerTicks {
@@ -156,8 +156,8 @@ Item {
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 14
-                    anchors.rightMargin: 10
-                    spacing: 10
+                    anchors.rightMargin: Theme.gapCard
+                    spacing: Theme.gapCard
 
                     HexBadge {
                         size: 30
@@ -172,7 +172,7 @@ Item {
                     Text {
                         text: qsTr("Secure checkout")
                         color: Colors.textPrimary
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontUi.pixelSize
                         font.weight: Font.Bold
                         Layout.fillWidth: true
                         elide: Text.ElideRight
@@ -195,7 +195,7 @@ Item {
                             horizontalAlignment: Text.AlignHCenter
                             text: root.statusText
                             color: Colors.accentHover
-                            font.pixelSize: 9
+                            font.pixelSize: Theme.fontMicro.pixelSize
                             font.family: Theme.fontMono.family
                             font.weight: Font.Bold
                         }
@@ -257,7 +257,7 @@ Item {
                         wrapMode: Text.WordWrap
                         horizontalAlignment: Text.AlignHCenter
                         color: Colors.textSecondary
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSmall.pixelSize
                         lineHeight: 1.45
                         text: qsTr("Checkout opened in your system browser. After paying, come back and tap Recheck to confirm.")
                     }
@@ -278,7 +278,7 @@ Item {
                             text: qsTr("ORDER %1").arg(root.orderId)
                             color: Colors.textMuted
                             font.family: Theme.fontMono.family
-                            font.pixelSize: 9
+                            font.pixelSize: Theme.fontMicro.pixelSize
                             font.weight: Font.Bold
                             font.letterSpacing: 1.0
                             elide: Text.ElideMiddle
@@ -314,7 +314,7 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 14
                     anchors.rightMargin: 14
-                    spacing: 10
+                    spacing: Theme.gapCard
 
                     GhostButton {
                         text: qsTr("Cancel")

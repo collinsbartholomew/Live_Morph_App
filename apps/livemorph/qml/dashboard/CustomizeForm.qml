@@ -127,9 +127,9 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                spacing: 10
+                anchors.leftMargin: Theme.spacingMd
+                anchors.rightMargin: Theme.spacingMd
+                spacing: Theme.gapCard
 
                 // Hex icon badge
                 HexBadge {
@@ -168,7 +168,7 @@ Item {
                               ? qsTr("SCENE / BACKGROUND")
                               : qsTr("DEFAULT")
                         color: Session.sceneEnabled ? Colors.accentHover : Colors.textMuted
-                        font.pixelSize: 8
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.family: Theme.fontMono.family
                         font.letterSpacing: 1.0
                     }
@@ -218,7 +218,7 @@ Item {
             width: parent.width - 40
             visible: root.expanded
             opacity: root.expanded ? 1 : 0
-            spacing: 20 // Electron: each section mb-5
+            spacing: Theme.padSection // Electron: each section mb-5
 
             Item { width: 1; height: 20 } // pt-5
 
@@ -258,7 +258,7 @@ Item {
                 Row {
                     visible: !root.refImagePath.length
                     anchors.centerIn: parent
-                    spacing: 10
+                    spacing: Theme.gapCard
 
                     Item {
                         width: 28; height: 28
@@ -284,7 +284,7 @@ Item {
                         text: root.dragOver ? qsTr("Drop to attach reference image")
                                             : qsTr("Drag image here, or click to browse")
                         color: root.dragOver || dropZoneMa.containsMouse ? Colors.textSecondary : Colors.textMuted
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontLabel.pixelSize
                     }
                 }
 
@@ -293,8 +293,8 @@ Item {
                     visible: root.refImagePath.length > 0
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: 12
-                    spacing: 10
+                    anchors.leftMargin: Theme.spacingMd
+                    spacing: Theme.gapCard
 
                     Image {
                         width: 48; height: 48
@@ -317,7 +317,7 @@ Item {
                         Text {
                             text: qsTr("Reference image attached")
                             color: Colors.textSecondary
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontLabel.pixelSize
                             font.weight: Font.Normal
                             elide: Text.ElideRight
                             width: dropZone.width - 48 - 24 - 32 - 12
@@ -325,7 +325,7 @@ Item {
                         Text {
                             text: qsTr("USED AS VISUAL ANCHOR")
                             color: Colors.textMuted
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontMonoTiny.pixelSize
                             font.family: Theme.fontMono.family
                             font.letterSpacing: 1.2
                         }
@@ -350,7 +350,7 @@ Item {
                         }
                         Tooltip {
                             anchors.top: parent.bottom
-                            anchors.topMargin: 4
+                            anchors.topMargin: Theme.spacingXs
                             text: qsTr("Remove reference image")
                             shown: removeRefMa.containsMouse
                         }
@@ -429,7 +429,7 @@ Item {
                             color: sessionPrompt === model.prompt ? Colors.accentHover
                                  : styleChipMa.containsMouse ? Colors.textPrimary
                                  : Colors.textSecondary
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontLabel.pixelSize
                             font.weight: Font.Normal
                         }
 
@@ -470,9 +470,9 @@ Item {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 12
-                    anchors.rightMargin: 12
-                    spacing: 12
+                    anchors.leftMargin: Theme.spacingMd
+                    anchors.rightMargin: Theme.spacingMd
+                    spacing: Theme.spacingMd
 
                     Rectangle {
                         width: 32; height: 32; radius: Theme.radiusSm
@@ -493,13 +493,13 @@ Item {
                         Text {
                             text: qsTr("Replace background")
                             color: Colors.textPrimary
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontMono.pixelSize
                             font.weight: Font.Bold
                         }
                         Text {
                             text: qsTr("Drop yourself into a new scene.")
                             color: Colors.textMuted
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontMonoTiny.pixelSize
                         }
                     }
 
@@ -586,7 +586,7 @@ Item {
                                     color: chipSelected ? Colors.accentHover
                                          : sceneChipMa.containsMouse ? Colors.textPrimary
                                          : Colors.textSecondary
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                 }
 
                                 MouseArea {
@@ -615,8 +615,8 @@ Item {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 4
-                    anchors.rightMargin: 4
+                    anchors.leftMargin: Theme.spacingXs
+                    anchors.rightMargin: Theme.spacingXs
                     spacing: 6
                     Icon {
                         name: "chevron-right"
@@ -627,7 +627,7 @@ Item {
                     Text {
                         text: qsTr("Edit prompt")
                         color: Colors.textPrimary
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontLabel.pixelSize
                     }
                     Rectangle {
                         width: advTag.implicitWidth + 12
@@ -641,7 +641,7 @@ Item {
                             anchors.centerIn: parent
                             text: qsTr("ADVANCED")
                             color: Colors.textMuted
-                            font.pixelSize: 8
+                            font.pixelSize: Theme.fontMicro.pixelSize
                             font.family: Theme.fontMono.family
                             font.weight: Font.Bold
                             font.letterSpacing: 1.2
@@ -660,7 +660,7 @@ Item {
                             anchors.centerIn: parent
                             text: qsTr("EDITED")
                             color: Colors.accentHover
-                            font.pixelSize: 8
+                            font.pixelSize: Theme.fontMicro.pixelSize
                             font.family: Theme.fontMono.family
                             font.weight: Font.Bold
                             font.letterSpacing: 1.2
@@ -682,21 +682,22 @@ Item {
                 id: advBody
                 width: parent.width
                 visible: advExpanded
-                spacing: 8
+                spacing: Theme.spacingSm
 
                 TextArea {
                     id: promptArea
                     width: parent.width
                     height: 160 // Electron: min-h-[160px]
-                    padding: 10
+                    padding: Theme.gapCard
+                    font: Theme.fontUi
                     // Hard cap like PromptCommitBar: an oversized prompt becomes
                     // one huge WS frame and can kill the session (proxy limit).
                     // (TextArea has no maximumLength on this Qt — clamp on edit.)
                     onTextChanged: {
-                        if (text.length > 1000) {
+                        if (text.length > Constants.maxPromptLength) {
                             const pos = cursorPosition
-                            text = text.substring(0, 1000)
-                            cursorPosition = Math.min(pos, 1000)
+                            text = text.substring(0, Constants.maxPromptLength)
+                            cursorPosition = Math.min(pos, Constants.maxPromptLength)
                         }
                     }
                     color: Colors.textPrimary
@@ -705,20 +706,11 @@ Item {
                         : qsTr("Describe the character transformation...")
                     wrapMode: TextEdit.Wrap
                     background: Rectangle {
-                        // Electron input-field focus: border #8b5cf680, bg #131320,
-                        // 3px #268b5cf6 ring
                         color: promptArea.activeFocus ? Colors.surfaceFocus : Colors.surfaceRaised
                         border.color: promptArea.activeFocus ? Colors.accent50 : Colors.surfaceBorder
                         border.width: 1
                         radius: Theme.radiusSm
-                        Rectangle {
-                            anchors.fill: parent
-                            anchors.margins: -2
-                            radius: Theme.radiusLg
-                            color: Colors.transparent
-                            border.width: 3
-                            border.color: promptArea.activeFocus ? Colors.accent15 : Colors.transparent
-                        }
+                        FocusRing { shown: promptArea.activeFocus; ringRadius: Theme.radiusSm }
                         Rectangle {
                             anchors.left: parent.left; anchors.right: parent.right
                             anchors.top: parent.top; anchors.topMargin: 1
@@ -733,7 +725,7 @@ Item {
                 // Electron: only shown for the decart realtime provider
                 Row {
                     visible: App.realtimeProvider === "decart"
-                    spacing: 8
+                    spacing: Theme.spacingSm
                     Switch {
                         checked: Session.enhancePrompts
                         onToggled: Session.enhancePrompts = checked
@@ -742,7 +734,7 @@ Item {
                     Text {
                         text: qsTr("Auto-improve prompts (Optional)")
                         color: Colors.textSecondary
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontLabel.pixelSize
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Item {
@@ -765,7 +757,7 @@ Item {
                         }
                         Tooltip {
                             anchors.bottom: parent.top
-                            anchors.bottomMargin: 4
+                            anchors.bottomMargin: Theme.spacingXs
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: qsTr("Lucy 2 auto-expands short prompts for better scene / background replacement and detail.")
                             shown: enhanceHelpMa.containsMouse
@@ -774,7 +766,7 @@ Item {
                 }
 
                 Row {
-                    spacing: 8
+                    spacing: Theme.spacingSm
                     visible: promptArea.text.trim() !== root.defaultPrompt() || Session.isActive || (Session.sceneEnabled && Session.scenePrompt.trim().length > 0)
                     Item {
                         width: resetInner.implicitWidth
@@ -782,7 +774,7 @@ Item {
                         Row {
                             id: resetInner
                             anchors.centerIn: parent
-                            spacing: 4
+                            spacing: Theme.spacingXs
                             Icon {
                                 name: "undo-2"
                                 size: 11
@@ -793,7 +785,7 @@ Item {
                                 id: resetBtn
                                 text: qsTr("RESET")
                                 color: resetBtnMa.containsMouse ? Colors.textSecondary : Colors.textMuted
-                                font.pixelSize: 10
+                                font.pixelSize: Theme.fontMonoTiny.pixelSize
                                 font.family: Theme.fontMono.family
                                 font.capitalization: Font.AllUppercase
                                 font.letterSpacing: 1.2
@@ -838,7 +830,7 @@ Item {
             SectionHeader { text: qsTr("SAVE AS CHARACTER"); width: parent.width }
             Row {
                 width: parent.width
-                spacing: 8
+                spacing: Theme.spacingSm
                 TextField {
                     id: nameField
                     width: parent.width - saveBtn.width - 8
@@ -901,7 +893,7 @@ Item {
                       ? qsTr("Saves the current prompt and reference image to your Library.")
                       : qsTr("Add a prompt or reference image above to save.")
                 color: Colors.textMuted
-                font.pixelSize: 10
+                font.pixelSize: Theme.fontMonoTiny.pixelSize
                 wrapMode: Text.WordWrap
             }
 
@@ -949,7 +941,7 @@ Item {
             if (!promptArea.activeFocus)
                 promptArea.text = Session.activePrompt
         }
-        function onActiveCharacterImageChanged() {
+        function onActiveCharacterChanged() {
             refImagePath = Session.activeCharacterImage
         }
     }

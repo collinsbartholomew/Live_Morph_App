@@ -31,12 +31,12 @@ Item {
         z: Theme.zPageBanner
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 12
+            anchors.leftMargin: Theme.spacingLg
+            anchors.rightMargin: Theme.spacingMd
             Text {
                 text: qsTr("Streaming unavailable")
                 color: Colors.statusError
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontMono.pixelSize
                 Layout.fillWidth: true
             }
             GhostButton {
@@ -97,7 +97,6 @@ Item {
                 focusX: width / 2
                 focusY: height / 2
                 fadeRadius: Math.max(width, height) * 0.8
-                glowAlpha: 0.04
                 sparkleEvery: 23
                 sparkleAlpha: 0.07
                 emphasisEvery: 7
@@ -157,8 +156,8 @@ Item {
                         id: inputPip
                         anchors.left: stageBox.left
                         anchors.bottom: stageBox.bottom
-                        anchors.leftMargin: 16
-                        anchors.bottomMargin: 16
+                        anchors.leftMargin: Theme.spacingLg
+                        anchors.bottomMargin: Theme.spacingLg
                         width: Math.max(140, Math.min(256, stageBox.width * 0.22))
                         height: width * 9 / 16
                     }
@@ -180,7 +179,7 @@ Item {
                             anchors.centerIn: parent
                             text: qsTr("Cooldown %1s").arg(Session.cooldownRemainingSec)
                             color: Colors.statusWarning
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontLabel.pixelSize
                             font.family: Theme.fontMono.family
                         }
                     }
@@ -280,7 +279,7 @@ Item {
         id: notifPanel
         anchors.top: topBar.bottom
         anchors.right: parent.right
-        anchors.rightMargin: 12
+        anchors.rightMargin: Theme.spacingMd
     }
 
     WhatsNewModal {
@@ -419,7 +418,7 @@ Item {
         }
         function onShowWhatsNewChanged() {
             if (App.showWhatsNew) {
-                Config.whatsNewSeenVersion = Backend.appVersion || "1.0.0"
+                Config.whatsNewSeenVersion = Backend.appVersion || Constants.appVersion
                 whatsNew.open = true
                 App.showWhatsNew = false
             }

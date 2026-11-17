@@ -25,8 +25,9 @@ pub struct User {
     /// Product origin: livemorph | secondary (shared user table, distinct when needed)
     #[serde(default = "default_product")]
     pub product: String,
+    /// HMAC hash of the bound license key (hash-at-rest; never the plaintext).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub access_key: Option<String>,
+    pub access_key_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -70,7 +71,7 @@ impl User {
             bonus_balance: signup_bonus,
             tier: "free".into(),
             product: "livemorph".into(),
-            access_key: None,
+            access_key_hash: None,
             plan: None,
             device_id: None,
             referral_code: Some(referral_code),

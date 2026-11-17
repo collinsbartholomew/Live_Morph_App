@@ -210,22 +210,39 @@ int main(int argc, char* argv[]) {
 			if (id == -1)
 				qWarning() << "Failed to load embedded font:" << f;
 		}
+		// Make Maple Mono the app font so every control that does not set
+		// font.family explicitly still renders in it (per-Text pixelSize
+		// overrides keep the family).
+		QFont appFont(QStringLiteral("Maple Mono"));
+		appFont.setPixelSize(14);
+		app.setFont(appFont);
 	}
 
 	QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-	// App-wide dark palette (stops light OS chrome bleeding into QML controls)
+	// App-wide dark palette (stops light OS chrome bleeding into QML controls).
+	// Values mirror the Obsidian Hex Colors tokens (pure neutrals, white accent).
 	QPalette dark;
-	dark.setColor(QPalette::Window, QColor(0x08, 0x08, 0x0c));
-	dark.setColor(QPalette::WindowText, QColor(0xed, 0xed, 0xf2));
-	dark.setColor(QPalette::Base, QColor(0x14, 0x14, 0x1c));
-	dark.setColor(QPalette::AlternateBase, QColor(0x0e, 0x0e, 0x14));
-	dark.setColor(QPalette::Text, QColor(0xed, 0xed, 0xf2));
-	dark.setColor(QPalette::Button, QColor(0x0e, 0x0e, 0x14));
-	dark.setColor(QPalette::ButtonText, QColor(0xed, 0xed, 0xf2));
-	dark.setColor(QPalette::Highlight, QColor(0x8b, 0x5c, 0xf6));
-	dark.setColor(QPalette::HighlightedText, QColor(0x08, 0x08, 0x0c));
-	dark.setColor(QPalette::PlaceholderText, QColor(0x6a, 0x6a, 0x7a));
+	dark.setColor(QPalette::Window, QColor("#000000"));
+	dark.setColor(QPalette::WindowText, QColor("#ffffff"));
+	dark.setColor(QPalette::Base, QColor("#141414"));
+	dark.setColor(QPalette::AlternateBase, QColor("#0a0a0a"));
+	dark.setColor(QPalette::Text, QColor("#ffffff"));
+	dark.setColor(QPalette::Button, QColor("#0a0a0a"));
+	dark.setColor(QPalette::ButtonText, QColor("#ffffff"));
+	dark.setColor(QPalette::Light, QColor("#242424"));
+	dark.setColor(QPalette::Midlight, QColor("#1c1c1c"));
+	dark.setColor(QPalette::Mid, QColor("#2a2a2a"));
+	dark.setColor(QPalette::Dark, QColor("#000000"));
+	dark.setColor(QPalette::Shadow, QColor("#000000"));
+	dark.setColor(QPalette::Highlight, QColor("#ffffff"));
+	dark.setColor(QPalette::HighlightedText, QColor("#000000"));
+	dark.setColor(QPalette::BrightText, QColor("#ffffff"));
+	dark.setColor(QPalette::Link, QColor("#ffffff"));
+	dark.setColor(QPalette::LinkVisited, QColor("#b8b8b8"));
+	dark.setColor(QPalette::ToolTipBase, QColor("#1a1a1a"));
+	dark.setColor(QPalette::ToolTipText, QColor("#ffffff"));
+	dark.setColor(QPalette::PlaceholderText, QColor("#7f7f7f"));
 	app.setPalette(dark);
 
 	auto* config = new ConfigManager(&app);
@@ -448,6 +465,11 @@ int main(int argc, char* argv[]) {
 		                        + QStringLiteral("/livemorph-dev-import-%1")
 		                              .arg(QCoreApplication::applicationPid());
 		QDir().mkpath(tmpRoot);
+		// The pid-suffixed dir under /tmp is predictable, so lock it down to
+		// the owning user before the symlink is created — otherwise another
+		// local user could pre-create/replace it between mkpath and link.
+		QFile::setPermissions(tmpRoot,
+		                      QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
 		const QString linkPath = tmpRoot + QStringLiteral("/LiveMorph");
 		QFile::remove(linkPath);
 		if (QFile::link(devQmlDir, linkPath)) {
@@ -504,8 +526,10 @@ int main(int argc, char* argv[]) {
 		writeInstanceSecret();
 		auto* lockServer = new QLocalServer(&app);
 		QLocalServer::removeServer(serverKey); // stale socket after a crash
-		if (!lockServer->listen(serverKey))
-			return 0;
+		if (!lockServer->listen(serverKey)) {
+			qWarning() << "single-instance listen failed:" << lockServer->errorString();
+			return 1;
+		}
 		const QString secret = readInstanceSecret();
 		QObject::connect(
 		    lockServer, &QLocalServer::newConnection, lockServer, [appCtrl, lockServer, secret, config]() {

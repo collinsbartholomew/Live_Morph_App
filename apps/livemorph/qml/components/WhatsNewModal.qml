@@ -12,6 +12,7 @@ import LiveMorph
  */
 Rectangle {
     id: root
+    property string modalId: "whatsnew"
     property bool open: false
     // Release headline + notes for the current version (set by callers when
     // the update payload provides them; Electron renders changelog markdown)
@@ -25,14 +26,14 @@ Rectangle {
 
     onOpenChanged: {
         if (open)
-            App.modalOpened()
+            App.modalOpened(root.modalId)
         else
-            App.modalClosed()
+            App.modalClosed(root.modalId)
     }
     Connections {
         target: App
-        function onModalEscapeRequested() {
-            if (root.open) {
+        function onModalEscapeRequested(id) {
+            if (root.open && id === root.modalId) {
                 Config.whatsNewSeenVersion = App.appVersion || Backend.appVersion || Constants.appVersion
                 root.open = false
             }
@@ -90,14 +91,14 @@ Rectangle {
             // ── Header ──────────────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.margins: 24
-                Layout.topMargin: 24
-                Layout.bottomMargin: 16
+                Layout.margins: Theme.spacingXl
+                Layout.topMargin: Theme.spacingXl
+                Layout.bottomMargin: Theme.spacingLg
                 spacing: 6
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 10
+                    spacing: Theme.gapCard
                     Hexagon {
                         size: 10
                         lineWidth: 1.5
@@ -107,7 +108,7 @@ Rectangle {
                         text: qsTr("WHAT'S NEW")
                         color: Colors.textMuted
                         font.family: Theme.fontMono.family
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                         font.weight: Font.Bold
                         font.letterSpacing: Theme.trackingEyebrow
                     }
@@ -126,7 +127,7 @@ Rectangle {
                     visible: root.headline.length > 0
                     text: root.headline
                     color: Colors.textSecondary
-                    font.pixelSize: 13
+                    font.pixelSize: Theme.fontSmall.pixelSize
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
                 }
@@ -136,8 +137,8 @@ Rectangle {
             Flickable {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.leftMargin: 24
-                Layout.rightMargin: 24
+                Layout.leftMargin: Theme.spacingXl
+                Layout.rightMargin: Theme.spacingXl
                 contentHeight: notesCol.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -145,14 +146,14 @@ Rectangle {
                 ColumnLayout {
                     id: notesCol
                     width: parent.width
-                    spacing: 12
+                    spacing: Theme.spacingMd
 
                     Repeater {
                         model: root.notes.length > 0 ? root.notes : [qsTr("This update includes performance improvements and bug fixes.")]
                         Row {
                             required property var modelData
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: Theme.spacingSm
                             Hexagon {
                                 size: 6
                                 lineWidth: 0
@@ -162,7 +163,7 @@ Rectangle {
                             Text {
                                 text: parent.modelData
                                 color: Colors.textSecondary
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontMono.pixelSize
                                 wrapMode: Text.WordWrap
                                 width: parent.width - 14
                                 lineHeight: 1.4
@@ -177,7 +178,7 @@ Rectangle {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 60
-                Layout.topMargin: 16
+                Layout.topMargin: Theme.spacingLg
                 color: Colors.surfaceRaised
                 Rectangle {
                     anchors.left: parent.left
@@ -188,8 +189,8 @@ Rectangle {
                 }
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 24
-                    anchors.rightMargin: 24
+                    anchors.leftMargin: Theme.spacingXl
+                    anchors.rightMargin: Theme.spacingXl
                     Item { Layout.fillWidth: true }
                     PrimaryButton {
                         text: qsTr("Got it")

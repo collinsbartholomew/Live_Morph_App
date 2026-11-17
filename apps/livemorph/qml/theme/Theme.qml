@@ -106,6 +106,9 @@ QtObject {
     readonly property int zLocal10: 10
     readonly property int zLocal11: 11
     readonly property int zLocal12: 12
+    // PiP video overlay: above stage content and local overlays, below the
+    // dropdown catcher and popups — it must never sit on top of an error card.
+    readonly property int zPip: 13
 
     readonly property int workshopWidth: 360
     readonly property int workshopCollapsedWidth: 48
@@ -158,12 +161,15 @@ QtObject {
     // comma-separated families). Only Light / Regular / Bold are bundled, so
     // every weight below maps deterministically onto those three. ----
     readonly property font fontUi: Qt.font({ family: "Maple Mono", pixelSize: 14 })
+    readonly property font fontLg: Qt.font({ family: "Maple Mono", pixelSize: 15 })
     readonly property font fontSmall: Qt.font({ family: "Maple Mono", pixelSize: 13 })
     readonly property font fontTiny: Qt.font({ family: "Maple Mono", pixelSize: 12 })
     readonly property font fontLabel: Qt.font({ family: "Maple Mono", pixelSize: 11, weight: Font.Bold, letterSpacing: 1.0 })
     readonly property font fontCaption: Qt.font({ family: "Maple Mono", pixelSize: 10, weight: Font.Bold, letterSpacing: 0.8 })
     readonly property font fontTitle: Qt.font({ family: "Maple Mono", pixelSize: 16, weight: Font.Bold })
+    readonly property font fontXl: Qt.font({ family: "Maple Mono", pixelSize: 18, weight: Font.Bold })
     readonly property font fontHeading: Qt.font({ family: "Maple Mono", pixelSize: 20, weight: Font.Bold })
+    readonly property font fontBanner: Qt.font({ family: "Maple Mono", pixelSize: 24, weight: Font.Bold })
     readonly property font fontHeadline: Qt.font({ family: "Maple Mono", pixelSize: 28, weight: Font.Bold })
     readonly property font fontDisplay: Qt.font({ family: "Maple Mono", pixelSize: 40, weight: Font.Bold })
     readonly property font fontAuthHeadline: Qt.font({ family: "Maple Mono", pixelSize: 34, weight: Font.Bold })

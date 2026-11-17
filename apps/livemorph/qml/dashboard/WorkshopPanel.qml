@@ -61,7 +61,7 @@ Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: Theme.padSection
                 anchors.rightMargin: Theme.padSection
-                spacing: 8
+                spacing: Theme.spacingSm
 
                 Hexagon {
                     size: 11
@@ -89,7 +89,7 @@ Rectangle {
                     text: Catalog.count
                     color: Catalog.count > 0 ? Colors.accentHover : Colors.textMuted
                     font.family: Theme.fontMono.family
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                     font.weight: Font.Bold
                 }
             }
@@ -100,7 +100,7 @@ Rectangle {
         Flickable {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.topMargin: 16
+            Layout.topMargin: Theme.spacingLg
             contentHeight: scrollCol.height
             contentWidth: width
             clip: true

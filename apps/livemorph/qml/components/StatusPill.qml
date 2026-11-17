@@ -41,8 +41,11 @@ Rectangle {
 
     implicitWidth: row.implicitWidth + 20
     implicitHeight: 24
+    // Long/server-derived status text must truncate, never push the pill (and
+    // the TopBar cluster behind it) out of place.
+    clip: true
     radius: Theme.radiusFull
-    z: ma.containsMouse ? Theme.zTooltip : Theme.zLocal0
+    z: ma.containsMouse ? Theme.zLocal5 : Theme.zLocal0
     color: isError ? Colors.errorFaintBg
         : isActive ? Colors.successFaintBg
         : isPending ? Colors.warningFaintBg
@@ -66,6 +69,8 @@ Rectangle {
         Text {
             text: root.effectiveText
             textFormat: Text.PlainText // status text may carry server-derived error prose
+            width: Math.min(implicitWidth, Math.max(0, root.width - 36))
+            elide: Text.ElideRight
             color: root.isError ? Colors.statusError
                  : root.isActive ? Colors.statusSuccess
                  : root.isPending ? Colors.statusWarning

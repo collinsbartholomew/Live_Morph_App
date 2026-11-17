@@ -439,8 +439,11 @@ static QJsonValue sanitizeJsonValue(const QJsonValue &v)
     if (v.isString())
         return QJsonValue(sanitizeTranslationValue(v.toString()));
     if (v.isObject()) {
+        // Bind the object to a local first: iterating v.toObject().constBegin()
+        // directly dangles (the temporary dies at the end of the init statement).
+        const QJsonObject src = v.toObject();
         QJsonObject o;
-        for (auto it = v.toObject().constBegin(); it != v.toObject().constEnd(); ++it)
+        for (auto it = src.constBegin(); it != src.constEnd(); ++it)
             o.insert(it.key(), sanitizeJsonValue(it.value()));
         return o;
     }

@@ -70,6 +70,10 @@ Controls.Button {
     contentItem: Row {
         spacing: Theme.spacingSm
         anchors.centerIn: parent
+        // Clamp to the button's inner width so a long/translated label elides
+        // instead of painting outside the button bounds.
+        width: Math.min(implicitWidth, Math.max(0, control.width - control.leftPadding - control.rightPadding))
+        clip: true
 
         Hexagon {
             size: 9
@@ -101,6 +105,7 @@ Controls.Button {
             font.letterSpacing: control.cta ? Theme.trackingCta : 0
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignHCenter
+            width: Math.min(implicitWidth, Math.max(0, parent.width - 19))
             elide: Text.ElideRight
         }
     }

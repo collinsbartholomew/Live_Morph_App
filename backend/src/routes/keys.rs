@@ -102,6 +102,8 @@ async fn validate_license_key_inner(
             "license key required (send `key` or `access_key`)".into(),
         ));
     }
+    // Keys are stored hashed at rest; all lookups go through key_hash.
+    let key_hash = crate::routes::auth::hash_token(&key);
     let device_id = resolve_device_id(&req, body.device_id.as_deref());
     if device_id.is_empty() {
         return Err(AppError::BadRequest(
@@ -122,7 +124,7 @@ async fn validate_license_key_inner(
     // 1) READ-ONLY resolution + ownership checks (no mutation here).
     let ak = db
         .access_keys_secondary()
-        .find_one(doc! { "key": &key, "active": true })
+        .find_one(doc! { "key_hash": &key_hash, "active": true })
         .await?
         .ok_or_else(|| AppError::NotFound("invalid or inactive license key".into()))?;
 
@@ -155,7 +157,7 @@ async fn validate_license_key_inner(
         let claimed = db
             .access_keys_secondary()
             .find_one_and_update(
-                doc! { "key": &key, "active": true, "credits_granted": { "$gt": 0.0 } },
+                doc! { "key_hash": &key_hash, "active": true, "credits_granted": { "$gt": 0.0 } },
                 doc! { "$set": {
                     "user_id": &auth.user_id,
                     "device_id": &device_id,
@@ -174,7 +176,7 @@ async fn validate_license_key_inner(
                 // Another request claimed it concurrently; re-read and validate state.
                 let latest = db
                     .access_keys_secondary()
-                    .find_one(doc! { "key": &key, "active": true })
+                    .find_one(doc! { "key_hash": &key_hash, "active": true })
                     .await?
                     .ok_or_else(|| AppError::NotFound("invalid or inactive license key".into()))?;
                 if latest.credits_granted > 0.0
@@ -210,7 +212,7 @@ async fn validate_license_key_inner(
                 doc! {
                     "$inc": { "credit_balance": grant },
                     "$set": {
-                        "access_key": &ak.key,
+                        "access_key_hash": crate::routes::auth::hash_token(&key),
                         "plan": &ak.plan,
                         "product": ProductId::Secondary.as_str(),
                         "device_id": &device_id,
@@ -235,7 +237,7 @@ async fn validate_license_key_inner(
             .update_one(
                 doc! { "_id": &user.id },
                 doc! { "$set": {
-                    "access_key": &ak.key,
+                    "access_key_hash": crate::routes::auth::hash_token(&key),
                     "plan": &ak.plan,
                     "product": ProductId::Secondary.as_str(),
                     "device_id": &device_id,
@@ -255,8 +257,8 @@ async fn validate_license_key_inner(
     Ok(HttpResponse::Ok().json(json!({
         "ok": true,
         "valid": true,
-        "access_key": ak.key,
-        "key": ak.key,
+        "access_key": &key,
+        "key": &key,
         "plan": ak.plan,
         "device_id": device_id,
         "expires_at": expires_at_string(ak.expires_at),
@@ -307,9 +309,14 @@ async fn keys_lookup(
         .map(|s| s.trim().to_uppercase())
         .unwrap_or_default();
 
-    let mut ak = if !key.is_empty() {
+    let key_hash = if key.is_empty() {
+        None
+    } else {
+        Some(crate::routes::auth::hash_token(&key))
+    };
+    let mut ak = if let Some(ref kh) = key_hash {
         db.access_keys_secondary()
-            .find_one(doc! { "key": &key, "active": true })
+            .find_one(doc! { "key_hash": kh, "active": true })
             .await?
     } else {
         None
@@ -336,12 +343,16 @@ async fn keys_lookup(
             }
             let device_id = if own { ak.device_id.clone() } else { None };
             let owner_id = if own { Some(ak.user_id.clone()) } else { None };
+            // Echo the presented key only — the plaintext is never stored on
+            // the user row (hash-at-rest), so without a supplied key there is
+            // nothing to echo back.
+            let key_out = if !key.is_empty() { key.clone() } else { String::new() };
             Ok(HttpResponse::Ok().json(json!({
                 "found": true,
                 "active": ak.active,
                 "expired": expired,
-                "key": ak.key,
-                "access_key": ak.key,
+                "key": key_out,
+                "access_key": key_out,
                 "plan": ak.plan,
                 "device_id": device_id,
                 "user_id": owner_id,
@@ -369,9 +380,10 @@ async fn keys_status(
     }
     let key = query.get("key").map(|s| s.trim().to_uppercase());
     let key_supplied = key.as_ref().map(|k| !k.is_empty()).unwrap_or(false);
-    let ak = if let Some(k) = key.filter(|k| !k.is_empty()) {
+    let key_hash = key.as_deref().filter(|k| !k.is_empty()).map(crate::routes::auth::hash_token);
+    let ak = if let Some(ref kh) = key_hash {
         db.access_keys_secondary()
-            .find_one(doc! { "key": &k, "active": true })
+            .find_one(doc! { "key_hash": kh, "active": true })
             .await?
     } else {
         db.access_keys_secondary()
@@ -397,11 +409,17 @@ async fn keys_status(
                 })));
             }
             let device_id = if own { ak.device_id.clone() } else { None };
+            let key_out = if let Some(ref k) = key {
+                k.clone()
+            } else {
+                // Plaintext is hash-at-rest on the user row; nothing to echo.
+                String::new()
+            };
             Ok(HttpResponse::Ok().json(json!({
                 "valid": ak.active && !expired && (ak.user_id.is_empty() || ak.user_id == auth.user_id),
                 "found": true,
                 "expired": expired,
-                "access_key": ak.key,
+                "access_key": key_out,
                 "plan": ak.plan,
                 "device_id": device_id,
                 "expires_at": expires_at_string(ak.expires_at),

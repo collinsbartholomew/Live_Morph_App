@@ -13,16 +13,28 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 #[get("/health")]
 async fn health(db: web::Data<Db>, _cfg: web::Data<Arc<Config>>) -> HttpResponse {
-    let mongo_ok = db
-        .db
-        .run_command(mongodb::bson::doc! { "ping": 1 })
-        .await
-        .is_ok();
-    let mongo_secondary_ok = db
-        .db_secondary
-        .run_command(mongodb::bson::doc! { "ping": 1 })
-        .await
-        .is_ok();
+    // LB probes can hit this constantly; cache the Mongo pings for 5s so a
+    // health flood doesn't turn into a Mongo write/read storm.
+    use std::sync::LazyLock;
+    use std::sync::Mutex;
+    static PING_CACHE: LazyLock<Mutex<Option<(std::time::Instant, bool, bool)>>> =
+        LazyLock::new(|| Mutex::new(None));
+    let cached = PING_CACHE
+        .lock()
+        .ok()
+        .and_then(|g| *g)
+        .filter(|(t, _, _)| t.elapsed() < std::time::Duration::from_secs(5));
+    let (mongo_ok, mongo_secondary_ok) = match cached {
+        Some((_, a, b)) => (a, b),
+        None => {
+            let a = db.db.run_command(mongodb::bson::doc! { "ping": 1 }).await.is_ok();
+            let b = db.db_secondary.run_command(mongodb::bson::doc! { "ping": 1 }).await.is_ok();
+            if let Ok(mut g) = PING_CACHE.lock() {
+                *g = Some((std::time::Instant::now(), a, b));
+            }
+            (a, b)
+        }
+    };
     let status = if mongo_ok && mongo_secondary_ok {
         "ok"
     } else {

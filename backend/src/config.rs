@@ -303,6 +303,22 @@ impl Config {
         {
             cfg.mongodb_db_secondary = cfg.secondary_product_id.trim().to_string();
         }
+        // Never run on the repo-known .env.example placeholder outside
+        // production: auto-generate a random per-boot dev secret instead (dev
+        // tokens don't need to survive restarts). Production refuses
+        // placeholders outright in main.rs.
+        const EXAMPLE_JWT_PLACEHOLDER: &str =
+            "change-me-to-a-long-random-string-at-least-32-chars";
+        if !cfg.is_production() && cfg.jwt_secret == EXAMPLE_JWT_PLACEHOLDER {
+            use rand::RngExt;
+            let mut rng = rand::rng();
+            let mut bytes = [0u8; 32];
+            rng.fill(&mut bytes);
+            cfg.jwt_secret = hex::encode(bytes);
+            tracing::warn!(
+                "JWT_SECRET is the shipped .env.example placeholder — generated a random per-boot dev secret; set a real JWT_SECRET"
+            );
+        }
         Ok(cfg)
     }
 
@@ -549,6 +565,12 @@ impl Config {
             }
             if !std::env::var("OTP_PEPPER").map(|p| p.len() >= 16).unwrap_or(false) {
                 return Err("OTP_PEPPER (>= 16 chars) is required in production".into());
+            }
+            // The dev fallback pepper passes the length check — refuse it
+            // explicitly in production (it is a repo-known HMAC key).
+            if std::env::var("OTP_PEPPER").as_deref() == Ok("livemorph-dev-otp-pepper-not-for-production")
+            {
+                return Err("OTP_PEPPER must not be the shipped dev fallback in production".into());
             }
             if !self.admin_secret.as_deref().map(|s| s.len() >= 16).unwrap_or(false) {
                 return Err("ADMIN_SECRET (>= 16 chars) is required in production".into());

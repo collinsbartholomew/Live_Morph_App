@@ -1,5 +1,6 @@
 #include "BackendClient.h"
 #include "core/DeviceIdentity.h"
+#include "core/ConfigManager.h"
 #include <QClipboard>
 #include <QDesktopServices>
 #include <QFileInfo>
@@ -907,7 +908,7 @@ void BackendClient::fetchBootstrap() {
 		// silently repoint desktop clients away from the user's saved setting
 		// (which ConfigManager owns), and a compromised backend must not be
 		// able to repoint the client (and its JWT) at an attacker host.
-		const bool envOverride = !qgetenv("LIVEMORPH_API_URL").isEmpty();
+		const bool envOverride = ConfigManager::envApiUrlOverrideActive();
 		const bool hasSavedUrl = !QSettings(QStringLiteral("LiveMorph"), QStringLiteral("LiveMorph"))
 		                             .value(QStringLiteral("api/baseUrl")).toString().isEmpty();
 		if (!envOverride && !hasSavedUrl) {
@@ -1013,7 +1014,18 @@ void BackendClient::downloadUpdate() {
 		// Manifest sha256 — the client refuses to install an update whose digest
 		// doesn't match. Absent = warn loudly (operator hasn't set APP_UPDATE_SHA256).
 		const QString expectedSha = o.value(QStringLiteral("sha256")).toString().trimmed().toLower();
-		const QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+		// DownloadLocation can be empty on minimal systems (no XDG dirs) —
+		// fall back to Documents, then Home, instead of writing to "/" (as
+		// root) or a relative path in the process working directory.
+		QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+		if (dir.isEmpty())
+			dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+		if (dir.isEmpty())
+			dir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+		if (dir.isEmpty()) {
+			emit updateDownloadFailed(QStringLiteral("No writable download folder available"));
+			return;
+		}
 		// Sanitize the filename: basename only, allowlist charset — never let the
 		// server steer a path, and never remove a pre-existing file up front.
 		QString fname = QUrl::fromPercentEncoding(qurl.fileName().toUtf8());
@@ -1086,10 +1098,11 @@ void BackendClient::downloadUpdate() {
 			}
 		});
 		connect(reply, &QNetworkReply::finished, this, [this, f, reply, outPath, received, hasher, expectedSha, finalPath]() {
-			// One QSaveFile per attempt leaked until app exit — close AND free it
-			// on every exit path. Capture `reply`: cancelUpdateDownload() nulls
-			// the member, so reading m_downloadReply here could deref null.
-			f->cancelWriting(); // QSaveFile::close() is private; discard the .part
+			// One QSaveFile per attempt leaked until app exit — free it on every
+			// exit path. Capture `reply`: cancelUpdateDownload() nulls the member.
+			// NOTE: do NOT call cancelWriting() unconditionally — it sets a sticky
+			// WriteError and makes the later commit() fail, breaking every download.
+			// On error paths the .part is removed explicitly below instead.
 			f->deleteLater();
 			delete received;
 			const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -1108,17 +1121,20 @@ void BackendClient::downloadUpdate() {
 				return;
 			}
 			// Integrity gate: verify the sha256 from the manifest before the
-			// rename. A missing digest is a config bug — warn, but don't install
-			// an unverifiable binary silently.
+			// rename. A missing digest is a config bug — warn, and do NOT mark the
+			// file executable, so an unverified binary can't be run by accident.
 			const QString got = QString::fromLatin1(hasher->result().toHex());
 			delete hasher;
+			bool digestOk = false;
 			if (expectedSha.isEmpty()) {
-				qWarning() << "BackendClient: update manifest has no sha256 — installing unverified (set APP_UPDATE_SHA256 on the backend)";
+				qWarning() << "BackendClient: update manifest has no sha256 — downloaded but NOT marked executable (set APP_UPDATE_SHA256 on the backend)";
 			} else if (got != expectedSha) {
 				emit updateDownloadFailed(tr("Update checksum mismatch — download rejected"));
 				cancelUpdateDownload();
 				QFile::remove(outPath);
 				return;
+			} else {
+				digestOk = true;
 			}
 			if (!f->commit()) {
 				emit updateDownloadFailed(tr("Could not finalize update file"));
@@ -1135,8 +1151,12 @@ void BackendClient::downloadUpdate() {
 				cancelUpdateDownload();
 				return;
 			}
-			QFile(finalPath).setPermissions(
-				QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+			// Only mark the update executable when its sha256 verified — an
+			// unverified download stays a plain data file.
+			QFile finalF(finalPath);
+			finalF.setPermissions(digestOk
+				? QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
+				: QFileDevice::ReadOwner | QFileDevice::WriteOwner);
 			emit updateDownloaded(finalPath);
 			cancelUpdateDownload();
 		});

@@ -226,7 +226,8 @@ async fn create_order(
         crypto_status: None,
         kind: None,
         plan: None,
-        access_key: None,
+        access_key_hash: None,
+        access_key_plain: None,
         device_id: body.device_id.clone(),
         created_at: bson::DateTime::from_chrono(Utc::now()),
         paid_at: None,
@@ -716,7 +717,7 @@ pub async fn verify_order_impl(
         "order_id": order.id,
         "status": order.status,
         "credits": order.credits,
-        "access_key": order.access_key,
+        "access_key": order.access_key_plain,
         "plan": order.plan,
         "balance": user.public_view(),
     })))

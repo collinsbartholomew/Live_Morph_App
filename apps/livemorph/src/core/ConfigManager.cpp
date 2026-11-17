@@ -237,6 +237,17 @@ QString ConfigManager::apiBaseUrl() const
     return kDefaultApiBaseUrl;
 }
 
+bool ConfigManager::envApiUrlOverrideActive()
+{
+    const QByteArray envUrl = qgetenv("LIVEMORPH_API_URL");
+    return !envUrl.isEmpty() && !normalizeApiBaseUrl(QString::fromUtf8(envUrl)).isEmpty();
+}
+
+QByteArray ConfigManager::turnUrlsEnv()
+{
+    return qgetenv("LIVEMORPH_TURN_URLS");
+}
+
 void ConfigManager::setApiBaseUrl(const QString &u)
 {
     if (u.trimmed().isEmpty())

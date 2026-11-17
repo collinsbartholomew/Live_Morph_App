@@ -239,9 +239,16 @@ async fn background_select(
     let product_id = product(&req);
     let auth = require_user(&req)?;
     let preset_id = body.preset_id.trim().to_string();
+    if preset_id.chars().count() > 64
+        || !BACKGROUND_PRESETS.iter().any(|(id, _, _)| *id == preset_id)
+    {
+        return Err(AppError::BadRequest("unknown preset_id".into()));
+    }
     let prompt = body
         .prompt
         .clone()
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
         .or_else(|| {
             BACKGROUND_PRESETS
                 .iter()
@@ -249,6 +256,9 @@ async fn background_select(
                 .map(|(_, _, pr)| pr.to_string())
         })
         .unwrap_or_default();
+    if prompt.chars().count() > 4000 {
+        return Err(AppError::BadRequest("prompt too long (max 4000 chars)".into()));
+    }
     // Persist the active background on the session-less profile so the client can
     // reconcile after reconnect (and for audit). Uses upsert to avoid TOCTOU race.
     let coll = match product_id {

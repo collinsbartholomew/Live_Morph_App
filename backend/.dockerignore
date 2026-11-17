@@ -11,4 +11,5 @@ scripts/
 docs/
 *.log
 *.md
-rust-toolchain.toml
+# rust-toolchain.toml is intentionally NOT ignored: the pinned toolchain must
+# travel with the build context so the image builds with the same rustc.

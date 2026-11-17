@@ -155,9 +155,10 @@ fn credit_gate_requires_positive_balance() {
 #[test]
 fn nowpayments_status_classification() {
     // Mirror the backend nowpayments module logic — tests verify our understanding
-    // matches the implementation contract.
+    // matches the implementation contract: only `finished` (fully settled)
+    // provisions credits; `confirmed` is still in flight.
     fn is_paid(s: &str) -> bool {
-        matches!(s.to_ascii_lowercase().as_str(), "finished" | "confirmed")
+        matches!(s.to_ascii_lowercase().as_str(), "finished")
     }
     fn is_terminal_failure(s: &str) -> bool {
         matches!(
@@ -172,7 +173,7 @@ fn nowpayments_status_classification() {
         )
     }
     assert!(is_paid("finished"));
-    assert!(is_paid("CONFIRMED"));
+    assert!(!is_paid("CONFIRMED"));
     assert!(is_terminal_failure("expired"));
     assert!(is_in_flight("waiting"));
     assert!(!is_paid("waiting"));

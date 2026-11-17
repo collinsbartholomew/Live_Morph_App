@@ -173,20 +173,19 @@ pub fn check_rate_limit(ip: &str, action: &str, max_requests: u32, window_secs: 
     }
 
     // Hard cap even between sweeps. First drop fully-expired buckets (a flood
-    // of unique keys shouldn't evict live buckets); only if still at cap, evict
-    // the LRU one.
+    // of unique keys shouldn't evict live buckets). Only if still at cap, evict
+    // a BATCH of the oldest buckets (10% at once) — scanning min_by_key per key is
+    // O(n) per insert under a flood; amortize it.
     if map.len() >= MAX_BUCKETS {
         map.retain(|_, (ts, _)| ts.iter().any(|t| now.duration_since(*t) < window));
     }
-    while map.len() >= MAX_BUCKETS {
-        let Some(oldest) = map
-            .iter()
-            .min_by_key(|(_, (_, last))| *last)
-            .map(|(k, _)| k.clone())
-        else {
-            break;
-        };
-        map.remove(&oldest);
+    if map.len() >= MAX_BUCKETS {
+        let mut entries: Vec<_> = map.iter().map(|(k, (_, last))| (k.clone(), *last)).collect();
+        entries.sort_by_key(|(_, last)| *last);
+        let evict = (entries.len() / 10).max(1);
+        for (k, _) in entries.into_iter().take(evict) {
+            map.remove(&k);
+        }
     }
 
     let key = (ip.to_lowercase(), action.to_string());

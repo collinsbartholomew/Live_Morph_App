@@ -55,8 +55,8 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 24
-        anchors.rightMargin: 24
+        anchors.leftMargin: Theme.spacingXl
+        anchors.rightMargin: Theme.spacingXl
         spacing: 0
 
         // ── Left: w-[360px] — Electron: settings gear + warmup / session cost ──
@@ -69,9 +69,9 @@ Rectangle {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 4
-                anchors.rightMargin: 8
-                spacing: 12
+                anchors.leftMargin: Theme.spacingXs
+                anchors.rightMargin: Theme.spacingSm
+                spacing: Theme.spacingMd
 
                 // Settings gear (opens Settings — Electron)
                 IconButton {
@@ -114,7 +114,7 @@ Rectangle {
                                   ? qsTr("DOWN… %1%").arg(Math.round(Backend.updateProgress))
                                   : qsTr("RESTART & UPDATE")
                             color: Colors.accent
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontLabel.pixelSize
                             font.weight: Font.Normal
                             font.capitalization: Font.AllUppercase
                             font.letterSpacing: 1.0
@@ -149,7 +149,7 @@ Rectangle {
             Row {
                 visible: root.warmingUp
                 anchors.centerIn: parent
-                spacing: 10
+                spacing: Theme.gapCard
 
                 Item {
                     width: 26; height: 26
@@ -170,7 +170,7 @@ Rectangle {
                     Text {
                         text: root.warmupText
                         color: Colors.textPrimary
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontMono.pixelSize
                         font.weight: Font.Bold
                         elide: Text.ElideRight
                         width: Math.min(implicitWidth, 170)
@@ -178,7 +178,7 @@ Rectangle {
                     Text {
                         text: qsTr("NO CREDITS USED YET")
                         color: Colors.textMuted
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.capitalization: Font.AllUppercase
                         font.letterSpacing: 1.2
                         font.family: Theme.fontMono.family
@@ -194,7 +194,7 @@ Rectangle {
                 Text {
                     text: qsTr("SESSION COST")
                     color: Colors.textMuted
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.fontMicro.pixelSize
                     font.family: Theme.fontMono.family
                     font.letterSpacing: 1.35
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -205,7 +205,7 @@ Rectangle {
                     // Session.creditsPerSecond ALREADY includes the HD multiplier.
                     text: qsTr("%1 cr").arg(fmtInt(Math.floor(Session.elapsedSec) * Session.creditsPerSecond))
                     color: Colors.textPrimary
-                    font.pixelSize: 13
+                    font.pixelSize: Theme.fontSmall.pixelSize
                     font.weight: Font.Bold
                     font.family: Theme.fontMono.family
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -290,7 +290,7 @@ Rectangle {
                         color: Recording.isRecording ? Colors.statusError
                              : (recMa.enabled && recMa.containsMouse) ? Colors.textPrimary
                              : Colors.textMuted
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.weight: Font.Bold
                         font.letterSpacing: 1.0
                         font.capitalization: Font.AllUppercase
@@ -311,7 +311,7 @@ Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: qsTr("···")
                         color: Colors.textMuted
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.family: Theme.fontMono.family
                     }
                 }
@@ -330,7 +330,7 @@ Rectangle {
 
                 Tooltip {
                     anchors.bottom: parent.top
-                    anchors.bottomMargin: 8
+                    anchors.bottomMargin: Theme.spacingSm
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: Recording.isRecording ? qsTr("Stop recording (F12)") : qsTr("Start recording (F12)")
                     shown: recMa.containsMouse
@@ -378,7 +378,7 @@ Rectangle {
                         color: StreamServer.running
                               ? (StreamServer.paused ? Colors.statusWarning : Colors.statusSuccess85)
                               : Colors.textMuted
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.weight: Font.Bold
                         font.letterSpacing: 1.0
                         font.capitalization: Font.AllUppercase
@@ -400,7 +400,7 @@ Rectangle {
                     anchors.bottomMargin: 6
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: StreamServer.running
-                          ? qsTr("Drag to OBS, or click to stop. URL: %1").arg(StreamServer.url)
+                          ? qsTr("Drag to OBS, or click to stop. URL: %1").arg(StreamServer.urlDisplay)
                           : qsTr("Start OBS stream output (MJPEG server)")
                     shown: obsMa.containsMouse
                 }
@@ -443,7 +443,7 @@ Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: qsTr("PREVIEW")
                         color: previewMa.containsMouse ? Colors.textSecondary : Colors.textMuted
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.weight: Font.Bold
                         font.letterSpacing: 1.0
                         font.capitalization: Font.AllUppercase
@@ -491,7 +491,7 @@ Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: qsTr("POPOUT")
                         color: popoutMa.containsMouse ? Colors.textSecondary : Colors.textMuted
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.weight: Font.Bold
                         font.letterSpacing: 1.0
                         font.capitalization: Font.AllUppercase
@@ -520,7 +520,7 @@ Rectangle {
         // Width reserved for the right quick-action cluster (REC/OBS/PREVIEW/
         // POPOUT 56px each + divider + gaps) so the centered CTA can never
         // slide under it at small window widths.
-        readonly property real rightClusterReserve: 265
+        readonly property real rightClusterReserve: Constants.actionBarRightReserve
         // Centered over [left group … strip edge], but clamped so it can never
         // overlap the fixed left group or the right button cluster at small widths.
         property real cx: (parent.width + Theme.actionLeftWidth) / 2 - width / 2
@@ -558,7 +558,7 @@ Rectangle {
 
                     Row {
                         anchors.centerIn: parent
-                        spacing: 8
+                        spacing: Theme.spacingSm
 
                         // Live: hex status glyph; idle: hex play glyph
                         Hexagon {
@@ -591,11 +591,15 @@ Rectangle {
 
                             text: Session.isActive ? qsTr("STOP SWAP") : qsTr("BEGIN SWAP")
                             color: morphMa.ctaEnabled ? Colors.textOnAccent : Colors.textMuted
-                            font.pixelSize: 14
+                            font.pixelSize: Theme.fontUi.pixelSize
                             font.weight: Font.Bold
                             font.letterSpacing: 2.0
                             font.capitalization: Font.AllUppercase
                             anchors.verticalCenter: parent.verticalCenter
+                            // A long translated label must truncate, never paint
+                            // outside the fixed-width CTA button.
+                            width: Math.min(implicitWidth, Math.max(0, parent.width - 40))
+                            elide: Text.ElideRight
                         }
 
                         // In-CTA elapsed (mono tabular)
@@ -609,7 +613,7 @@ Rectangle {
                             }
                             color: morphMa.ctaEnabled ? Colors.textOnAccent : Colors.textMuted
                             opacity: morphMa.containsMouse ? 1.0 : 0.75
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontLabel.pixelSize
                             font.family: Theme.fontMono.family
                             anchors.verticalCenter: parent.verticalCenter
                         }
@@ -663,7 +667,7 @@ Rectangle {
 
                     Tooltip {
                         anchors.bottom: parent.top
-                        anchors.bottomMargin: 8
+                        anchors.bottomMargin: Theme.spacingSm
                         anchors.horizontalCenter: parent.horizontalCenter
                         property bool lowCredits: Auth.isAuthenticated
                             && !Session.isActive

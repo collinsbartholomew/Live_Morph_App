@@ -29,9 +29,9 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        spacing: 12
+        anchors.leftMargin: Theme.spacingLg
+        anchors.rightMargin: Theme.spacingLg
+        spacing: Theme.spacingMd
 
         // Connection dot + engine name + region (Electron left cluster)
         Row {
@@ -41,7 +41,9 @@ Rectangle {
                 lineWidth: 0
                 anchors.verticalCenter: parent.verticalCenter
                 fillColor: !Backend.reachable ? Colors.statusError
-                        : (Session.connectionStatus === "connecting" || Session.connectionStatus === "reconnecting") ? Colors.statusWarning
+                        : (Session.connectionStatus === "error"
+                           || Session.connectionStatus === "insufficient_credits") ? Colors.statusError
+                        : (Session.connectionStatus === "connecting" || Session.reconnecting) ? Colors.statusWarning
                         : (Session.isActive && (Session.connectionStatus === "connected" || Session.connectionStatus === "generating")) ? Colors.statusSuccess
                         : Colors.textMuted
             }
@@ -67,7 +69,7 @@ Rectangle {
                          : Session.hdActive ? Colors.accentHover
                          : Colors.textSecondary
                     font.family: Theme.fontMono.family
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.fontMicro.pixelSize
                     font.weight: Font.Bold
                     font.letterSpacing: 1.2
                 }
@@ -89,7 +91,7 @@ Rectangle {
                 color: Colors.textSecondary
                 font.letterSpacing: 1.5
                 font.family: Theme.fontMono.family
-                font.pixelSize: 9
+                font.pixelSize: Theme.fontMicro.pixelSize
                 font.weight: Font.Bold
             }
         }
@@ -111,7 +113,7 @@ Rectangle {
                  : Session.connectionQuality === "fair" ? Colors.statusWarning
                  : Colors.statusError
             font.family: Theme.fontMono.family
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontMonoTiny.pixelSize
             font.weight: Font.Normal
             Layout.alignment: Qt.AlignVCenter
         }
@@ -156,10 +158,10 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
-                    text: StreamServer.url
+                    text: StreamServer.urlDisplay
                     color: copiedMa.containsMouse ? Colors.textPrimary : Colors.textMuted
                     font.family: Theme.fontMono.family
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                     // Long custom URLs must not overpaint the right edge.
                     width: Math.min(implicitWidth, 220)
                     elide: Text.ElideMiddle
@@ -170,7 +172,7 @@ Rectangle {
                     text: root.copiedFlash
                     color: Colors.statusSuccess
                     font.family: Theme.fontMono.family
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.fontMicro.pixelSize
                     font.weight: Font.Bold
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -182,7 +184,7 @@ Rectangle {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    Backend.copyToClipboard(StreamServer.url)
+                    StreamServer.copyStreamUrl()
                     root.copiedFlash = qsTr("COPIED")
                     flashTimer.restart()
                 }
@@ -201,7 +203,7 @@ Rectangle {
             visible: !StreamServer.running
             text: qsTr("STREAM OUTPUT: NOT STARTED")
             color: Colors.textMuted
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontMonoTiny.pixelSize
             font.family: Theme.fontMono.family
             font.capitalization: Font.AllUppercase
             font.letterSpacing: 1.2

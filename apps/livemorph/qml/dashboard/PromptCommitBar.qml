@@ -53,7 +53,7 @@ Rectangle {
         anchors.rightMargin: Math.max(16, (parent.width - Constants.maxPromptBarWidth) / 2)
         anchors.topMargin: 6
         anchors.bottomMargin: 6
-        spacing: 8
+        spacing: Theme.spacingSm
 
         Item { Layout.fillWidth: true; Layout.maximumWidth: 40 }
 
@@ -72,7 +72,7 @@ Rectangle {
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 6
-                anchors.rightMargin: 4
+                anchors.rightMargin: Theme.spacingXs
                 spacing: 6
 
                 Item {
@@ -101,12 +101,12 @@ Rectangle {
                     rightPadding: 0
                     // Hard cap: an oversized prompt becomes one huge WS frame
                     // and can kill the session (proxy frame limit).
-                    maximumLength: 1000
+                    maximumLength: Constants.maxPromptLength
                     text: root.promptDraft
                     placeholderText: qsTr("Add sunglasses, a hat, or a new background…")
                     color: Colors.textPrimary
                     placeholderTextColor: Colors.textMuted
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     selectByMouse: true
                     selectionColor: Colors.selectionBg
                     selectedTextColor: Colors.selectionText
@@ -137,7 +137,7 @@ Rectangle {
                     text: promptField.text.length + "/" + promptField.maximumLength
                     color: promptField.text.length >= promptField.maximumLength
                            ? Colors.statusWarning : Colors.textMuted
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.fontMicro.pixelSize
                     font.family: Theme.fontMono.family
                     Layout.alignment: Qt.AlignVCenter
                 }
@@ -201,7 +201,7 @@ Rectangle {
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 6
-                anchors.rightMargin: 4
+                anchors.rightMargin: Theme.spacingXs
                 spacing: 6
 
                 Item {
@@ -232,7 +232,7 @@ Rectangle {
                     placeholderText: qsTr("Set the background… e.g. a sunlit beach")
                     color: Colors.textPrimary
                     placeholderTextColor: Colors.textMuted
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     selectByMouse: true
                     selectionColor: Colors.selectionBg
                     selectedTextColor: Colors.selectionText

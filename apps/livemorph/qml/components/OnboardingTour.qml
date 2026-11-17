@@ -370,8 +370,8 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 20
-            spacing: 12
+            anchors.margins: Theme.padSection
+            spacing: Theme.spacingMd
 
             RowLayout {
                 Layout.fillWidth: true
@@ -381,14 +381,14 @@ Item {
                     Text {
                         text: ("0" + (root.step + 1)).slice(-2)
                         color: Colors.textPrimary
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontLabel.pixelSize
                         font.family: Theme.fontMono.family
                         font.letterSpacing: 1.2
                     }
                     Text {
                         text: " / " + ("0" + root.steps.length).slice(-2)
                         color: Colors.textMuted40
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontLabel.pixelSize
                         font.family: Theme.fontMono.family
                         font.letterSpacing: 1.2
                     }
@@ -396,7 +396,7 @@ Item {
                 Text {
                     text: root.actForStep(root.step)
                     color: Colors.textMuted
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                     font.family: Theme.fontMono.family
                     font.capitalization: Font.AllUppercase
                     font.letterSpacing: 1.5
@@ -429,7 +429,7 @@ Item {
             Text {
                 text: (root.steps[root.step] || {title: ""}).title
                 color: Colors.textPrimary
-                font.pixelSize: 15
+                font.pixelSize: Theme.fontLg.pixelSize
                 font.weight: Font.Bold
                 font.letterSpacing: -0.375 // tracking-tight
                 Layout.fillWidth: true
@@ -439,7 +439,7 @@ Item {
             Text {
                 text: (root.steps[root.step] || {body: ""}).body
                 color: Colors.textSecondary
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontMono.pixelSize
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
                 lineHeight: 1.625 // leading-relaxed
@@ -449,8 +449,8 @@ Item {
             // glowing accent fill (shadow 0 0 6px rgba(139,92,246,.55))
             RowLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: 4
-                spacing: 4
+                Layout.topMargin: Theme.spacingXs
+                spacing: Theme.spacingXs
                 Repeater {
                     model: 3
                     delegate: Rectangle {
@@ -482,7 +482,7 @@ Item {
             }
 
             RowLayout {
-                Layout.topMargin: 8
+                Layout.topMargin: Theme.spacingSm
                 Layout.fillWidth: true
                 // Back: icon-only (Electron)
                 Rectangle {
@@ -507,7 +507,7 @@ Item {
                 Text {
                     text: qsTr("Skip tour")
                     color: skipMa.containsMouse ? Colors.textSecondary : Colors.textMuted
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontLabel.pixelSize
                     MouseArea {
                         id: skipMa
                         anchors.fill: parent

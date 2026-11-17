@@ -50,12 +50,15 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        spacing: 8
+        anchors.leftMargin: Theme.spacingLg
+        anchors.rightMargin: Theme.spacingLg
+        spacing: Theme.spacingSm
 
         StatusPill {
             visible: !root.narrow
+            // Clamp so a long translated statusText cannot squeeze the bell +
+            // account cluster at mid widths.
+            Layout.maximumWidth: 260
             text: Session.statusText
             status: Session.connectionStatus
         }
@@ -121,7 +124,7 @@ Rectangle {
                     anchors.centerIn: parent
                     text: root.notifUnread > 9 ? "9+" : root.notifUnread
                     color: Colors.textOnAccent
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.fontMicro.pixelSize
                     font.weight: Font.Bold
                 }
             }
@@ -168,7 +171,7 @@ Rectangle {
 
             Row {
                 anchors.centerIn: parent
-                spacing: 4 // gap-1
+                spacing: Theme.spacingXs // gap-1
 
                 // Solid white hexagon avatar with black initials (hex sized to
                 // the wrapper so it never overhangs the 22x22 box)
@@ -196,7 +199,7 @@ Rectangle {
                             return (first + last).toUpperCase()
                         }
                         color: Colors.textOnAccent
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                         font.weight: Font.Bold
                     }
                 }
@@ -226,7 +229,7 @@ Rectangle {
         }
     }
 
-    // ── Account menu popover (Nocturne redesign: identity header + tier pill,
+    // ── Account menu popover (Obsidian Hex redesign: identity header + tier pill,
     //    clickable balance card, icon-disc action rows, sign out) ──
     Popup {
         id: accountMenu
@@ -276,8 +279,8 @@ Rectangle {
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
                 Layout.topMargin: 14
-                Layout.bottomMargin: 12
-                spacing: 10
+                Layout.bottomMargin: Theme.spacingMd
+                spacing: Theme.gapCard
 
                 Item {
                     width: 40
@@ -298,7 +301,7 @@ Rectangle {
                             return ([...parts[0]][0] + [...parts[parts.length - 1]][0]).toUpperCase()
                         }
                         color: Colors.textOnAccent
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSmall.pixelSize
                         font.weight: Font.Bold
                     }
                 }
@@ -309,7 +312,7 @@ Rectangle {
                     Text {
                         text: Auth.displayName || Auth.email
                         color: Colors.textPrimary
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSmall.pixelSize
                         font.weight: Font.Bold
                         elide: Text.ElideRight
                         Layout.fillWidth: true
@@ -318,7 +321,7 @@ Rectangle {
                         visible: (Auth.displayName || "").length > 0
                         text: Auth.email
                         color: Colors.textMuted
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontLabel.pixelSize
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
@@ -353,7 +356,7 @@ Rectangle {
                              : Auth.tier === "basic" ? Colors.tierBasicText
                              : Colors.textMuted
                         font.family: Theme.fontMono.family
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.weight: Font.Bold
                         font.letterSpacing: 1.0
                     }
@@ -365,7 +368,7 @@ Rectangle {
                 visible: Auth.isAuthenticated && Auth.isLoading
                 Layout.leftMargin: 14
                 Layout.rightMargin: 14
-                Layout.bottomMargin: 8
+                Layout.bottomMargin: Theme.spacingSm
                 spacing: 6
                 Rectangle { Layout.preferredWidth: 48; Layout.preferredHeight: 14; radius: Theme.radiusXs; color: Colors.surfaceElevated }
                 Rectangle { Layout.preferredWidth: 32; Layout.preferredHeight: 10; radius: Theme.radiusXs; color: Colors.surfaceElevated }
@@ -377,9 +380,9 @@ Rectangle {
             Rectangle {
                 visible: Auth.isAuthenticated
                 Layout.fillWidth: true
-                Layout.leftMargin: 10
-                Layout.rightMargin: 10
-                Layout.topMargin: 10
+                Layout.leftMargin: Theme.gapCard
+                Layout.rightMargin: Theme.gapCard
+                Layout.topMargin: Theme.gapCard
                 Layout.bottomMargin: 6
                 implicitHeight: balCol.implicitHeight + 20
                 radius: Theme.radiusMd
@@ -392,9 +395,9 @@ Rectangle {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    anchors.leftMargin: 12
-                    anchors.rightMargin: 12
-                    anchors.topMargin: 10
+                    anchors.leftMargin: Theme.spacingMd
+                    anchors.rightMargin: Theme.spacingMd
+                    anchors.topMargin: Theme.gapCard
                     spacing: 6
 
                     // Credits row: eyebrow label left, big mono value right
@@ -404,7 +407,7 @@ Rectangle {
                             text: qsTr("CREDITS")
                             color: Colors.textMuted
                             font.family: Theme.fontMono.family
-                            font.pixelSize: 9
+                            font.pixelSize: Theme.fontMicro.pixelSize
                             font.letterSpacing: 1.5
                         }
                         Item { Layout.fillWidth: true }
@@ -414,7 +417,7 @@ Rectangle {
                                  : Auth.creditBalance < Constants.lowCreditThreshold ? Colors.statusWarning
                                  : Colors.textPrimary
                             font.family: Theme.fontMono.family
-                            font.pixelSize: 16
+                            font.pixelSize: Theme.fontTitle.pixelSize
                             font.weight: Font.Bold
                         }
                     }
@@ -428,7 +431,7 @@ Rectangle {
                             text: qsTr("FREE")
                             color: Colors.textMuted
                             font.family: Theme.fontMono.family
-                            font.pixelSize: 9
+                            font.pixelSize: Theme.fontMicro.pixelSize
                             font.letterSpacing: 1.5
                         }
                         Rectangle {
@@ -444,14 +447,14 @@ Rectangle {
                                 text: "+" + Auth.bonusBalance.toLocaleString(Qt.locale(I18n.uiLocaleName()), 'f', 0)
                                 color: Colors.statusSuccess
                                 font.family: Theme.fontMono.family
-                                font.pixelSize: 9
+                                font.pixelSize: Theme.fontMicro.pixelSize
                                 font.weight: Font.Bold
                             }
                         }
                         Text {
                             text: qsTr("used before paid credits")
                             color: Colors.textMuted
-                            font.pixelSize: 9
+                            font.pixelSize: Theme.fontMicro.pixelSize
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                         }
@@ -462,7 +465,7 @@ Rectangle {
                         visible: Auth.creditBalance <= 0
                         text: qsTr("You're out of credits — top up to keep morphing.")
                         color: Colors.statusWarning
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
@@ -483,10 +486,10 @@ Rectangle {
             // ── Actions ── (explicit height: ColumnLayout+Repeater implicit is 0)
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: 8
-                Layout.rightMargin: 8
+                Layout.leftMargin: Theme.spacingSm
+                Layout.rightMargin: Theme.spacingSm
                 Layout.topMargin: 2
-                Layout.bottomMargin: 4
+                Layout.bottomMargin: Theme.spacingXs
                 Layout.preferredHeight: actionsRep.count * 36 + Math.max(0, actionsRep.count - 1) * 2
                 spacing: 2
 
@@ -514,9 +517,9 @@ Rectangle {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 10
-                            spacing: 10
+                            anchors.leftMargin: Theme.spacingSm
+                            anchors.rightMargin: Theme.gapCard
+                            spacing: Theme.gapCard
 
                             // Hex icon badge
                             HexBadge {
@@ -545,7 +548,7 @@ Rectangle {
                                 color: modelData.accent
                                      ? (broke ? Colors.statusWarning : Colors.accentHover)
                                      : (itemMa.containsMouse ? Colors.textPrimary : Colors.textSecondary)
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontMono.pixelSize
                                 font.weight: modelData.accent ? Font.Bold : Font.Normal
                                 elide: Text.ElideRight
                             }
@@ -582,9 +585,9 @@ Rectangle {
             Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBorderSubtle }
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: 8
-                Layout.rightMargin: 8
-                Layout.topMargin: 4
+                Layout.leftMargin: Theme.spacingSm
+                Layout.rightMargin: Theme.spacingSm
+                Layout.topMargin: Theme.spacingXs
                 Layout.bottomMargin: 6
                 spacing: 2
 
@@ -596,9 +599,9 @@ Rectangle {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 10
-                        spacing: 10
+                        anchors.leftMargin: Theme.spacingSm
+                        anchors.rightMargin: Theme.gapCard
+                        spacing: Theme.gapCard
 
                         HexBadge {
                             size: 26
@@ -608,14 +611,14 @@ Rectangle {
                             lineColor: signoutMa.containsMouse ? Colors.statusError40 : Colors.surfaceBorderSubtle
                             fillColor: signoutMa.containsMouse ? Colors.statusError20 : Colors.surfaceElevated
                             iconColor: signoutMa.containsMouse ? Colors.statusError
-                                     : Qt.rgba(Colors.statusError.r, Colors.statusError.g, Colors.statusError.b, 0.7)
+                                     : Colors.statusError60
                         }
                         Text {
                             Layout.fillWidth: true
                             text: qsTr("Sign out")
                             color: signoutMa.containsMouse ? Colors.statusError
-                                 : Qt.rgba(Colors.statusError.r, Colors.statusError.g, Colors.statusError.b, 0.7)
-                            font.pixelSize: 12
+                                 : Colors.statusError60
+                            font.pixelSize: Theme.fontMono.pixelSize
                         }
                     }
 

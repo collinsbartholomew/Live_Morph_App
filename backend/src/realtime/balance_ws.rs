@@ -193,15 +193,21 @@ pub async fn balance_ws(
                         }).to_string()).await;
                     }
                 }
-                msg = msg_stream.next() => {
+                // Silence bound: a peer that vanished without a TCP FIN is only
+                // detected by the kernel after ~15 min, leaking a task plus a
+                // Mongo read every 10 s. Break after 120 s of silence, same idea
+                // as the realtime proxy's silence break. `StreamExt::next` is
+                // cancel-safe, so the timeout does not lose a frame.
+                msg = tokio::time::timeout(Duration::from_secs(120), msg_stream.next()) => {
                     match msg {
-                        Some(Ok(actix_ws::Message::Close(_))) | None => break,
-                        Some(Ok(actix_ws::Message::Ping(p))) => {
+                        Err(_) | Ok(None) => break,
+                        Ok(Some(Ok(actix_ws::Message::Close(_)))) => break,
+                        Ok(Some(Ok(actix_ws::Message::Ping(p)))) => {
                             let _ = session.pong(&p).await;
                         }
-                        Some(Ok(actix_ws::Message::Pong(_))) => {}
+                        Ok(Some(Ok(actix_ws::Message::Pong(_)))) => {}
                         // client ping as JSON
-                        Some(Ok(actix_ws::Message::Text(t))) if t.contains("ping") => {
+                        Ok(Some(Ok(actix_ws::Message::Text(t)))) if t.contains("ping") => {
                             let _ = session.text(json!({
                                 "type": "pong",
                                 "product": product_str,

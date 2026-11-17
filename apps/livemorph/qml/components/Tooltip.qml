@@ -2,7 +2,7 @@ import QtQuick
 import LiveMorph
 
 /**
- * Nocturne tooltip: elevated surface, soft layered shadow, top placement is
+ * Obsidian Hex tooltip: elevated surface, soft layered shadow, top placement is
  * the caller's job (anchor above the control). Delay before showing.
  * Instant show/hide under the project-wide animation ban.
  */
@@ -42,7 +42,7 @@ Rectangle {
         text: root.text
         color: Colors.textPrimary
         font.family: Theme.fontUi.family
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontLabel.pixelSize
         font.weight: Font.Normal
         wrapMode: Text.WordWrap
         horizontalAlignment: Text.AlignHCenter

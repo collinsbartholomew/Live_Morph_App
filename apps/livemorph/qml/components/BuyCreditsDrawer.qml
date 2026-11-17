@@ -249,7 +249,7 @@ Item {
             lineWidth: 1.5
             lineColor: Colors.accent
             anchors.left: parent.left
-            anchors.leftMargin: 12
+            anchors.leftMargin: Theme.spacingMd
             anchors.top: parent.top
             anchors.topMargin: -3
             z: Theme.zLocal1
@@ -259,7 +259,7 @@ Item {
             lineWidth: 1.5
             lineColor: Colors.accent
             anchors.right: parent.right
-            anchors.rightMargin: 12
+            anchors.rightMargin: Theme.spacingMd
             anchors.top: parent.top
             anchors.topMargin: -3
             z: Theme.zLocal1
@@ -314,9 +314,9 @@ Item {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 20
-                    anchors.rightMargin: 12
-                    spacing: 12
+                    anchors.leftMargin: Theme.padSection
+                    anchors.rightMargin: Theme.spacingMd
+                    spacing: Theme.spacingMd
 
                     HexBadge {
                         size: 38
@@ -385,10 +385,10 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    anchors.margins: 10
+                    anchors.margins: Theme.gapCard
                     text: root.reason
                     color: Colors.statusWarning
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     wrapMode: Text.WordWrap
                 }
             }
@@ -402,9 +402,9 @@ Item {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 24
-                    anchors.rightMargin: 24
-                    spacing: 8
+                    anchors.leftMargin: Theme.spacingXl
+                    anchors.rightMargin: Theme.spacingXl
+                    spacing: Theme.spacingSm
 
                                         SectionHeader {
                         text: qsTr("BALANCE");
@@ -415,13 +415,13 @@ Item {
                         text: Auth.creditBalance.toLocaleString(Qt.locale(I18n.uiLocaleName()), 'f', 0)
                         color: Colors.textPrimary
                         font.family: Theme.fontMono.family
-                        font.pixelSize: 18
+                        font.pixelSize: Theme.fontXl.pixelSize
                         font.weight: Font.Bold
                     }
                     Text {
                         text: qsTr("(%n minute)", "(%n minutes)", Math.max(0, Math.floor((Auth.creditBalance + Auth.bonusBalance) / Math.max(0.1, Session.creditsPerSecond * 60))))
                         color: Colors.textMuted
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                     }
                 }
             }
@@ -430,7 +430,7 @@ Item {
             Flickable {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.topMargin: 12
+                Layout.topMargin: Theme.spacingMd
                 contentWidth: width
                 contentHeight: packagesCol.height
                 clip: true
@@ -440,11 +440,11 @@ Item {
                 ColumnLayout {
                     id: packagesCol
 
-                    spacing: 10
+                    spacing: Theme.gapCard
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.leftMargin: 20
-                    anchors.rightMargin: 20
+                    anchors.leftMargin: Theme.padSection
+                    anchors.rightMargin: Theme.padSection
 
                     Repeater {
                         model: root.packageList
@@ -477,13 +477,13 @@ Item {
                          anchors.fill: parent
                          anchors.leftMargin: 14
                          anchors.rightMargin: 14
-                         spacing: 12
+                         spacing: Theme.spacingMd
 
                          // Index label
                          Text {
                          text: String(index + 1).padStart(2, "0")
                          color: isSelected ? Colors.accentMuted : Colors.textMuted
-                         font.pixelSize: 10
+                         font.pixelSize: Theme.fontMonoTiny.pixelSize
                          font.family: Theme.fontMono.family
                          font.letterSpacing: 1
                          opacity: 0.5
@@ -520,7 +520,7 @@ Item {
                           anchors.centerIn: parent
                           text: qsTr("POPULAR")
                           color: Colors.tierProText
-                          font.pixelSize: 8
+                          font.pixelSize: Theme.fontMicro.pixelSize
                           font.family: Theme.fontMono.family
                           font.weight: Font.Bold
                           font.letterSpacing: 1.0
@@ -541,7 +541,7 @@ Item {
                           anchors.centerIn: parent
                           text: qsTr("HD")
                           color: Colors.textSecondary
-                          font.pixelSize: 8
+                          font.pixelSize: Theme.fontMicro.pixelSize
                           font.family: Theme.fontMono.family
                           font.weight: Font.Bold
                           font.letterSpacing: 0.5
@@ -552,7 +552,7 @@ Item {
                                     Text {
                                         text: qsTr("%1 cr · %2").arg(modelData.credits, modelData.per)
                                         color: Colors.textMuted
-                                        font.pixelSize: 10
+                                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                                         font.family: Theme.fontMono.family
                                     }
 
@@ -560,7 +560,7 @@ Item {
                                         visible: (modelData.subtitle || "").length > 0
                                         text: modelData.subtitle || ""
                                         color: Colors.textSecondary
-                                        font.pixelSize: 11
+                                        font.pixelSize: Theme.fontLabel.pixelSize
                                         wrapMode: Text.WordWrap
                                         Layout.maximumWidth: 340 // ~36ch at 11px
                                     }
@@ -577,7 +577,7 @@ Item {
                                         Text {
                                             text: "$"
                                             color: isSelected ? Colors.accentMuted : Colors.textMuted
-                                            font.pixelSize: 14
+                                            font.pixelSize: Theme.fontUi.pixelSize
                                             font.weight: Font.Normal
                                             Layout.alignment: Qt.AlignBottom
                                             bottomPadding: 3
@@ -600,7 +600,7 @@ Item {
                                         // pricing ladder the badge never shows (hidden).
                                         text: qsTr("Save %1%").arg(root.savingsPercent(index))
                                         color: Colors.accent80
-                                        font.pixelSize: 10
+                                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                                         font.family: Theme.fontMono.family
                                         Layout.alignment: Qt.AlignRight
                                     }
@@ -625,30 +625,30 @@ Item {
             SectionHeader {
                 visible: root.cryptoAddress.length === 0 && !root.paymentSuccess
                 Layout.fillWidth: true
-                Layout.leftMargin: 20
-                Layout.rightMargin: 20
-                Layout.topMargin: 16
+                Layout.leftMargin: Theme.padSection
+                Layout.rightMargin: Theme.padSection
+                Layout.topMargin: Theme.spacingLg
                 text: qsTr("PAYMENT METHOD")
             }
             Text {
                 Layout.fillWidth: true
-                Layout.leftMargin: 20
-                Layout.rightMargin: 20
-                Layout.topMargin: 4
-                Layout.bottomMargin: 8
+                Layout.leftMargin: Theme.padSection
+                Layout.rightMargin: Theme.padSection
+                Layout.topMargin: Theme.spacingXs
+                Layout.bottomMargin: Theme.spacingSm
                 text: qsTr("Outside Nigeria? Pick Crypto.")
                 color: Colors.textMuted
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontLabel.pixelSize
             }
 
             // Payment method cards (hidden while tracker active)
             ColumnLayout {
                 visible: root.cryptoAddress.length === 0 && !root.paymentSuccess
                 Layout.fillWidth: true
-                Layout.leftMargin: 20
-                Layout.rightMargin: 20
-                Layout.topMargin: 16
-                spacing: 8
+                Layout.leftMargin: Theme.padSection
+                Layout.rightMargin: Theme.padSection
+                Layout.topMargin: Theme.spacingLg
+                spacing: Theme.spacingSm
 
                 Repeater {
                     model: root.methodModel
@@ -666,9 +666,9 @@ Item {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 12
-                            spacing: 12
+                            anchors.leftMargin: Theme.spacingMd
+                            anchors.rightMargin: Theme.spacingMd
+                            spacing: Theme.spacingMd
 
                             Rectangle {
                                 width: 40
@@ -693,14 +693,14 @@ Item {
                                 Text {
                                     text: modelData.label
                                     color: Colors.textPrimary
-                                    font.pixelSize: 14
+                                    font.pixelSize: Theme.fontUi.pixelSize
                                     font.weight: Font.Normal
                                 }
 
                                 Text {
                                     text: modelData.subtitle || ""
                                     color: Colors.textMuted
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
                                 }
@@ -726,7 +726,7 @@ Item {
                                             anchors.centerIn: parent
                                             text: modelData.t
                                             color: Colors.white
-                                            font.pixelSize: 9
+                                            font.pixelSize: Theme.fontMicro.pixelSize
                                             font.weight: Font.Bold
                                         }
                                     }
@@ -762,11 +762,11 @@ Item {
                 ColumnLayout {
                     id: footCol
                     anchors.fill: parent
-                    anchors.leftMargin: 20
-                    anchors.rightMargin: 20
-                    anchors.topMargin: 16
-                    anchors.bottomMargin: 16
-                    spacing: 10
+                    anchors.leftMargin: Theme.padSection
+                    anchors.rightMargin: Theme.padSection
+                    anchors.topMargin: Theme.spacingLg
+                    anchors.bottomMargin: Theme.spacingLg
+                    spacing: Theme.gapCard
 
                     // Electron: fast-settling cryptos only (crypto selected)
                     Text {
@@ -775,7 +775,7 @@ Item {
                         wrapMode: Text.WordWrap
                         text: qsTr("We accept fast-settling cryptos only. BTC and Ethereum take 30+ minutes to confirm — use USDT, USDC, SOL, TRX or TON for fast settlement.")
                         color: Colors.textMuted
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                     }
 
                     // Inline error box
@@ -789,8 +789,8 @@ Item {
                         border.width: 1
                         RowLayout {
                             anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 8
+                            anchors.margins: Theme.spacingSm
+                            spacing: Theme.spacingSm
                             Icon {
                                 name: "alert-circle"
                                 size: 14
@@ -802,7 +802,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: root.inlineError
                                 color: Colors.statusError
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 wrapMode: Text.WordWrap
                             }
                         }
@@ -819,8 +819,8 @@ Item {
                         border.width: 1
                         RowLayout {
                             anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 8
+                            anchors.margins: Theme.spacingSm
+                            spacing: Theme.spacingSm
                             Icon {
                                 name: "alert-circle"
                                 size: 14
@@ -832,7 +832,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: root.inlineWarning
                                 color: Colors.statusWarning
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 wrapMode: Text.WordWrap
                             }
                         }
@@ -862,7 +862,7 @@ Item {
 
                         Row {
                             anchors.centerIn: parent
-                            spacing: 12
+                            spacing: Theme.spacingMd
 
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
@@ -879,7 +879,7 @@ Item {
                                     return qsTr("Continue with %1").arg(pkg.name);
                                 }
                                 color: Colors.textOnAccent
-                                font.pixelSize: 13
+                                font.pixelSize: Theme.fontSmall.pixelSize
                                 font.weight: Font.Bold
                                 font.capitalization: Font.AllUppercase
                                 font.letterSpacing: 1.0
@@ -905,7 +905,7 @@ Item {
                                 Text {
                                     text: "$"
                                     color: Colors.base50
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     font.weight: Font.Normal
                                     anchors.baseline: ctaPrice.baseline
                                 }
@@ -919,7 +919,7 @@ Item {
                                         return ""
                                     }
                                     color: Colors.textOnAccent
-                                    font.pixelSize: 18
+                                    font.pixelSize: Theme.fontXl.pixelSize
                                     font.weight: Font.Bold
                                     font.family: Theme.fontMono.family
                                     font.letterSpacing: -0.5
@@ -927,7 +927,7 @@ Item {
                                 Text {
                                     text: "\u2192"
                                     color: Colors.base70
-                                    font.pixelSize: 14
+                                    font.pixelSize: Theme.fontUi.pixelSize
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
@@ -967,7 +967,7 @@ Item {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: Theme.spacingSm
 
                         Text {
                             text: root.payMethod === "usdt"
@@ -976,7 +976,7 @@ Item {
                                     ? qsTr("Charged in NGN at today's rate. Foreign cards will be declined.")
                                     : qsTr("Choose a payment method above to continue")
                             color: Colors.textMuted
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontLabel.pixelSize
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                         }
@@ -999,9 +999,9 @@ Item {
             // Credit key redemption
             Rectangle {
                 Layout.fillWidth: true
-                Layout.leftMargin: 20
-                Layout.rightMargin: 20
-                Layout.bottomMargin: 8
+                Layout.leftMargin: Theme.padSection
+                Layout.rightMargin: Theme.padSection
+                Layout.bottomMargin: Theme.spacingSm
                 height: creditKeyCol.implicitHeight + 24
                 radius: Theme.radiusMd
                 color: Colors.surfaceRaised
@@ -1013,11 +1013,11 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    anchors.margins: 12
-                    spacing: 8
+                    anchors.margins: Theme.spacingMd
+                    spacing: Theme.spacingSm
 
                     RowLayout {
-                        spacing: 8
+                        spacing: Theme.spacingSm
                         Rectangle {
                             width: 26; height: 26
                             radius: Theme.radiusSm
@@ -1034,21 +1034,21 @@ Item {
                         Text {
                             text: qsTr("Have a manual credit key?")
                             color: Colors.textSecondary
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontMono.pixelSize
                             font.weight: Font.Bold
                             Layout.fillWidth: true
                         }
                     }
 
                     RowLayout {
-                        spacing: 8
+                        spacing: Theme.spacingSm
 
                         TextField {
                             id: creditKeyInput
                             Layout.fillWidth: true
                             placeholderText: qsTr("CK-XXXX-XXXX")
                             color: Colors.textPrimary
-                            font.pixelSize: 13
+                            font.pixelSize: Theme.fontSmall.pixelSize
                             font.family: Theme.fontMono.family
                             inputMethodHints: Qt.ImhUppercaseOnly | Qt.ImhNoPredictiveText
                             background: Rectangle {
@@ -1076,9 +1076,9 @@ Item {
 
                 visible: root.cryptoAddress.length > 0
                 Layout.fillWidth: true
-                Layout.leftMargin: 20
-                Layout.rightMargin: 20
-                Layout.bottomMargin: 8
+                Layout.leftMargin: Theme.padSection
+                Layout.rightMargin: Theme.padSection
+                Layout.bottomMargin: Theme.spacingSm
                 height: visible ? cryptoCol.implicitHeight + 28 : 0
                 radius: Theme.radiusMd
                 color: Colors.surfaceRaised
@@ -1099,11 +1099,11 @@ Item {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.margins: 14
-                    spacing: 10
+                    spacing: Theme.gapCard
 
                     // Phase circle + headline + waiting pill
                     RowLayout {
-                        spacing: 12
+                        spacing: Theme.spacingMd
                         Rectangle {
                             width: 40; height: 40; radius: Theme.radiusFull
                             color: cryptoInvoicePanel.stepLanded ? Colors.statusSuccess10 : Colors.accent10
@@ -1123,14 +1123,14 @@ Item {
                                 text: cryptoInvoicePanel.stepLanded ? qsTr("Payment credited")
                                     : qsTr("Crypto payment in progress")
                                 color: Colors.textPrimary
-                                font.pixelSize: 14
+                                font.pixelSize: Theme.fontUi.pixelSize
                                 font.weight: Font.Bold
                             }
                             Text {
                                 // amount stays visible for the send step
                                 text: qsTr("Send %1 %2").arg(root.cryptoAmount > 0 ? Number(root.cryptoAmount).toFixed(6) : "—").arg(root.cryptoCurrency || "USDT")
                                 color: Colors.textSecondary
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 font.family: Theme.fontMono.family
                             }
                         }
@@ -1150,7 +1150,7 @@ Item {
                                 text: qsTr("WAITING %1").arg(root.formatElapsed(Math.floor(root.elapsedSecs || 0)))
                                 color: Colors.accentHover
                                 font.family: Theme.fontMono.family
-                                font.pixelSize: 9
+                                font.pixelSize: Theme.fontMicro.pixelSize
                                 font.weight: Font.Bold
                                 font.letterSpacing: 1.0
                             }
@@ -1162,7 +1162,7 @@ Item {
                     // shows a 10px hint under its 12px title)
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 10
+                        spacing: Theme.gapCard
 
                         Repeater {
                             model: [
@@ -1181,7 +1181,7 @@ Item {
                                 required property var modelData
                                 required property int index
                                 Layout.fillWidth: true
-                                spacing: 10
+                                spacing: Theme.gapCard
 
                                 // Circle: done = check, pending = index number
                                 Rectangle {
@@ -1206,7 +1206,7 @@ Item {
                                         visible: !modelData.done
                                         text: modelData.n
                                         color: modelData.active ? Colors.accent : Colors.textMuted
-                                        font.pixelSize: 10
+                                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                                         font.weight: Font.Bold
                                         font.family: Theme.fontMono.family
                                     }
@@ -1217,7 +1217,7 @@ Item {
                                     visible: index < 2
                                     Layout.fillWidth: true
                                     Layout.alignment: Qt.AlignTop
-                                    Layout.topMargin: 24
+                                    Layout.topMargin: Theme.spacingXl
                                     height: 2
                                     color: (index + 1 < 3 && [cryptoInvoicePanel.stepSent, cryptoInvoicePanel.stepSeen, cryptoInvoicePanel.stepLanded][index + 1])
                                            ? Colors.accent40 : Colors.surfaceBorder
@@ -1232,14 +1232,14 @@ Item {
                                         color: modelData.done ? Colors.statusSuccess
                                              : modelData.active ? Colors.textPrimary
                                              : Colors.textMuted
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontMono.pixelSize
                                         font.weight: modelData.active ? Font.Bold : Font.Normal
                                     }
                                     Text {
                                         visible: modelData.active
                                         text: modelData.hint
                                         color: Colors.textMuted
-                                        font.pixelSize: 10
+                                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                                         wrapMode: Text.WordWrap
                                         Layout.fillWidth: true
                                     }
@@ -1258,9 +1258,9 @@ Item {
                         border.width: 1
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            spacing: 8
+                            anchors.leftMargin: Theme.gapCard
+                            anchors.rightMargin: Theme.gapCard
+                            spacing: Theme.spacingSm
                             Icon {
                                 name: "copy"
                                 size: 13
@@ -1270,7 +1270,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: root.cryptoAddress
                                 color: Colors.textSecondary
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 font.family: Theme.fontMono.family
                                 elide: Text.ElideMiddle
                             }
@@ -1301,11 +1301,11 @@ Item {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
-                            anchors.margins: 8
+                            anchors.margins: Theme.spacingSm
                             wrapMode: Text.WordWrap
                             text: qsTr("Crypto settlement typically completes within 15 minutes. You can close this panel. Credits land in your account automatically when the network finishes.")
                             color: Colors.textMuted
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontMonoTiny.pixelSize
                         }
                     }
                     Rectangle {
@@ -1321,17 +1321,17 @@ Item {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
-                            anchors.margins: 8
+                            anchors.margins: Theme.spacingSm
                             wrapMode: Text.WordWrap
                             text: qsTr("Still no settlement after 30 minutes. The network can be busy, but credits typically still arrive within an hour. If your payment is missing after an hour, contact support with your transaction hash and we will resolve it manually.")
                             color: Colors.statusWarning
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontMonoTiny.pixelSize
                         }
                     }
 
                     Flow {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: Theme.spacingSm
 
                         SecondaryButton {
                             // Electron: recheck appears only after 5 minutes
@@ -1384,7 +1384,7 @@ Item {
                                 && root.linkCopiedFlash !== qsTr("Link copied")
                             text: root.linkCopiedFlash
                             color: Colors.textMuted
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontMonoTiny.pixelSize
                             width: parent.width
                             wrapMode: Text.WordWrap
                         }
@@ -1395,7 +1395,7 @@ Item {
                         visible: root.pendingOrderId.length > 0
                         text: qsTr("Your wallet won't be charged. If you've already sent crypto, those credits will still arrive when the network confirms.")
                         color: Colors.textMuted
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                         wrapMode: Text.WordWrap
                     }
             }
@@ -1419,7 +1419,7 @@ Item {
 
             Column {
             anchors.centerIn: parent
-            spacing: 10
+            spacing: Theme.gapCard
 
             HexBadge {
             size: 56
@@ -1437,7 +1437,7 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: qsTr("Payment confirmed")
                     color: Colors.textPrimary
-                    font.pixelSize: 15
+                    font.pixelSize: Theme.fontLg.pixelSize
                     font.weight: Font.Bold
                 }
 
@@ -1454,7 +1454,7 @@ Item {
                         anchors.centerIn: parent
                         text: qsTr("+%1 credits added").arg(Number(Math.max(1, root.lastPurchasedCredits)).toFixed(0))
                         color: Colors.statusSuccess
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontMono.pixelSize
                         font.family: Theme.fontMono.family
                         font.weight: Font.Bold
                     }

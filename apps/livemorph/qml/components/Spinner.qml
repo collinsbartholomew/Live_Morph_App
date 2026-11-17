@@ -2,7 +2,7 @@ import QtQuick
 import LiveMorph
 
 /**
- * Nocturne spinner: track ring + quarter arc. Animations are banned
+ * Obsidian Hex spinner: track ring + quarter arc. Animations are banned
  * project-wide, so instead of spinning we gate the arc's opacity on
  * `running` (paused = dimmed static arc). Stroke scales with size.
  */

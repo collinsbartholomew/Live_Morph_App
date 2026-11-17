@@ -89,8 +89,8 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.topMargin: 44
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
+        anchors.leftMargin: Theme.spacingLg
+        anchors.rightMargin: Theme.spacingLg
         spacing: 6
         z: Theme.zLocal12
         Rectangle {
@@ -102,22 +102,22 @@ Rectangle {
             border.width: 1
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
+                anchors.leftMargin: Theme.gapCard
+                anchors.rightMargin: Theme.gapCard
                 spacing: 6
                 Icon { name: "alert-circle"; size: 12; color: Colors.statusError }
                 Text {
                     text: CameraCtrl.lastError
                     textFormat: Text.PlainText // server-derived — never rich text
                     color: Colors.statusError
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontLabel.pixelSize
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
                 Text {
                     text: qsTr("Try again")
                     color: camRetryMa.containsMouse ? Colors.dangerHover : Colors.statusError
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontLabel.pixelSize
                     font.underline: true
                     MouseArea {
                         id: camRetryMa
@@ -137,8 +137,8 @@ Rectangle {
         id: stagePill
         anchors.top: parent.top
         anchors.left: parent.left
-        anchors.topMargin: 12
-        anchors.leftMargin: 16
+        anchors.topMargin: Theme.spacingMd
+        anchors.leftMargin: Theme.spacingLg
         height: 22
         width: stageLabel.implicitWidth + 16
         radius: Theme.radiusFull
@@ -152,7 +152,7 @@ Rectangle {
             text: qsTr("STAGE")
             color: Colors.textMuted
             font.family: Theme.fontMono.family
-            font.pixelSize: 9
+            font.pixelSize: Theme.fontMicro.pixelSize
             font.letterSpacing: 1.5
         }
     }
@@ -162,7 +162,7 @@ Rectangle {
         visible: Recording.isRecording
         anchors.verticalCenter: stagePill.verticalCenter
         anchors.left: stagePill.right
-        anchors.leftMargin: 8 // gap-2
+        anchors.leftMargin: Theme.spacingSm // gap-2
         anchors.topMargin: 0
         height: 22
         width: recRow.implicitWidth + 12
@@ -192,7 +192,7 @@ Rectangle {
                     return h > 0 ? (h + ":" + pad(m) + ":" + pad(sec)) : (pad(m) + ":" + pad(sec))
                 }
                 color: Colors.white95 // white/95
-                font.pixelSize: 9
+                font.pixelSize: Theme.fontMicro.pixelSize
                 font.family: Theme.fontMono.family
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -203,9 +203,9 @@ Rectangle {
     Row {
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.topMargin: 12
-        anchors.rightMargin: 16
-        spacing: 8
+        anchors.topMargin: Theme.spacingMd
+        anchors.rightMargin: Theme.spacingLg
+        spacing: Theme.spacingSm
         z: Theme.zLocal11
 
         // Swap Active pill: accent/10 + accent/20 border + pulsing dot
@@ -233,7 +233,7 @@ Rectangle {
                 Text {
                     text: qsTr("Swap Active")
                     color: Colors.accentHover
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                     font.capitalization: Font.AllUppercase
                     font.letterSpacing: 1.0
                     font.family: Theme.fontMono.family
@@ -274,7 +274,7 @@ Rectangle {
                     color: Auth.creditBalance <= 0 ? Colors.statusError
                          : Auth.creditBalance < Constants.lowCreditThreshold ? Colors.statusWarning
                          : Colors.textSecondary
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                     font.weight: Font.Bold
                     font.family: Theme.fontMono.family
                     anchors.verticalCenter: parent.verticalCenter
@@ -303,8 +303,8 @@ Rectangle {
         visible: StreamServer.running && !StreamServer.paused
         anchors.bottom: parent.bottom
         anchors.right: parent.right
-        anchors.bottomMargin: 16
-        anchors.rightMargin: 16
+        anchors.bottomMargin: Theme.spacingLg
+        anchors.rightMargin: Theme.spacingLg
         height: 24
         width: obsRow.implicitWidth + 16
         radius: Theme.radiusFull
@@ -325,7 +325,7 @@ Rectangle {
             Text {
                 text: qsTr("OBS Stream Active")
                 color: Colors.statusSuccess
-                font.pixelSize: 10
+                font.pixelSize: Theme.fontMonoTiny.pixelSize
                 font.family: Theme.fontMono.family
                 font.capitalization: Font.AllUppercase
                 font.letterSpacing: 1.5
@@ -341,15 +341,15 @@ Rectangle {
         visible: !Session.isActive && !warm
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.topMargin: 12
-        anchors.rightMargin: 16
+        anchors.topMargin: Theme.spacingMd
+        anchors.rightMargin: Theme.spacingLg
         spacing: 6
         opacity: root.hovered ? 0.4 : 0
         z: Theme.zLocal11
         Text {
             text: qsTr("Double-click")
             color: Colors.white
-            font.pixelSize: 9
+            font.pixelSize: Theme.fontMicro.pixelSize
             font.family: Theme.fontMono.family
             font.capitalization: Font.AllUppercase
             font.letterSpacing: 1.5
@@ -385,7 +385,6 @@ Rectangle {
             focusX: width / 2
             focusY: height / 2
             fadeRadius: Math.max(width, height) * 0.8
-            glowAlpha: 0.05
             sparkleEvery: 23
             sparkleAlpha: 0.07
             emphasisEvery: 7
@@ -397,7 +396,7 @@ Rectangle {
 
         Column {
             anchors.centerIn: parent
-            spacing: 20
+            spacing: Theme.padSection
             width: Math.min(320, parent.width - 48)
 
             // Brand monogram cell with a play glyph (shared BrandMark)
@@ -437,7 +436,7 @@ Rectangle {
                 wrapMode: Text.WordWrap
                 text: qsTr("Pick a character in the workshop, then start the swap.")
                 color: Colors.textMuted
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontMono.pixelSize
                 lineHeight: 1.4
             }
 
@@ -447,7 +446,7 @@ Rectangle {
                 Text {
                     text: qsTr("Press")
                     color: Colors.textMuted
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Rectangle {
@@ -463,7 +462,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: qsTr("BEGIN SWAP")
                         color: Colors.accentHover
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                         font.family: Theme.fontMono.family
                         font.weight: Font.Bold
                         font.letterSpacing: 1.2
@@ -472,7 +471,7 @@ Rectangle {
                 Text {
                     text: qsTr("to transform")
                     color: Colors.textMuted
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -540,7 +539,7 @@ Rectangle {
         // Glass card: spinner disc + status line + no-billing pill
         Rectangle {
             anchors.centerIn: parent
-            width: cardCol.implicitWidth + 40
+            width: Math.min(cardCol.implicitWidth + 40, parent.width - 48)
             implicitHeight: cardCol.implicitHeight + 32
             radius: Theme.radiusLg
             color: Colors.surfaceOverlay
@@ -567,7 +566,7 @@ Rectangle {
             Column {
                 id: cardCol
                 anchors.centerIn: parent
-                spacing: 10
+                spacing: Theme.gapCard
 
                 Item {
                     width: 48; height: 48
@@ -592,7 +591,7 @@ Rectangle {
                     text: Session.reconnecting
                           ? qsTr("Reconnecting…") : qsTr("Connecting…")
                     color: Colors.textPrimary
-                    font.pixelSize: 13
+                    font.pixelSize: Theme.fontSmall.pixelSize
                     font.weight: Font.Bold
                 }
 
@@ -609,7 +608,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: qsTr("NO CREDITS USED YET")
                         color: Colors.textMuted
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.family: Theme.fontMono.family
                         font.letterSpacing: 1.2
                     }
@@ -629,14 +628,20 @@ Rectangle {
     Connections {
         target: Session
         function onConnectionStatusChanged() {
-            if (Session.status === SessionManager.Error)
+            if (Session.status === SessionManager.Error
+                || Session.status === SessionManager.InsufficientCredits)
                 root.errorDismissed = false
         }
     }
 
     Item {
         anchors.fill: parent
-        visible: Session.status === SessionManager.Error && !root.errorDismissed
+        // InsufficientCredits is a terminal error state (stopSession keeps it)
+        // — it needs the same stage overlay, or the stage silently shows the
+        // idle/camera art while the session is dead.
+        visible: (Session.status === SessionManager.Error
+                  || Session.status === SessionManager.InsufficientCredits)
+                 && !root.errorDismissed
         z: Theme.zLocal8
 
         Rectangle { anchors.fill: parent; color: Colors.scrimHeavy } // bg-black/70
@@ -645,7 +650,9 @@ Rectangle {
         Rectangle {
             anchors.centerIn: parent
             width: Math.min(340, parent.width - 48)
-            height: errCol.implicitHeight + 48
+            // Clamp height too: long translated/server statusText must not
+            // push the action buttons out of the clipped stage.
+            height: Math.min(errCol.implicitHeight + 48, parent.height - 48)
             radius: Theme.radiusLg
             color: Colors.surfaceOverlay
             border.color: Colors.surfaceBorder
@@ -674,8 +681,8 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: 24
-                spacing: 12
+                anchors.margins: Theme.spacingXl
+                spacing: Theme.spacingMd
 
                 // 44px error hexagon badge (bg-error/10 ring-error/20)
                 Item {
@@ -704,7 +711,7 @@ Rectangle {
                     text: Session.statusText.length ? Session.statusText : qsTr("Something went wrong. Please try again.")
                     textFormat: Text.PlainText // Session.statusText can carry server text — never rich text
                     color: Colors.textPrimary
-                    font.pixelSize: 14
+                    font.pixelSize: Theme.fontUi.pixelSize
                     font.weight: Font.Bold
                 }
 
@@ -714,10 +721,12 @@ Rectangle {
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
                     Layout.maximumWidth: 280
-                    visible: root.isConnError || /network|connection|timeout|signaling/i.test(Session.statusText)
+                    // errorKind-driven, never prose sniffing — under a
+                    // non-English locale a regex on statusText silently fails.
+                    visible: root.isConnError
                     text: qsTr("A VPN, firewall, or work/school wifi may be blocking it. Try another network. Or switch to the Standard engine in Settings, which works on most networks.")
                     color: Colors.textSecondary
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                 }
 
                 // "No credits charged" as a bordered pill (Electron)
@@ -737,24 +746,32 @@ Rectangle {
                         anchors.centerIn: parent
                         text: qsTr("No credits charged")
                         color: Colors.textMuted
-                        font.pixelSize: 10
+                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                         font.family: Theme.fontMono.family
                     }
                 }
 
                 RowLayout {
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.topMargin: 4
-                    spacing: 8
+                    Layout.topMargin: Theme.spacingXs
+                    spacing: Theme.spacingSm
 
                     PrimaryButton {
-                        text: Session.cooldownActive
-                              ? qsTr("Try again in %n second", "Try again in %n seconds", Session.cooldownRemainingSec)
-                              : qsTr("Try again")
-                        enabled: !Session.cooldownActive
+                        // Out of credits: the primary action is topping up,
+                        // not retrying a session that cannot start.
+                        text: Session.status === SessionManager.InsufficientCredits
+                              ? qsTr("Top up credits")
+                              : (Session.cooldownActive
+                                 ? qsTr("Try again in %n second", "Try again in %n seconds", Session.cooldownRemainingSec)
+                                 : qsTr("Try again"))
+                        enabled: Session.status !== SessionManager.InsufficientCredits
+                                 && !Session.cooldownActive
                         onClicked: {
                             root.errorDismissed = true
-                            App.toggleSwap()
+                            if (Session.status === SessionManager.InsufficientCredits)
+                                App.openBuyCredits()
+                            else
+                                App.toggleSwap()
                         }
                     }
                     GhostButton {
@@ -767,10 +784,10 @@ Rectangle {
                 Text {
                     visible: Session.statusText.length > 0 && !root.isConnError
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.topMargin: 10
+                    Layout.topMargin: Theme.gapCard
                     text: qsTr("Contact support")
                     color: supportLinkMa.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontLabel.pixelSize
                     font.underline: true
                     MouseArea {
                         id: supportLinkMa

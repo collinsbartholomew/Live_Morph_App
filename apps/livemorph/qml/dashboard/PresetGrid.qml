@@ -70,9 +70,9 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 10   // px-2.5
-                anchors.rightMargin: 10
-                spacing: 12             // gap-3
+                anchors.leftMargin: Theme.gapCard   // px-2.5
+                anchors.rightMargin: Theme.gapCard
+                spacing: Theme.spacingMd             // gap-3
 
                 // Stacked cover 37×46 — two offset layers fade on expand
                 Item {
@@ -126,7 +126,7 @@ Item {
                     Text {
                         text: qsTr("LiveMorph characters")
                         color: Colors.textPrimary
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSmall.pixelSize
                         font.weight: Font.Bold
                         elide: Text.ElideRight
                         Layout.fillWidth: true
@@ -145,7 +145,7 @@ Item {
                             text: qsTr("%1 AVAILABLE").arg(root.starterCount)
                             color: Colors.textMuted
                             font.family: Theme.fontMono.family
-                            font.pixelSize: 9
+                            font.pixelSize: Theme.fontMicro.pixelSize
                             font.letterSpacing: 1.2
                         }
                     }
@@ -285,7 +285,7 @@ Item {
                     text: qsTr("SORT A\u2192Z")
                     color: sortMa.containsMouse ? Colors.textSecondary : Colors.textMuted
                     font.family: Theme.fontMono.family
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.fontMicro.pixelSize
                     font.letterSpacing: 1.0
                 }
                 MouseArea {
@@ -311,7 +311,7 @@ Item {
                     text: qsTr("%1 saved").arg(root.saved)
                     color: Colors.textMuted
                     font.family: Theme.fontMono.family
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                 }
             }
         }
@@ -397,7 +397,7 @@ Item {
                         Canvas {
                             id: slotDash
                             anchors.fill: parent
-                            anchors.margins: 8
+                            anchors.margins: Theme.spacingSm
                             onPaint: {
                                 var ctx = getContext("2d")
                                 ctx.reset()
@@ -430,7 +430,7 @@ Item {
 
                     Column {
                         anchors.centerIn: parent
-                        spacing: 8
+                        spacing: Theme.spacingSm
                         Item {
                             width: 30; height: 30
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -453,7 +453,7 @@ Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: qsTr("Add a character")
                             color: slotMa.containsMouse ? Colors.textSecondary : Colors.textMuted
-                            font.pixelSize: 10
+                            font.pixelSize: Theme.fontMonoTiny.pixelSize
                         }
                     }
 
@@ -476,7 +476,7 @@ Item {
             x: root.gridPad
             text: qsTr("Your library is full at %1 characters. Delete one to free a slot.").arg(root.saved)
             color: Colors.textSecondary
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontMonoTiny.pixelSize
             wrapMode: Text.WordWrap
         }
 
@@ -488,7 +488,7 @@ Item {
             width: parent.width - root.gridPad * 2
             text: qsTr("By uploading, you confirm the image is fictional or you have the person's consent, and that you'll disclose AI use to viewers.")
             color: Colors.textMuted
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontMonoTiny.pixelSize
             wrapMode: Text.WordWrap
             lineHeight: 1.6
         }
@@ -584,22 +584,22 @@ Item {
                 radius: Theme.radiusXs
             }
             contentItem: RowLayout {
-                spacing: 10
+                spacing: Theme.gapCard
                 Icon {
                     name: mi.iconName || ""
                     size: 14
                     color: mi.destructive
                          ? (mi.highlighted ? Colors.statusError
-                            : Qt.rgba(Colors.statusError.r, Colors.statusError.g, Colors.statusError.b, 0.7))
+                            : Colors.statusError60)
                          : (mi.highlighted ? Colors.textSecondary : Colors.textMuted)
                 }
                 Text {
                     text: mi.text
                     color: mi.destructive
                          ? (mi.highlighted ? Colors.statusError
-                            : Qt.rgba(Colors.statusError.r, Colors.statusError.g, Colors.statusError.b, 0.85))
+                            : Colors.statusError85)
                          : (mi.enabled ? Colors.textPrimary : Colors.textMuted)
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     Layout.fillWidth: true
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
@@ -680,24 +680,62 @@ Item {
         id: renameDialog
         property string targetId: ""
         property string targetName: ""
-        title: qsTr("Rename character")
         modal: true
         anchors.centerIn: Overlay.overlay
         width: 320
-        standardButtons: Dialog.Ok | Dialog.Cancel
+        header: null
         background: Rectangle {
             color: Colors.surfaceOverlay
             border.color: Colors.surfaceBorder
             radius: Theme.radiusMd
         }
         contentItem: ColumnLayout {
-            spacing: 12
+            spacing: Theme.spacingMd
+            Text {
+                text: qsTr("Rename character")
+                color: Colors.textPrimary
+                font.family: Theme.fontHeading.family
+                font.pixelSize: Theme.fontHeading.pixelSize
+                font.weight: Font.Bold
+            }
             TextField {
                 id: renameField
                 Layout.fillWidth: true
                 text: renameDialog.targetName
                 placeholderText: qsTr("Character name")
                 maximumLength: 40
+            }
+        }
+        footer: Item {
+            implicitWidth: parent.width
+            implicitHeight: 72
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: 1
+                color: Colors.surfaceBorderSubtle
+            }
+            RowLayout {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: Theme.spacingLg
+                anchors.rightMargin: Theme.spacingLg
+                anchors.topMargin: Theme.spacingMd
+                anchors.bottomMargin: Theme.spacingMd
+                spacing: Theme.gapCard
+                SecondaryButton {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    text: qsTr("Cancel")
+                    onClicked: renameDialog.reject()
+                }
+                PrimaryButton {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    text: qsTr("Rename")
+                    onClicked: renameDialog.accept()
+                }
             }
         }
         onAccepted: {

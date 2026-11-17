@@ -150,13 +150,13 @@ Item {
                 anchors.bottomMargin: 5
                 anchors.leftMargin: 6
                 anchors.rightMargin: 6
-                spacing: 4
+                spacing: Theme.spacingXs
 
                 Text {
                     id: nameLbl
                     text: renameField.visible ? "" : (root.name || "")
                     color: cardMa.containsMouse ? Colors.white : Colors.white90
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                     font.weight: Font.Bold
                     font.letterSpacing: -0.25
                     elide: Text.ElideRight
@@ -221,7 +221,7 @@ Item {
                     maximumLength: 40 // matches PresetGrid rename + C++ cap
                     background: Rectangle { color: Colors.black70 }
                     color: Colors.white
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                     font.family: Theme.fontMono.family
                     padding: 2
                     function commit() {
@@ -368,7 +368,7 @@ Item {
                 Text {
                     text: qsTr("PRO")
                     color: Colors.tierProText
-                    font.pixelSize: 8
+                    font.pixelSize: Theme.fontMicro.pixelSize
                     font.family: Theme.fontMono.family
                     font.weight: Font.Bold
                     anchors.verticalCenter: parent.verticalCenter

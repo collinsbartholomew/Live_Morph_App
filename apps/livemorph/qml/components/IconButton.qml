@@ -56,7 +56,7 @@ Controls.Button {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             font.family: Theme.fontUi.family
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontMono.pixelSize
             font.weight: Font.Bold
         }
     }

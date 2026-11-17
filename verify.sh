@@ -61,8 +61,9 @@ if ( cd "$BACKEND" && cargo build ) >/tmp/verify_build.log 2>&1; then
   # Only boot a local gate backend when BASE is the default; with a remote BASE
   # we must not kill or replace whatever is running there.
   if [ "$BASE" = "http://127.0.0.1:3874" ]; then
-    # Kill only a previous GATE-started backend (recorded PID), not a dev
-    # backend the user started themselves.
+    # Kill a previous gate-started backend (recorded PID) and, as a fallback,
+    # ANY debug backend binary — note this also kills a dev backend the user
+    # started themselves from backend/target/debug.
     if [ -f /tmp/verify_backend.pid ]; then
       kill "$(cat /tmp/verify_backend.pid)" 2>/dev/null
       sleep 1

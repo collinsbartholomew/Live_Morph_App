@@ -159,7 +159,7 @@ Item {
     // Bottom-right stack, above the status + action bars (compact-aware).
     anchors.right: parent.right
     anchors.bottom: parent.bottom
-    anchors.rightMargin: 24
+    anchors.rightMargin: Theme.spacingXl
     anchors.bottomMargin: root.pageChrome
         ? Theme.statusBarHeight
           + ((parent.height < Theme.compactChromeBelow || Config.compactChrome)
@@ -176,7 +176,7 @@ Item {
     Column {
         id: col
         width: parent.width
-        spacing: 10
+        spacing: Theme.gapCard
 
         // Dismiss-all chip above the stack
         Rectangle {
@@ -194,7 +194,7 @@ Item {
                 text: qsTr("DISMISS ALL")
                 color: dismissAllMa.containsMouse ? Colors.textSecondary : Colors.textMuted
                 font.family: Theme.fontMono.family
-                font.pixelSize: 9
+                font.pixelSize: Theme.fontMicro.pixelSize
                 font.weight: Font.Bold
                 font.letterSpacing: 1.0
             }
@@ -273,9 +273,9 @@ Item {
                         anchors.right: parent.right
                         anchors.top: parent.top
                         anchors.leftMargin: 14
-                        anchors.rightMargin: 10
-                        anchors.topMargin: 10
-                        spacing: 10
+                        anchors.rightMargin: Theme.gapCard
+                        anchors.topMargin: Theme.gapCard
+                        spacing: Theme.gapCard
 
                         // Severity hex badge: outlined hex + glyph (monochrome-
                         // weighted; only the semantic hue reads through)
@@ -305,7 +305,7 @@ Item {
                                 text: model.message + (model.repeat > 1 ? "  ×" + model.repeat : "")
                                 textFormat: Text.PlainText // server-derived — never rich text
                                 color: Colors.textPrimary
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontMono.pixelSize
                                 font.weight: Font.Bold
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
@@ -315,7 +315,7 @@ Item {
                                 text: model.detail || ""
                                 textFormat: Text.PlainText // server-derived — never rich text
                                 color: Colors.textMuted
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
                                 maximumLineCount: 2
@@ -339,7 +339,7 @@ Item {
                                 text: (model.actionLabel || "").toUpperCase()
                                 color: Colors.accentHover
                                 font.family: Theme.fontMono.family
-                                font.pixelSize: 9
+                                font.pixelSize: Theme.fontMicro.pixelSize
                                 font.weight: Font.Bold
                                 font.letterSpacing: Theme.trackingEyebrow
                             }

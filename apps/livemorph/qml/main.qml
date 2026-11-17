@@ -8,6 +8,8 @@ import QtQuick.Window
 ApplicationWindow {
     id: root
 
+    font: Theme.fontUi
+
     readonly property string page: App.currentPage
     property var previewWin: null
     property var popoutWin: null
@@ -161,9 +163,9 @@ ApplicationWindow {
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            spacing: 10
+            anchors.leftMargin: Theme.spacingMd
+            anchors.rightMargin: Theme.spacingMd
+            spacing: Theme.gapCard
 
             Icon {
                 name: "alert-circle"
@@ -175,7 +177,7 @@ ApplicationWindow {
             Text {
                 text: qsTr("Can't reach the LiveMorph API — check that the backend is running and the URL in Settings")
                 color: Colors.textPrimary
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontMono.pixelSize
                 Layout.alignment: Qt.AlignVCenter
                 Layout.fillWidth: true
                 elide: Text.ElideRight
@@ -213,7 +215,6 @@ ApplicationWindow {
             focusX: width / 2
             focusY: height / 2
             fadeRadius: Math.max(width, height) * 0.75
-            glowAlpha: 0.05
             sparkleEvery: 23
             sparkleAlpha: 0.07
             emphasisEvery: 7
@@ -225,7 +226,7 @@ ApplicationWindow {
 
         Column {
             anchors.centerIn: parent
-            spacing: 24
+            spacing: Theme.spacingXl
             // Brand monogram over the maintenance alert
             Item {
                 width: 64; height: 64
@@ -249,14 +250,14 @@ ApplicationWindow {
             Text {
                 text: qsTr("Under maintenance")
                 color: Colors.textPrimary
-                font.pixelSize: 20
+                font.pixelSize: Theme.fontHeading.pixelSize
                 font.weight: Font.Bold
                 anchors.horizontalCenter: parent.horizontalCenter
             }
             Text {
                 text: qsTr("LiveMorph is undergoing scheduled maintenance. Please check back soon.")
                 color: Colors.textSecondary
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontUi.pixelSize
                 lineHeight: 1.625
                 anchors.horizontalCenter: parent.horizontalCenter
             }

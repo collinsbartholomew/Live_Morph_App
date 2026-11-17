@@ -6,7 +6,7 @@ import QtQuick.Layouts
 /**
  * NotificationCenter — drop-down inbox fed by the C++ Notifier model.
  *
- * Nocturne redesign:
+ * Obsidian Hex redesign:
  *  - 340px panel: header (title + unread pill + mark-all-read ghost chip +
  *    clear-with-confirm), All/Unread segmented filter, Today/Earlier groups.
  *  - Item rows are rounded hover cards: unread accent dot, severity icon disc,
@@ -92,7 +92,7 @@ Rectangle {
             listView.contentY = savedY
     }
 
-    width: Theme.notificationsWidth
+    width: Math.min(Theme.notificationsWidth, (parent ? parent.width : 1024) * 0.94)
     // Compact-aware height: never reach into the action/status bars at the
     // minimum window size (mirrors the toast host's bottom-margin formula).
     height: Math.max(0, Math.min(parent ? parent.height - Theme.topBarHeight
@@ -167,8 +167,8 @@ Rectangle {
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 14
-                anchors.rightMargin: 10
-                spacing: 8
+                anchors.rightMargin: Theme.gapCard
+                spacing: Theme.spacingSm
 
                 Hexagon {
                     size: 12
@@ -179,7 +179,7 @@ Rectangle {
                 Text {
                     text: qsTr("Notifications")
                     color: Colors.textPrimary
-                    font.pixelSize: 15
+                    font.pixelSize: Theme.fontLg.pixelSize
                     font.weight: Font.Bold
                 }
 
@@ -199,7 +199,7 @@ Rectangle {
                         text: root.unreadCount > 99 ? "99+" : root.unreadCount
                         color: Colors.accentHover
                         font.family: Theme.fontMono.family
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.weight: Font.Bold
                     }
                 }
@@ -222,7 +222,7 @@ Rectangle {
                         text: qsTr("MARK ALL READ")
                         color: marMa.containsMouse ? Colors.accentHover : Colors.textMuted
                         font.family: Theme.fontLabel.family
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                     }
                     MouseArea {
                         id: marMa
@@ -316,11 +316,11 @@ Rectangle {
             visible: viewModel.count > 0
             model: viewModel
             clip: true
-            spacing: 4
-            leftMargin: 8
-            rightMargin: 8
+            spacing: Theme.spacingXs
+            leftMargin: Theme.spacingSm
+            rightMargin: Theme.spacingSm
             topMargin: 6
-            bottomMargin: 8
+            bottomMargin: Theme.spacingSm
 
             ScrollBar.vertical: StyledScrollBar { thin: true }
 
@@ -334,12 +334,12 @@ Rectangle {
                 Text {
                     visible: kind === "header"
                     anchors.left: parent.left
-                    anchors.leftMargin: 8
+                    anchors.leftMargin: Theme.spacingSm
                     anchors.verticalCenter: parent.verticalCenter
                     text: typeof title !== "undefined" ? title : ""
                     color: Colors.textMuted
                     font.family: Theme.fontMono.family
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.fontMicro.pixelSize
                     font.letterSpacing: Theme.trackingEyebrow
                     font.capitalization: Font.AllUppercase
                 }
@@ -386,10 +386,10 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 8
-                        anchors.topMargin: 8
-                        spacing: 10
+                        anchors.leftMargin: Theme.gapCard
+                        anchors.rightMargin: Theme.spacingSm
+                        anchors.topMargin: Theme.spacingSm
+                        spacing: Theme.gapCard
 
                         // Unread accent hex dot
                         Hexagon {
@@ -398,7 +398,7 @@ Rectangle {
                             fillColor: Colors.accent
                             visible: unread
                             Layout.alignment: Qt.AlignTop
-                            Layout.topMargin: 10
+                            Layout.topMargin: Theme.gapCard
                         }
 
                         // Severity hex badge (dimmed once read)
@@ -427,7 +427,7 @@ Rectangle {
                                     text: title
                                     textFormat: Text.PlainText // server-derived
                                     color: unread ? Colors.textPrimary : Colors.textSecondary
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fontMono.pixelSize
                                     font.weight: unread ? Font.Bold : Font.Normal
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
@@ -448,7 +448,7 @@ Rectangle {
                                         text: "×" + repeat
                                         color: Colors.accentHover
                                         font.family: Theme.fontMono.family
-                                        font.pixelSize: 9
+                                        font.pixelSize: Theme.fontMicro.pixelSize
                                         font.weight: Font.Bold
                                     }
                                 }
@@ -458,7 +458,7 @@ Rectangle {
                                     color: Colors.textMuted
                                     opacity: 0.7
                                     font.family: Theme.fontMono.family
-                                    font.pixelSize: 9
+                                    font.pixelSize: Theme.fontMicro.pixelSize
                                     font.letterSpacing: 1.0
                                 }
 
@@ -499,7 +499,7 @@ Rectangle {
                                 text: body
                                 textFormat: Text.PlainText // server-derived
                                 color: Colors.textMuted
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
                                 // collapsed: 2 lines; expanded: full body, no cap

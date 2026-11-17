@@ -3,7 +3,7 @@ import QtQuick.Controls
 import LiveMorph
 
 /**
- * Nocturne scrollbar: slim rounded thumb; accent-colored while dragged,
+ * Obsidian Hex scrollbar: slim rounded thumb; accent-colored while dragged,
  * strong border color on hover, hidden when content fits.
  * Attach: Flickable { ScrollBar.vertical: StyledScrollBar { } }
  */

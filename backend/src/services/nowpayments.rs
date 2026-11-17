@@ -140,7 +140,10 @@ pub async fn get_payment_status(cfg: &Arc<Config>, payment_id: &str) -> AppResul
 }
 
 /// Map NOWPayments status → our order lifecycle.
-/// finished / confirmed → paid; failed / expired / refunded → terminal failure.
+/// Only `finished` counts as paid (funds fully settled); `confirmed` means the
+/// chain accepted the payment but funds are still being sent, so treating it
+/// as paid could provision credits for a payment that later fails.
+/// failed / expired / refunded → terminal failure.
 pub fn is_paid(status: &str) -> bool {
     matches!(
         status.to_ascii_lowercase().as_str(),

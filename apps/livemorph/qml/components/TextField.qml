@@ -3,7 +3,7 @@ import QtQuick.Controls as Controls
 import LiveMorph
 
 /**
- * Nocturne text field: elevated fill, 1px border, accent focus ring
+ * Obsidian Hex text field: elevated fill, 1px border, accent focus ring
  * (50% border + 3px accent/15 halo), inset top highlight, disabled state.
  */
 Controls.TextField {

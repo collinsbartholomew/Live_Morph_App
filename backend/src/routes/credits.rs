@@ -152,7 +152,8 @@ async fn admin_add(
                 delta: credits,
                 balance_after: fresh.total_credits(),
                 kind: "credit_key".into(),
-                ref_id: Some(key.clone()),
+                // Store only the hash — a DB dump must not reveal redeemable keys.
+                ref_id: Some(hash_token(&key)),
                 note: Some("manual credit key redemption".into()),
                 created_at: bson::DateTime::from_chrono(Utc::now()),
             })
@@ -201,6 +202,16 @@ async fn admin_add(
             .await?
             .ok_or_else(|| AppError::NotFound("user".into()))?
     };
+
+    if let Some(total) = body.set_total {
+        // set_total is a TRUE set: a negative or non-finite value would push
+        // bonus_balance/credit_balance negative via the $min/$max pipeline.
+        if !total.is_finite() || total < 0.0 {
+            return Err(AppError::BadRequest(
+                "set_total must be a finite value >= 0".into(),
+            ));
+        }
+    }
 
     let (delta, label) = if let Some(total) = body.set_total {
         (total - target.total_credits(), "admin_set_total".to_string())

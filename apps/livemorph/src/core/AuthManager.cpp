@@ -1068,8 +1068,19 @@ void AuthManager::exportData()
         }
         const QByteArray json = reply->readAll();
 
-        // Write a copy to Downloads for the user to keep.
-        const QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+        // Write a copy to Downloads for the user to keep. DownloadLocation can
+        // be empty on minimal systems (no XDG dirs) — fall back to Documents,
+        // then Home, instead of writing a relative path into the CWD.
+        QString dir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+        if (dir.isEmpty())
+            dir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        if (dir.isEmpty())
+            dir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+        if (dir.isEmpty()) {
+            emit dataExported({});
+            setError(tr("No writable folder available for the export"));
+            return;
+        }
         const QString name = QStringLiteral("livemorph-export-%1.json")
                                  .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")));
         const QString path = QDir(dir).filePath(name);

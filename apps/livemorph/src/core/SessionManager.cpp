@@ -12,19 +12,62 @@
 #include <QFileInfo>
 #include <QBuffer>
 #include <QImage>
+#include <QDir>
+#include <QStandardPaths>
 #include <QtGlobal>
+#include <QtConcurrent>
+#include <QFutureWatcher>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
 #include <QDebug>
 #include <QRegularExpression>
 #include <QRandomGenerator>
 
 namespace {
+// Only bundled resources and files inside the user's own directories may be
+// read and sent to the signaling provider. Anything else (/etc, other users'
+// homes, system dirs) is rejected at the C++ boundary, so a compromised QML
+// layer cannot exfiltrate arbitrary local files via set_image. On top of the
+// path check, imageToBase64DataUrl only proceeds when the file decodes as an
+// image, which also rejects non-image secrets.
+bool isAllowedLocalImagePath(const QString &canonicalPath)
+{
+    if (canonicalPath.startsWith(QLatin1Char(':')))
+        return true; // qrc resource
+    const QStringList roots = {
+        QStandardPaths::writableLocation(QStandardPaths::HomeLocation),
+        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation),
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation),
+        QStandardPaths::writableLocation(QStandardPaths::DownloadLocation),
+        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation),
+        QStandardPaths::writableLocation(QStandardPaths::TempLocation),
+    };
+    for (const QString &root : roots) {
+        if (!root.isEmpty()
+            && (canonicalPath == root || canonicalPath.startsWith(root + QLatin1Char('/'))))
+            return true;
+    }
+    return false;
+}
+
 QString imageToBase64DataUrl(const QString &pathOrUrl)
 {
+    if (pathOrUrl.startsWith(QLatin1String("https://"))
+        || pathOrUrl.startsWith(QLatin1String("http://")))
+        return QString(); // remote images are fetched async by fetchRemoteImage
     QString filePath = pathOrUrl;
     if (pathOrUrl.startsWith(QLatin1String("qrc:")))
         filePath = QStringLiteral(":") + pathOrUrl.mid(4);
     else if (pathOrUrl.startsWith(QLatin1String("file://")))
         filePath = QUrl(pathOrUrl).toLocalFile();
+    else {
+        // Plain path: canonicalize (resolves symlinks) and enforce containment.
+        const QString canonical = QFileInfo(filePath).canonicalFilePath();
+        if (canonical.isEmpty() || !isAllowedLocalImagePath(canonical))
+            return QString();
+        filePath = canonical;
+    }
 
     // Hard byte cap on the source file, AND a cap on the encoded data URL:
     // the proxy rejects WS frames above MAX_BODY_BYTES (8 MiB default) and
@@ -214,6 +257,14 @@ void SessionManager::wireSignaling()
     connect(m_signaling, &WebRtcSignalingClient::mediaServerReceived, this,
             [this](const QString &ip, quint16 port) {
         qInfo() << "SessionManager: media server" << ip << ":" << port << "— adding TCP ICE candidate";
+        // server_ip is server-controlled — validate it as a plain host/IP before
+        // it goes into an ICE candidate string (webrtcbin parses candidate text).
+        static const QRegularExpression hostRe(
+            QStringLiteral("^[A-Za-z0-9.\\-\\[\\]:]+$"));
+        if (!hostRe.match(ip).hasMatch() || port == 0) {
+            qWarning() << "SessionManager: rejecting malformed media server address:" << ip << port;
+            return;
+        }
         if (m_peer) {
             // TCP passive candidate at the media server endpoint
             const QString cand = QStringLiteral(
@@ -449,7 +500,7 @@ void SessionManager::createNativePeer()
         turn = rest;
     }
     if (turn.isEmpty()) {
-        QByteArray turnUrl = qgetenv("LIVEMORPH_TURN_URLS"); // canonical product name
+        QByteArray turnUrl = ConfigManager::turnUrlsEnv(); // single source of truth; validated by GstRtcPeer
         if (!turnUrl.isEmpty())
             turn = QString::fromUtf8(turnUrl);
     }
@@ -961,6 +1012,141 @@ void SessionManager::startSession(const QString &provider, const QString &tier)
     }
 }
 
+void SessionManager::sendCharacterImageOrPrompt(const QString &image, const QString &prompt, bool rawFallback)
+{
+    if (!m_signaling || !m_signaling->isConnected())
+        return;
+    if (image.startsWith(QLatin1String("https://")) || image.startsWith(QLatin1String("http://"))) {
+        fetchRemoteImage(image, prompt, rawFallback, 0);
+        return;
+    }
+    startImageEncodeJob(image, prompt, rawFallback);
+}
+
+void SessionManager::startImageEncodeJob(const QString &image, const QString &prompt, bool rawFallback)
+{
+    // Single-flight: a newer character switch supersedes any in-flight encode.
+    if (m_imgWatcher) {
+        QFutureWatcher<QString> *old = m_imgWatcher.data();
+        m_imgWatcher = nullptr;
+        old->disconnect();
+        old->cancel();
+        old->deleteLater();
+    }
+    const int job = ++m_imgJob;
+    auto *w = new QFutureWatcher<QString>(this);
+    m_imgWatcher = w;
+    connect(w, &QFutureWatcher<QString>::finished, this,
+            [this, w, job, image, prompt, rawFallback]() {
+        const QString b64 = w->result();
+        w->deleteLater();
+        if (w == m_imgWatcher.data())
+            m_imgWatcher = nullptr;
+        // Drop the temp download copy once encoded.
+        if (image.startsWith(QStandardPaths::writableLocation(QStandardPaths::TempLocation)))
+            QFile::remove(image);
+        if (job != m_imgJob)
+            return; // superseded by a newer switch
+        if (!m_active || !m_signaling || !m_signaling->isConnected())
+            return;
+        if (!b64.isEmpty()) {
+            m_signaling->sendSetImage(b64, prompt, m_enhance);
+        } else {
+            imageJobFailed(prompt, rawFallback);
+        }
+    });
+    // The 8 MiB read + multi-scale encode can take hundreds of ms on a large
+    // photo — never on the GUI thread during a live session.
+    w->setFuture(QtConcurrent::run(imageToBase64DataUrl, image));
+}
+
+void SessionManager::fetchRemoteImage(const QString &url, const QString &prompt, bool rawFallback, int depth)
+{
+    // https-only with a strict host/path charset; redirects are re-validated.
+    static const QRegularExpression kHttpsUrl(QStringLiteral(
+        "^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?(/[!-~]*)?$"));
+    if (depth > 3 || !kHttpsUrl.match(url).hasMatch()) {
+        qWarning() << "SessionManager: rejected remote image URL";
+        imageJobFailed(prompt, rawFallback);
+        return;
+    }
+    if (!m_imgNam)
+        m_imgNam = new QNetworkAccessManager(this);
+    QNetworkRequest req{QUrl(url)};
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+    QNetworkReply *reply = m_imgNam->get(req);
+    const int job = ++m_imgJob;
+    // Hard cap on the download itself (abort mid-body if the server lies about
+    // Content-Length), matching the 8 MiB source cap in imageToBase64DataUrl.
+    connect(reply, &QNetworkReply::downloadProgress, this, [reply](qint64 received, qint64) {
+        if (received > 8 * 1024 * 1024)
+            reply->abort();
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply, job, prompt, rawFallback, depth]() {
+        reply->deleteLater();
+        if (job != m_imgJob)
+            return; // superseded by a newer switch
+        const QUrl redirect = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl();
+        if (!redirect.isEmpty()) {
+            const QString next = redirect.isRelative() ? reply->url().resolved(redirect).toString()
+                                                       : redirect.toString();
+            if (next.startsWith(QLatin1String("https://")))
+                fetchRemoteImage(next, prompt, rawFallback, depth + 1);
+            else
+                imageJobFailed(prompt, rawFallback);
+            return;
+        }
+        if (reply->error() != QNetworkReply::NoError) {
+            qWarning() << "SessionManager: reference image fetch failed:" << reply->errorString();
+            imageJobFailed(prompt, rawFallback);
+            return;
+        }
+        const QByteArray data = reply->readAll();
+        if (data.isEmpty() || data.size() > 8 * 1024 * 1024) {
+            imageJobFailed(prompt, rawFallback);
+            return;
+        }
+        const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+                            + QStringLiteral("/livemorph-img");
+        QDir().mkpath(dir);
+        // mkpath does not fix a pre-existing dir: on multi-user machines another
+        // local user could pre-create this dir world-writable and plant a symlink
+        // here to clobber a victim file. Force per-user 0700 (same as the
+        // dev-import dir in main.cpp), and fail closed if we cannot.
+        if (!QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
+            qWarning() << "SessionManager: cannot secure temp image dir" << dir;
+            imageJobFailed(prompt, rawFallback);
+            return;
+        }
+        const QString path = dir + QStringLiteral("/ref-%1.img").arg(job);
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate) || f.write(data) != data.size()) {
+            imageJobFailed(prompt, rawFallback);
+            return;
+        }
+        f.close();
+        startImageEncodeJob(path, prompt, rawFallback);
+    });
+}
+
+void SessionManager::imageJobFailed(const QString &prompt, bool rawFallback)
+{
+    if (!m_active || !m_signaling || !m_signaling->isConnected())
+        return;
+    if (rawFallback) {
+        // The composed prompt references a reference image the engine never
+        // received — send the RAW prompt instead and surface the failure.
+        qWarning() << "SessionManager: reference image unreadable — sending raw prompt";
+        if (!m_prompt.trimmed().isEmpty())
+            m_signaling->sendPrompt(m_prompt.trimmed(), m_enhance);
+        emit characterSwitchFailed();
+    } else if (!prompt.isEmpty()) {
+        m_signaling->sendPrompt(prompt, m_enhance);
+    } else {
+        qWarning() << "SessionManager: reference image unreadable and no prompt";
+    }
+}
+
 void SessionManager::pushActiveTargetsToProvider()
 {
     if (!m_active)
@@ -968,21 +1154,7 @@ void SessionManager::pushActiveTargetsToProvider()
     if (m_signaling && m_signaling->isConnected()) {
         const QString prompt = composedPrompt();
         if (!m_characterImage.isEmpty()) {
-            const QString b64 = imageToBase64DataUrl(m_characterImage);
-            if (!b64.isEmpty()) {
-                m_signaling->sendSetImage(b64, prompt, m_enhance);
-            } else if (!m_prompt.trimmed().isEmpty()) {
-                // Image unreadable — the composed prompt still carries the
-                // "character shown in the reference image" prefix, which
-                // would reference an image the engine never received.
-                // Send the RAW prompt instead and surface the failure.
-                qWarning() << "SessionManager: reference image unreadable — sending raw prompt";
-                m_signaling->sendPrompt(m_prompt.trimmed(), m_enhance);
-                emit characterSwitchFailed();
-            } else {
-                qWarning() << "SessionManager: reference image unreadable and no prompt";
-                emit characterSwitchFailed();
-            }
+            sendCharacterImageOrPrompt(m_characterImage, prompt, true);
         } else if (!prompt.isEmpty()) {
             m_signaling->sendPrompt(prompt, m_enhance);
         } else if (!m_characterId.isEmpty()) {
@@ -1055,15 +1227,10 @@ void SessionManager::setActiveCharacter(const QString &id, const QString &name,
         setStatus(Status::Generating, tr("Applying %1…").arg(m_characterName));
         if (m_signaling && m_signaling->isConnected()) {
             const QString prompt = composedPrompt();
-            if (!m_characterImage.isEmpty()) {
-                const QString b64 = imageToBase64DataUrl(m_characterImage);
-                if (!b64.isEmpty())
-                    m_signaling->sendSetImage(b64, prompt, m_enhance);
-                else if (!prompt.isEmpty())
-                    m_signaling->sendPrompt(prompt, m_enhance);
-            } else if (!prompt.isEmpty()) {
+            if (!m_characterImage.isEmpty())
+                sendCharacterImageOrPrompt(m_characterImage, prompt, false);
+            else if (!prompt.isEmpty())
                 m_signaling->sendPrompt(prompt, m_enhance);
-            }
         }
     }
 }

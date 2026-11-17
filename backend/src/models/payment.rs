@@ -48,9 +48,13 @@ pub struct PaymentOrder {
     pub kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<String>,
-    /// Access key generated for an activation order (surfaced to the client).
+    /// HMAC hash of the activation key (hash-at-rest; never the plaintext).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub access_key: Option<String>,
+    pub access_key_hash: Option<String>,
+    /// Transient plaintext, set only in-memory right after minting so the
+    /// verify/status response can surface it exactly once. Never persisted.
+    #[serde(skip)]
+    pub access_key_plain: Option<String>,
     /// Device fingerprint sent by the client for abuse detection / multi-device.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_id: Option<String>,

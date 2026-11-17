@@ -1,10 +1,11 @@
 # Bundle LiveMorph + Qt/GStreamer runtime for Windows.
 # (The app no longer uses Qt WebEngine — media is GStreamer webrtcbin.)
 # Usage (from apps/livemorph after a Release build):
-#   .\packaging\deploy-windows.ps1 -BuildDir build\bin\Release -QtDir C:\Qt\6.12.0\msvc2022_64
+#   .\packaging\deploy-windows.ps1 -QtDir C:\Qt\6.12.0\msvc2022_64
+# (-BuildDir defaults to build\bin, the single-config output dir)
 
 param(
-    [string]$BuildDir = "build/bin/Release",
+    [string]$BuildDir = "build/bin",
     [string]$QtDir = $env:QTDIR,
     [string]$GstDir = $env:GSTREAMER_1_0_ROOT_MSVC_X86_64
 )
@@ -12,16 +13,19 @@ param(
 $ErrorActionPreference = "Stop"
 if (-not $QtDir) { throw "Set -QtDir or QTDIR to your Qt 6 kit" }
 
-# Multi-config generators append the config to the runtime output dir.
-$exe = Join-Path $BuildDir "LiveMorph.exe"
-if (-not (Test-Path $exe)) {
-    # Only append bin\Release when BuildDir isn't already a multi-config output dir.
-    if ($BuildDir -notmatch 'bin[\\/]Release$') {
-        $alt = Join-Path $BuildDir "bin\Release\LiveMorph.exe"
-        if (Test-Path $alt) { $exe = $alt }
-    }
-    if (-not (Test-Path $exe)) { throw "Missing LiveMorph.exe under $BuildDir — build Release first (try build\bin\Release)" }
+# Multi-config generators (VS) append the config to the runtime output dir
+# (build\bin\Release); single-config generators (Ninja/MinGW) put the exe
+# directly in build\bin. Probe all candidates.
+$exe = $null
+foreach ($cand in @(
+    (Join-Path $BuildDir "LiveMorph.exe"),
+    (Join-Path $BuildDir "bin\Release\LiveMorph.exe"),
+    "build\bin\LiveMorph.exe",
+    "build\bin\Release\LiveMorph.exe"
+)) {
+    if (Test-Path $cand) { $exe = $cand; break }
 }
+if (-not $exe) { throw "Missing LiveMorph.exe — build Release first (looked under '$BuildDir', build\bin, build\bin\Release)" }
 
 $windeploy = Join-Path $QtDir "bin\windeployqt.exe"
 & $windeploy --release --qmldir (Join-Path $PSScriptRoot "..\qml") --compiler-runtime $exe
@@ -48,13 +52,8 @@ start "" "%~dp0LiveMorph.exe" %*
     Write-Warning "GSTREAMER_1_0_ROOT_MSVC_X86_64 not set — GStreamer DLLs NOT bundled; the packaged app needs GStreamer installed."
 }
 
-# Copy i18n .qm if any
-$i18nSrc = Join-Path $PSScriptRoot "..\i18n"
-$i18nDst = Join-Path $BuildDir "i18n"
-if (Test-Path $i18nSrc) {
-    New-Item -ItemType Directory -Force -Path $i18nDst | Out-Null
-    Copy-Item (Join-Path $i18nSrc "*.qm") $i18nDst -ErrorAction SilentlyContinue
-}
+# Translations ship inside the binary (embedded livemorph_en.ts catalog +
+# online runtime translation) — there are no .qm files to stage.
 
 Write-Host "Done. Ship the entire folder: $BuildDir"
 Write-Host "Optional: wrap with Inno Setup / NSIS for an installer."

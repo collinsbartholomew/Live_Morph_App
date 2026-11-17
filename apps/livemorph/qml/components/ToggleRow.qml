@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import LiveMorph
 
 /**
- * Nocturne settings row: whole row toggles the switch (not just the knob),
+ * Obsidian Hex settings row: whole row toggles the switch (not just the knob),
  * title in primary text, BETA as a full-radius accent chip.
  * API: title, desc, beta, checked, toggled(bool).
  */
@@ -37,16 +37,16 @@ ColumnLayout {
         RowLayout {
             id: rowContent
             anchors.fill: parent
-            spacing: 8
+            spacing: Theme.spacingSm
 
             RowLayout {
-                spacing: 8
+                spacing: Theme.spacingSm
                 Layout.fillWidth: true
                 Text {
                     text: root.title
                     color: Colors.textPrimary
                     font.family: Theme.fontUi.family
-                    font.pixelSize: 13
+                    font.pixelSize: Theme.fontSmall.pixelSize
                     font.weight: Font.Normal
                     elide: Text.ElideRight
                     Layout.fillWidth: true
@@ -64,7 +64,7 @@ ColumnLayout {
                         anchors.centerIn: parent
                         text: qsTr("BETA")
                         color: Colors.accentHover
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.family: Theme.fontMono.family
                         font.letterSpacing: 1.2
                     }
@@ -95,7 +95,7 @@ ColumnLayout {
         visible: root.desc.length > 0
         text: root.desc
         color: Colors.textMuted
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontLabel.pixelSize
         wrapMode: Text.WordWrap
         Layout.fillWidth: true
     }

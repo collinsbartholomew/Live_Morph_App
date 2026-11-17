@@ -99,7 +99,7 @@ Item {
             lineWidth: 1.5
             lineColor: Colors.accent
             anchors.left: parent.left
-            anchors.leftMargin: 12
+            anchors.leftMargin: Theme.spacingMd
             anchors.top: parent.top
             anchors.topMargin: -3
             z: Theme.zLocal1
@@ -109,7 +109,7 @@ Item {
             lineWidth: 1.5
             lineColor: Colors.accent
             anchors.right: parent.right
-            anchors.rightMargin: 12
+            anchors.rightMargin: Theme.spacingMd
             anchors.top: parent.top
             anchors.topMargin: -3
             z: Theme.zLocal1
@@ -144,9 +144,9 @@ Item {
                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: Colors.surfaceBorder }
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 20
-                    anchors.rightMargin: 8
-                    spacing: 10
+                    anchors.leftMargin: Theme.padSection
+                    anchors.rightMargin: Theme.spacingSm
+                    spacing: Theme.gapCard
                     HexBadge {
                         size: 30
                         iconName: "settings"
@@ -159,7 +159,7 @@ Item {
                     Text {
                         text: qsTr("Settings")
                         color: Colors.textPrimary
-                        font.pixelSize: 16
+                        font.pixelSize: Theme.fontTitle.pixelSize
                         font.weight: Font.Bold
                         Layout.fillWidth: true
                     }
@@ -214,16 +214,16 @@ Item {
 
                     ColumnLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        anchors.topMargin: 12
-                        anchors.bottomMargin: 12
+                        anchors.leftMargin: Theme.spacingSm
+                        anchors.rightMargin: Theme.spacingSm
+                        anchors.topMargin: Theme.spacingMd
+                        anchors.bottomMargin: Theme.spacingMd
                         spacing: 14
 
                                                 SectionHeader {
                             text: qsTr("STUDIO");
                             Layout.fillWidth: true;
-                            Layout.leftMargin: 10
+                            Layout.leftMargin: Theme.gapCard
                             Layout.bottomMargin: 2
                         }
 
@@ -259,7 +259,7 @@ Item {
                                     anchors.left: parent.left
                                     anchors.top: parent.top
                                     anchors.bottom: parent.bottom
-                                    anchors.margins: 4
+                                    anchors.margins: Theme.spacingXs
                                     width: 2
                                     radius: Theme.radiusHairline
                                     color: Colors.accent
@@ -267,8 +267,8 @@ Item {
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    spacing: 10
+                                    anchors.leftMargin: Theme.spacingMd
+                                    spacing: Theme.gapCard
                                     Icon {
                                         name: modelData.icon
                                         size: 15
@@ -278,7 +278,7 @@ Item {
                                     Text {
                                         text: modelData.label
                                         color: active ? Colors.textPrimary : Colors.textSecondary
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontMono.pixelSize
                                         font.weight: active ? Font.Bold : Font.Normal
                                         Layout.fillWidth: true
                                         elide: Text.ElideRight
@@ -300,7 +300,7 @@ Item {
                                                 SectionHeader {
                             text: qsTr("ACCOUNT");
                             Layout.fillWidth: true;
-                            Layout.leftMargin: 10
+                            Layout.leftMargin: Theme.gapCard
                             Layout.bottomMargin: 2
                         }
 
@@ -322,19 +322,19 @@ Item {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
-                                anchors.margins: 4
+                                anchors.margins: Theme.spacingXs
                                 width: 2; radius: Theme.radiusHairline
                                 color: Colors.accent
                             }
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 12
-                                spacing: 10
+                                anchors.leftMargin: Theme.spacingMd
+                                spacing: Theme.gapCard
                                 Icon { name: "credit-card"; size: 15; color: active ? Colors.accentHover : Colors.textMuted }
                                 Text {
                                     text: qsTr("Account")
                                     color: active ? Colors.textPrimary : Colors.textSecondary
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fontMono.pixelSize
                                     font.weight: active ? Font.Bold : Font.Normal
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
@@ -362,7 +362,7 @@ Item {
                             Keys.onReturnPressed: root.pickTab("about")
                             Keys.onSpacePressed: root.pickTab("about")
                             Layout.fillWidth: true
-                            Layout.topMargin: 12
+                            Layout.topMargin: Theme.spacingMd
                             height: 34
                             radius: Theme.radiusMd
                             color: active ? Colors.surfaceOverlay : (aboutMa.containsMouse ? Colors.overlay30 : Colors.transparent)
@@ -373,19 +373,19 @@ Item {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
-                                anchors.margins: 4
+                                anchors.margins: Theme.spacingXs
                                 width: 2; radius: Theme.radiusHairline
                                 color: Colors.accent
                             }
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 12
-                                spacing: 10
+                                anchors.leftMargin: Theme.spacingMd
+                                spacing: Theme.gapCard
                                 Icon { name: "info"; size: 15; color: active ? Colors.accentHover : Colors.textMuted }
                                 Text {
                                     text: qsTr("About")
                                     color: active ? Colors.textPrimary : Colors.textSecondary
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fontMono.pixelSize
                                     font.weight: active ? Font.Bold : Font.Normal
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
@@ -442,7 +442,7 @@ Item {
                         ColumnLayout {
                         id: contentCol
                         anchors.fill: parent
-                        anchors.margins: 20
+                        anchors.margins: Theme.padSection
                         spacing: 0
 
                         // ════════════════════════ GENERAL ═══════════════════════
@@ -455,7 +455,7 @@ Item {
                                                         SectionHeader {
                                 text: qsTr("SWAP ENGINE");
                                 Layout.fillWidth: true;
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             Rectangle {
                                 id: engineBox
@@ -472,9 +472,9 @@ Item {
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 12
-                                    spacing: 10
+                                    anchors.leftMargin: Theme.gapCard
+                                    anchors.rightMargin: Theme.spacingMd
+                                    spacing: Theme.gapCard
                                     Rectangle {
                                         width: 26; height: 26
                                         radius: Theme.radiusSm
@@ -486,7 +486,7 @@ Item {
                                     Text {
                                         text: App.swapTier === "hd" ? qsTr("HD") : qsTr("Standard")
                                         color: Colors.textPrimary
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontMono.pixelSize
                                         font.weight: Font.Bold
                                         Layout.fillWidth: true
                                     }
@@ -512,7 +512,7 @@ Item {
                                     width: 320
                                     // Count-based height: ColumnLayout+Repeater implicitHeight is 0.
                                     height: 2 * 40 + 2 + 16
-                                    padding: 8
+                                    padding: Theme.spacingSm
                                     closePolicy: Popup.CloseOnEscape
                                     background: Rectangle {
                                         color: Colors.surfaceOverlay
@@ -563,15 +563,15 @@ Item {
                                                 border.color: Colors.accent30
                                                 ColumnLayout {
                                                     anchors.fill: parent
-                                                    anchors.leftMargin: 10
-                                                    anchors.rightMargin: 10
+                                                    anchors.leftMargin: Theme.gapCard
+                                                    anchors.rightMargin: Theme.gapCard
                                                     spacing: 1
                                                     RowLayout {
                                                         Layout.fillWidth: true
                                                         Text {
                                                             text: modelData.label
                                                             color: sel ? Colors.textPrimary : Colors.textSecondary
-                                                            font.pixelSize: 12
+                                                            font.pixelSize: Theme.fontMono.pixelSize
                                                             font.weight: sel ? Font.Bold : Font.Normal
                                                             Layout.fillWidth: true
                                                         }
@@ -586,7 +586,7 @@ Item {
                                                     Text {
                                                         text: modelData.hint
                                                         color: Colors.textMuted
-                                                        font.pixelSize: 10
+                                                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                                                         elide: Text.ElideRight
                                                         Layout.fillWidth: true
                                                     }
@@ -614,11 +614,11 @@ Item {
                             Text {
                                 text: qsTr("Standard is watermark-free at %1 credits/sec. HD adds smooth 30fps at the same rate. Switch any time between swaps.").arg(Session.creditsPerSecond.toFixed(0))
                                 color: Colors.textMuted
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
-                                Layout.topMargin: 8
-                                Layout.bottomMargin: 20
+                                Layout.topMargin: Theme.spacingSm
+                                Layout.bottomMargin: Theme.padSection
                             }
 
 
@@ -626,12 +626,12 @@ Item {
                                                         SectionHeader {
                                 text: qsTr("DISPLAY");
                                 Layout.fillWidth: true;
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             Text {
                                 text: qsTr("Input camera PIP")
                                 color: Colors.textPrimary
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontMono.pixelSize
                                 font.weight: Font.Bold
                             }
                             // Electron: one bordered pill group (p-0.5, rounded-full),
@@ -642,7 +642,7 @@ Item {
                             // so every pill group in the app shares one component.
                             SegmentedControl {
                                 Layout.fillWidth: true
-                                Layout.topMargin: 8
+                                Layout.topMargin: Theme.spacingSm
                                 equalWidths: true
                                 model: [
                                     { label: qsTr("Always show"), value: "always" },
@@ -656,11 +656,11 @@ Item {
                                 visible: !root.firstSwapDoneCheck()
                                 text: qsTr("First-run override active")
                                 color: Colors.accent70
-                                font.pixelSize: 9
+                                font.pixelSize: Theme.fontMicro.pixelSize
                                 font.family: Theme.fontMono.family
                                 font.capitalization: Font.AllUppercase
                                 font.letterSpacing: Theme.trackingEyebrow
-                                Layout.topMargin: 4
+                                Layout.topMargin: Theme.spacingXs
                             }
                             Text {
                                 // Electron: per-option help, 10px
@@ -673,11 +673,11 @@ Item {
                                     return qsTr("Hidden during live and after stop.")
                                 }
                                 color: Colors.textMuted
-                                font.pixelSize: 10
+                                font.pixelSize: Theme.fontMonoTiny.pixelSize
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
-                                Layout.topMargin: 8
-                                Layout.bottomMargin: 20
+                                Layout.topMargin: Theme.spacingSm
+                                Layout.bottomMargin: Theme.padSection
                             }
 
                             ToggleRow {
@@ -685,14 +685,14 @@ Item {
                                 desc: qsTr("Show your real camera in the stage before the swap starts.")
                                 checked: Config.showCameraBeforeSwap
                                 onToggled: (v) => Config.showCameraBeforeSwap = v
-                                Layout.bottomMargin: 20
+                                Layout.bottomMargin: Theme.padSection
                             }
 
                             // NOTIFICATIONS
                                                         SectionHeader {
                                 text: qsTr("NOTIFICATIONS");
                                 Layout.fillWidth: true;
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             ToggleRow {
                                 title: qsTr("Desktop notifications")
@@ -706,14 +706,14 @@ Item {
                                 desc: qsTr("Occasional product updates and credit promotions.")
                                 checked: Config.productNotifications
                                 onToggled: (v) => Config.productNotifications = v
-                                Layout.bottomMargin: 20
+                                Layout.bottomMargin: Theme.padSection
                             }
 
                             // LANGUAGE
                                                         SectionHeader {
                                 text: qsTr("LANGUAGE");
                                 Layout.fillWidth: true;
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             Rectangle {
                                 id: langBox
@@ -729,9 +729,9 @@ Item {
                                 border.width: 1
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 12
-                                    spacing: 10
+                                    anchors.leftMargin: Theme.gapCard
+                                    anchors.rightMargin: Theme.spacingMd
+                                    spacing: Theme.gapCard
                                     Rectangle {
                                         width: 26; height: 26
                                         radius: Theme.radiusSm
@@ -743,7 +743,7 @@ Item {
                                     Text {
                                         text: I18n.languageDisplayName(I18n.language)
                                         color: Colors.textPrimary
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontMono.pixelSize
                                         font.weight: Font.Bold
                                         Layout.fillWidth: true
                                     }
@@ -769,7 +769,7 @@ Item {
                                     width: 240
                                     height: Math.min(240, I18n.availableLanguages.length * 34
                                                      + Math.max(0, I18n.availableLanguages.length - 1) * 2 + 16)
-                                    padding: 8
+                                    padding: Theme.spacingSm
                                     closePolicy: Popup.CloseOnEscape
                                     background: Rectangle {
                                         color: Colors.surfaceOverlay
@@ -823,13 +823,13 @@ Item {
                                                 border.color: Colors.accent30
                                                 RowLayout {
                                                     anchors.fill: parent
-                                                    anchors.leftMargin: 10
-                                                    anchors.rightMargin: 8
-                                                    spacing: 8
+                                                    anchors.leftMargin: Theme.gapCard
+                                                    anchors.rightMargin: Theme.spacingSm
+                                                    spacing: Theme.spacingSm
                                                     Text {
                                                         text: I18n.languageDisplayName(modelData)
                                                         color: sel ? Colors.textPrimary : Colors.textSecondary
-                                                        font.pixelSize: 11
+                                                        font.pixelSize: Theme.fontLabel.pixelSize
                                                         font.weight: sel ? Font.Bold : Font.Normal
                                                         Layout.fillWidth: true
                                                     }
@@ -851,18 +851,18 @@ Item {
                             Text {
                                 text: qsTr("Interface language. Some catalog text may stay in English.")
                                 color: Colors.textMuted
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
-                                Layout.topMargin: 8
-                                Layout.bottomMargin: 20
+                                Layout.topMargin: Theme.spacingSm
+                                Layout.bottomMargin: Theme.padSection
                             }
 
                             // LIBRARY
                                                         SectionHeader {
                                 text: qsTr("LIBRARY");
                                 Layout.fillWidth: true;
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             ToggleRow {
                                 title: qsTr("Show built-in characters")
@@ -881,7 +881,7 @@ Item {
                                                         SectionHeader {
                                 text: qsTr("CAMERA DEVICE");
                                 Layout.fillWidth: true;
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             Rectangle {
                                 id: devBox
@@ -897,9 +897,9 @@ Item {
                                 border.width: 1
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 12
-                                    spacing: 10
+                                    anchors.leftMargin: Theme.gapCard
+                                    anchors.rightMargin: Theme.spacingMd
+                                    spacing: Theme.gapCard
                                     Rectangle {
                                         width: 26; height: 26
                                         radius: Theme.radiusSm
@@ -911,7 +911,7 @@ Item {
                                     Text {
                                         text: CameraCtrl.currentDeviceName || qsTr("Default camera")
                                         color: Colors.textPrimary
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontMono.pixelSize
                                         font.weight: Font.Bold
                                         Layout.fillWidth: true
                                         elide: Text.ElideMiddle
@@ -938,7 +938,7 @@ Item {
                                     width: Math.min(340, root.width - 40)
                                     height: Math.min(240, CameraCtrl.availableDevices.length * 34
                                                      + Math.max(0, CameraCtrl.availableDevices.length - 1) * 2 + 16)
-                                    padding: 8
+                                    padding: Theme.spacingSm
                                     closePolicy: Popup.CloseOnEscape
                                     background: Rectangle {
                                         color: Colors.surfaceOverlay
@@ -987,14 +987,14 @@ Item {
                                                 border.color: Colors.accent30
                                                 RowLayout {
                                                     anchors.fill: parent
-                                                    anchors.leftMargin: 10
-                                                    anchors.rightMargin: 8
-                                                    spacing: 8
+                                                    anchors.leftMargin: Theme.gapCard
+                                                    anchors.rightMargin: Theme.spacingSm
+                                                    spacing: Theme.spacingSm
                                                     Rectangle { width: 6; height: 6; radius: Theme.radiusXl; color: sel ? Colors.accent : Colors.textMuted }
                                                     Text {
                                                         text: modelData
                                                         color: sel ? Colors.textPrimary : Colors.textSecondary
-                                                        font.pixelSize: 11
+                                                        font.pixelSize: Theme.fontLabel.pixelSize
                                                         font.weight: sel ? Font.Bold : Font.Normal
                                                         elide: Text.ElideMiddle
                                                         Layout.fillWidth: true
@@ -1017,19 +1017,19 @@ Item {
                                                         SectionHeader {
                                 text: qsTr("RESOLUTION");
                                 Layout.fillWidth: true;
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             Text {
                                 text: qsTr("HD (locked)")
                                 color: Colors.textSecondary
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontMono.pixelSize
                                 Layout.fillWidth: true
                             }
                             Text {
                                 text: qsTr("Resolution follows your plan's engine tier.")
                                 color: Colors.textMuted
-                                font.pixelSize: 11
-                                Layout.topMargin: 8
+                                font.pixelSize: Theme.fontLabel.pixelSize
+                                Layout.topMargin: Theme.spacingSm
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                             }
@@ -1043,7 +1043,7 @@ Item {
 
                             RowLayout {
                                 Layout.fillWidth: true
-                                Layout.bottomMargin: 12
+                                Layout.bottomMargin: Theme.spacingMd
                                                                 SectionHeader {
                                     text: qsTr("OBS STREAM OUTPUT");
                                     Layout.fillWidth: true;
@@ -1068,7 +1068,7 @@ Item {
                                             id: statusLbl
                                             text: StreamServer.running ? qsTr("Active") : qsTr("Inactive")
                                             color: Colors.textSecondary
-                                            font.pixelSize: 10
+                                            font.pixelSize: Theme.fontMonoTiny.pixelSize
                                             font.family: Theme.fontMono.family
                                         }
                                     }
@@ -1090,8 +1090,8 @@ Item {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.top: parent.top
-                                    anchors.margins: 20
-                                    spacing: 10
+                                    anchors.margins: Theme.padSection
+                                    spacing: Theme.gapCard
 
                                     RowLayout {
                                         Layout.fillWidth: true
@@ -1122,10 +1122,10 @@ Item {
 
                                     Text {
                                         Layout.fillWidth: true
-                                        text: StreamServer.url || VirtualCamera.obsBrowserSourceUrl
+                                        text: StreamServer.urlDisplay || VirtualCamera.obsBrowserSourceUrl
                                         color: Colors.accent
                                         font.family: Theme.fontMono.family
-                                        font.pixelSize: 14
+                                        font.pixelSize: Theme.fontUi.pixelSize
                                         wrapMode: Text.WrapAnywhere
                                     }
 
@@ -1138,7 +1138,7 @@ Item {
                                             compact: true
                                             text: root.copiedFlash.length > 0 && root.copiedFlash === qsTr("Copied") ? qsTr("Copied") : qsTr("Copy")
                                             onClicked: {
-                                                Backend.copyToClipboard(StreamServer.url || VirtualCamera.obsBrowserSourceUrl)
+                                                StreamServer.running ? StreamServer.copyStreamUrl() : Backend.copyToClipboard(VirtualCamera.obsBrowserSourceUrl)
                                                 root.copiedFlash = qsTr("Copied")
                                                 copyFlashTimer.restart()
                                             }
@@ -1159,7 +1159,7 @@ Item {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    Backend.copyToClipboard(StreamServer.url || VirtualCamera.obsBrowserSourceUrl)
+                                    StreamServer.running ? StreamServer.copyStreamUrl() : Backend.copyToClipboard(VirtualCamera.obsBrowserSourceUrl)
                                     root.copiedFlash = qsTr("Copied")
                                     copyFlashTimer.restart()
                                 }
@@ -1169,7 +1169,7 @@ Item {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Layout.topMargin: 14
-                                spacing: 8
+                                spacing: Theme.spacingSm
                                 SecondaryButton {
                                     text: StreamServer.running ? qsTr("Stop output") : qsTr("Start output")
                                     onClicked: {
@@ -1185,26 +1185,26 @@ Item {
                             Text {
                                 text: qsTr("How to add LiveMorph to OBS")
                                 color: Colors.textPrimary
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontMono.pixelSize
                                 font.weight: Font.Bold
                                 Layout.topMargin: 22
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             // 3 steps (Electron): Browser Source / Window
                             // Capture / Direct MJPEG w/ badges + code block
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 12
+                                spacing: Theme.spacingMd
 
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 2
                                     RowLayout {
-                                        spacing: 8
+                                        spacing: Theme.spacingSm
                                         Text {
                                             text: qsTr("Browser Source:")
                                             color: Colors.textPrimary
-                                            font.pixelSize: 12
+                                            font.pixelSize: Theme.fontMono.pixelSize
                                             font.weight: Font.Normal
                                         }
                                         Rectangle {
@@ -1219,7 +1219,7 @@ Item {
                                                 anchors.centerIn: parent
                                                 text: qsTr("RECOMMENDED")
                                                 color: Colors.accent70
-                                                font.pixelSize: 9
+                                                font.pixelSize: Theme.fontMicro.pixelSize
                                                 font.family: Theme.fontMono.family
                                                 font.letterSpacing: 1.0
                                             }
@@ -1228,7 +1228,7 @@ Item {
                                     Text {
                                         text: qsTr("Add a Browser Source with the URL above. LiveMorph streams MJPEG at full frame size — no capture card needed.")
                                         color: Colors.textMuted
-                                        font.pixelSize: 11
+                                        font.pixelSize: Theme.fontLabel.pixelSize
                                         wrapMode: Text.WordWrap
                                         Layout.fillWidth: true
                                     }
@@ -1240,13 +1240,13 @@ Item {
                                     Text {
                                         text: qsTr("Window Capture:")
                                         color: Colors.textPrimary
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontMono.pixelSize
                                         font.weight: Font.Normal
                                     }
                                     Text {
                                         text: qsTr("Capture the Preview window (1280×720, OBS-capturable). Use Clean Mode (Ctrl+Shift+C) to hide its toolbar.")
                                         color: Colors.textMuted
-                                        font.pixelSize: 11
+                                        font.pixelSize: Theme.fontLabel.pixelSize
                                         wrapMode: Text.WordWrap
                                         Layout.fillWidth: true
                                     }
@@ -1256,11 +1256,11 @@ Item {
                                     Layout.fillWidth: true
                                     spacing: 2
                                     RowLayout {
-                                        spacing: 8
+                                        spacing: Theme.spacingSm
                                         Text {
                                             text: qsTr("Direct MJPEG:")
                                             color: Colors.textPrimary
-                                            font.pixelSize: 12
+                                            font.pixelSize: Theme.fontMono.pixelSize
                                             font.weight: Font.Normal
                                         }
                                         Rectangle {
@@ -1275,7 +1275,7 @@ Item {
                                                 anchors.centerIn: parent
                                                 text: qsTr("ADVANCED")
                                                 color: Colors.textMuted
-                                                font.pixelSize: 9
+                                                font.pixelSize: Theme.fontMicro.pixelSize
                                                 font.family: Theme.fontMono.family
                                                 font.letterSpacing: 1.0
                                             }
@@ -1288,18 +1288,18 @@ Item {
                                         color: Colors.overlay40 // surface-overlay/50
                                         Text {
                                             anchors.left: parent.left
-                                            anchors.leftMargin: 8
+                                            anchors.leftMargin: Theme.spacingSm
                                             anchors.verticalCenter: parent.verticalCenter
-                                            text: StreamServer.url || qsTr("http://127.0.0.1:%1/stream (starts with the app)").arg(Constants.defaultStreamPort)
+                                            text: StreamServer.urlDisplay || qsTr("http://127.0.0.1:%1/stream (starts with the app)").arg(Constants.defaultStreamPort)
                                             color: Colors.accent70 // accent/70
                                             font.family: Theme.fontMono.family
-                                            font.pixelSize: 11
+                                            font.pixelSize: Theme.fontLabel.pixelSize
                                         }
                                         MouseArea {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                Backend.copyToClipboard(StreamServer.url || VirtualCamera.obsBrowserSourceUrl)
+                                                StreamServer.running ? StreamServer.copyStreamUrl() : Backend.copyToClipboard(VirtualCamera.obsBrowserSourceUrl)
                                                 App.notify(qsTr("URL copied"), "success")
                                             }
                                         }
@@ -1308,12 +1308,12 @@ Item {
                             }
 
                             // Output behavior (Electron: pt-4 border-t + heading)
-                            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBorderSubtle; Layout.topMargin: 16 }
+                            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBorderSubtle; Layout.topMargin: Theme.spacingLg }
                                                         SectionHeader {
                                 text: qsTr("OUTPUT BEHAVIOR");
                                 Layout.fillWidth: true;
                                 Layout.topMargin: 14
-                                Layout.bottomMargin: 8
+                                Layout.bottomMargin: Theme.spacingSm
                             }
 
                             ToggleRow {
@@ -1334,12 +1334,12 @@ Item {
                                                         SectionHeader {
                                 text: qsTr("SESSION RECORDING");
                                 Layout.fillWidth: true;
-                                Layout.bottomMargin: 8
+                                Layout.bottomMargin: Theme.spacingSm
                             }
                             Text {
                                 text: qsTr("Save your swap session to a local video file. Recording does not cost extra credits.")
                                 color: Colors.textSecondary
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
                                 Layout.bottomMargin: 18
@@ -1348,13 +1348,13 @@ Item {
                             Text {
                                 text: qsTr("Save recordings to")
                                 color: Colors.textPrimary
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontMono.pixelSize
                                 font.weight: Font.Bold
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Layout.topMargin: 8
-                                spacing: 8
+                                Layout.topMargin: Theme.spacingSm
+                                spacing: Theme.spacingSm
                                 Rectangle {
                                     Layout.fillWidth: true
                                     height: 38
@@ -1364,13 +1364,13 @@ Item {
                                     border.width: 1
                                     Text {
                                         anchors.left: parent.left
-                                        anchors.leftMargin: 12
+                                        anchors.leftMargin: Theme.spacingMd
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: parent.width - 24
                                         text: Recording.outputDirectory || qsTr("Default videos folder")
                                         color: Colors.textSecondary
                                         font.family: Theme.fontMono.family
-                                        font.pixelSize: 11
+                                        font.pixelSize: Theme.fontLabel.pixelSize
                                         elide: Text.ElideMiddle
                                     }
                                 }
@@ -1382,9 +1382,9 @@ Item {
                             Text {
                                 text: qsTr("Videos land here with timestamped filenames.")
                                 color: Colors.textMuted
-                                font.pixelSize: 11
-                                Layout.topMargin: 8
-                                Layout.bottomMargin: 20
+                                font.pixelSize: Theme.fontLabel.pixelSize
+                                Layout.topMargin: Theme.spacingSm
+                                Layout.bottomMargin: Theme.padSection
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                             }
@@ -1394,19 +1394,19 @@ Item {
                                 desc: qsTr("Recording starts by itself when your swap goes live and saves when the swap ends. You can still stop it anytime with the record button.")
                                 checked: Config.autoRecord
                                 onToggled: (v) => Config.autoRecord = v
-                                Layout.bottomMargin: 20
+                                Layout.bottomMargin: Theme.padSection
                             }
 
                             Text {
                                 text: qsTr("Quality")
                                 color: Colors.textPrimary
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontMono.pixelSize
                                 font.weight: Font.Bold
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                spacing: 10
+                                spacing: Theme.gapCard
                                 Repeater {
                                     model: [
                                         { label: qsTr("Standard"), sub: qsTr("~20 MB/min"), value: "balanced" },
@@ -1430,10 +1430,10 @@ Item {
 
                                         ColumnLayout {
                                             anchors.fill: parent
-                                            anchors.leftMargin: 12
-                                            anchors.rightMargin: 12
-                                            anchors.topMargin: 10
-                                            anchors.bottomMargin: 10
+                                            anchors.leftMargin: Theme.spacingMd
+                                            anchors.rightMargin: Theme.spacingMd
+                                            anchors.topMargin: Theme.gapCard
+                                            anchors.bottomMargin: Theme.gapCard
                                             spacing: 2
 
                                             RowLayout {
@@ -1441,7 +1441,7 @@ Item {
                                                 Text {
                                                     text: modelData.label
                                                     color: Colors.textPrimary
-                                                    font.pixelSize: 12
+                                                    font.pixelSize: Theme.fontMono.pixelSize
                                                     font.weight: Font.Normal
                                                 }
                                                 Item { Layout.fillWidth: true }
@@ -1456,7 +1456,7 @@ Item {
                                             Text {
                                                 text: modelData.sub
                                                 color: Colors.textMuted
-                                                font.pixelSize: 10
+                                                font.pixelSize: Theme.fontMonoTiny.pixelSize
                                                 font.family: Theme.fontMono.family
                                             }
                                         }
@@ -1470,11 +1470,11 @@ Item {
                                                         SectionHeader {
                                 text: qsTr("CRASH RECOVERY");
                                 Layout.fillWidth: true;
-                                Layout.topMargin: 24
-                                Layout.bottomMargin: 8
+                                Layout.topMargin: Theme.spacingXl
+                                Layout.bottomMargin: Theme.spacingSm
                             }
                             RowLayout {
-                                spacing: 8
+                                spacing: Theme.spacingSm
                                 SecondaryButton {
                                     text: qsTr("Scan orphan recordings")
                                     onClicked: {
@@ -1488,8 +1488,8 @@ Item {
                                 ColumnLayout {
                                     visible: Recording.recentRecordings.length > 0
                                     Layout.fillWidth: true
-                                    Layout.topMargin: 8
-                                    spacing: 4
+                                    Layout.topMargin: Theme.spacingSm
+                                    spacing: Theme.spacingXs
                                     Repeater {
                                         model: Recording.recentRecordings
                                         delegate: Rectangle {
@@ -1502,15 +1502,15 @@ Item {
                                             border.width: 1
                                             RowLayout {
                                                 anchors.fill: parent
-                                                anchors.leftMargin: 12
-                                                anchors.rightMargin: 12
-                                                spacing: 8
+                                                anchors.leftMargin: Theme.spacingMd
+                                                anchors.rightMargin: Theme.spacingMd
+                                                spacing: Theme.spacingSm
                                                 Icon { name: "video"; size: 14; color: Colors.textMuted50 }
                                                 Text {
                                                     text: modelData.fileName || modelData.path || ""
                                                     color: Colors.textSecondary
                                                     font.family: Theme.fontMono.family
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: Theme.fontLabel.pixelSize
                                                     elide: Text.ElideMiddle
                                                     Layout.fillWidth: true
                                                 }
@@ -1519,13 +1519,13 @@ Item {
                                                     text: [modelData.sizeText, modelData.dateText].filter(Boolean).join(" · ")
                                                     color: Colors.textMuted
                                                     font.family: Theme.fontMono.family
-                                                    font.pixelSize: 10
+                                                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                                                 }
                                                 Text {
                                                     text: qsTr("SHOW IN FOLDER")
                                                     visible: recRowMa.containsMouse
                                                     color: Colors.accent
-                                                    font.pixelSize: 10
+                                                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                                                     font.family: Theme.fontMono.family
                                                     font.letterSpacing: 1.0
                                                 }
@@ -1546,12 +1546,12 @@ Item {
                                 delegate: RowLayout {
                                     required property var modelData
                                     Layout.fillWidth: true
-                                    Layout.topMargin: 8
-                                    spacing: 8
+                                    Layout.topMargin: Theme.spacingSm
+                                    spacing: Theme.spacingSm
                                     Text {
                                         text: modelData.name || modelData.path
                                         color: Colors.statusWarning
-                                        font.pixelSize: 10
+                                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                                         font.family: Theme.fontMono.family
                                         elide: Text.ElideMiddle
                                         Layout.fillWidth: true
@@ -1577,11 +1577,11 @@ Item {
                                                         SectionHeader {
                                 text: qsTr("ACCOUNT");
                                 Layout.fillWidth: true;
-                                Layout.bottomMargin: 12
+                                Layout.bottomMargin: Theme.spacingMd
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                spacing: 12
+                                spacing: Theme.spacingMd
                                 Item {
                                     width: 38; height: 38
                                     Hexagon {
@@ -1595,18 +1595,18 @@ Item {
                                         anchors.centerIn: parent
                                         text: { const t = Auth.displayName.trim(); return t.length ? t[0].toUpperCase() : "?" }
                                         color: Colors.textOnAccent
-                                        font.pixelSize: 14
+                                        font.pixelSize: Theme.fontUi.pixelSize
                                         font.bold: true
                                     }
                                 }
                                 ColumnLayout {
                                     spacing: 3
                                     RowLayout {
-                                        spacing: 8
+                                        spacing: Theme.spacingSm
                                         Text {
                                             text: Auth.displayName || qsTr("—")
                                             color: Colors.textPrimary
-                                            font.pixelSize: 13
+                                            font.pixelSize: Theme.fontSmall.pixelSize
                                             font.weight: Font.Bold
                                             elide: Text.ElideMiddle
                                             Layout.fillWidth: true
@@ -1636,7 +1636,7 @@ Item {
                                                      : parent.isStarter ? Colors.tierStarterText
                                                      : Colors.tierBasicText
                                                 font.family: Theme.fontMono.family
-                                                font.pixelSize: 9
+                                                font.pixelSize: Theme.fontMicro.pixelSize
                                                 font.weight: Font.Bold
                                                 font.letterSpacing: Theme.trackingEyebrow
                                             }
@@ -1646,7 +1646,7 @@ Item {
                                     Text {
                                         text: Auth.email || ""
                                         color: Colors.textMuted
-                                        font.pixelSize: 11
+                                        font.pixelSize: Theme.fontLabel.pixelSize
                                         elide: Text.ElideMiddle
                                         Layout.fillWidth: true
                                     }
@@ -1656,8 +1656,8 @@ Item {
                                                         SectionHeader {
                                 text: qsTr("BILLING");
                                 Layout.fillWidth: true;
-                                Layout.topMargin: 24
-                                Layout.bottomMargin: 10
+                                Layout.topMargin: Theme.spacingXl
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             Rectangle {
                                 Layout.fillWidth: true
@@ -1677,7 +1677,7 @@ Item {
                                     anchors.right: parent.right
                                     anchors.top: parent.top
                                     anchors.margins: 14
-                                    spacing: 4
+                                    spacing: Theme.spacingXs
 
                                                                         SectionHeader {
                                         text: qsTr("CREDIT BALANCE");
@@ -1690,14 +1690,14 @@ Item {
                                             color: Auth.creditBalance < Constants.criticalCreditThreshold ? Colors.statusError
                                                  : Auth.creditBalance < Constants.lowCreditThreshold ? Colors.statusWarning
                                                  : Colors.textPrimary
-                                            font.pixelSize: 24
+                                            font.pixelSize: Theme.fontBanner.pixelSize
                                             font.weight: Font.Bold
                                             font.family: Theme.fontMono.family
                                         }
                                         Text {
                                             text: qsTr("credits")
                                             color: Colors.textMuted
-                                            font.pixelSize: 11
+                                            font.pixelSize: Theme.fontLabel.pixelSize
                                             font.family: Theme.fontMono.family
                                             Layout.alignment: Qt.AlignBaseline
                                         }
@@ -1711,10 +1711,10 @@ Item {
                                                 : (Math.floor(mins / 60) + "h " + (mins % 60) + "m"))
                                         }
                                         color: Colors.textMuted
-                                        font.pixelSize: 10
+                                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                                     }
                                     RowLayout {
-                                        Layout.topMargin: 8
+                                        Layout.topMargin: Theme.spacingSm
                                         spacing: 14
                                         PrimaryButton {
                                             text: qsTr("Buy credits")
@@ -1728,9 +1728,9 @@ Item {
                             Text {
                                 text: qsTr("View your usage & account on the web →")
                                 color: billWebMa.containsMouse ? Colors.accentHover : Colors.accent
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 font.underline: billWebMa.containsMouse
-                                Layout.topMargin: 12
+                                Layout.topMargin: Theme.spacingMd
                                 MouseArea {
                                     id: billWebMa
                                     anchors.fill: parent
@@ -1747,8 +1747,8 @@ Item {
                                             .arg((Session.creditsPerSecond * Backend.hdMultiplier).toFixed(0))
                                       : qsTr("2 credits = 1 second of live AI swap.")
                                 color: Colors.textMuted
-                                font.pixelSize: 10
-                                Layout.topMargin: 10
+                                font.pixelSize: Theme.fontMonoTiny.pixelSize
+                                Layout.topMargin: Theme.gapCard
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                             }
@@ -1756,16 +1756,16 @@ Item {
                                                         SectionHeader {
                                 text: qsTr("YOUR DATA");
                                 Layout.fillWidth: true;
-                                Layout.topMargin: 24
-                                Layout.bottomMargin: 10
+                                Layout.topMargin: Theme.spacingXl
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             Text {
                                 text: qsTr("You have the right to access, export, or delete your data at any time. Requests are handled by our support team.")
                                 color: Colors.textMuted
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             RowLayout {
                                 Layout.fillWidth: true
@@ -1775,14 +1775,14 @@ Item {
                                     Text {
                                         text: qsTr("Export my data")
                                         color: Colors.textPrimary
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontMono.pixelSize
                                         font.weight: Font.Normal
                                         Layout.fillWidth: true
                                     }
                                     Text {
                                         text: qsTr("We reply within 30 days.")
                                         color: Colors.textMuted
-                                        font.pixelSize: 10
+                                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                                         wrapMode: Text.WordWrap
                                         Layout.fillWidth: true
                                     }
@@ -1790,7 +1790,7 @@ Item {
                                 Text {
                                     text: qsTr("Request")
                                     color: exportLinkMa.containsMouse ? Colors.accentHover : Colors.accent
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     MouseArea {
                                         id: exportLinkMa
                                         anchors.fill: parent
@@ -1806,21 +1806,21 @@ Item {
                             }
                             RowLayout {
                                 Layout.fillWidth: true
-                                Layout.topMargin: 10
+                                Layout.topMargin: Theme.gapCard
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 2
                                     Text {
                                         text: qsTr("Delete my account")
                                         color: Colors.textPrimary
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontMono.pixelSize
                                         font.weight: Font.Normal
                                         Layout.fillWidth: true
                                     }
                                     Text {
                                         text: qsTr("Permanent. All data removed within 30 days.")
                                         color: Colors.textMuted
-                                        font.pixelSize: 10
+                                        font.pixelSize: Theme.fontMonoTiny.pixelSize
                                         wrapMode: Text.WordWrap
                                         Layout.fillWidth: true
                                     }
@@ -1828,7 +1828,7 @@ Item {
                                 Text {
                                     text: qsTr("Request deletion")
                                     color: deleteLinkMa.containsMouse ? Colors.dangerHover : Colors.statusError
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     MouseArea {
                                         id: deleteLinkMa
                                         anchors.fill: parent
@@ -1842,8 +1842,8 @@ Item {
                             Text {
                                 text: qsTr("Learn more about your rights")
                                 color: learnRightsMa.containsMouse ? Colors.accentHover : Colors.accent
-                                font.pixelSize: 10
-                                Layout.topMargin: 8
+                                font.pixelSize: Theme.fontMonoTiny.pixelSize
+                                Layout.topMargin: Theme.spacingSm
                                 MouseArea {
                                     id: learnRightsMa
                                     anchors.fill: parent
@@ -1860,7 +1860,7 @@ Item {
                                 Text {
                                     text: qsTr("Sign out")
                                     color: signoutLinkMa.containsMouse ? Colors.textPrimary : Colors.textMuted
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     MouseArea {
                                         id: signoutLinkMa
                                         anchors.fill: parent
@@ -1878,7 +1878,7 @@ Item {
                                 Text {
                                     text: qsTr("Sign out on all devices")
                                     color: signoutAllMa.containsMouse ? Colors.textPrimary : Colors.textMuted
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     visible: Auth.isAuthenticated
                                     MouseArea {
                                         id: signoutAllMa
@@ -1926,7 +1926,7 @@ Item {
                                 Layout.topMargin: 14
                                 text: qsTr("LiveMorph")
                                 color: Colors.textPrimary
-                                font.pixelSize: 18
+                                font.pixelSize: Theme.fontXl.pixelSize
                                 font.weight: Font.Bold
                             }
                             Text {
@@ -1934,19 +1934,19 @@ Item {
                                 Layout.topMargin: 2
                                 text: qsTr("v%1").arg(App.appVersion)
                                 color: Colors.textMuted
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontLabel.pixelSize
                             }
 
                             // Links row (Electron: horizontal, hairline dividers)
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
-                                Layout.topMargin: 20
-                                spacing: 10
+                                Layout.topMargin: Theme.padSection
+                                spacing: Theme.gapCard
 
                                 Text {
                                     text: qsTr("What's new")
                                     color: aWhatsNewMa.containsMouse ? Colors.accent : Colors.textMuted
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     font.weight: Font.Normal
                                     MouseArea { id: aWhatsNewMa; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.open = false; App.showWhatsNew = true } }
                                 }
@@ -1954,7 +1954,7 @@ Item {
                                 Text {
                                     text: qsTr("Replay tour")
                                     color: aTourMa.containsMouse ? Colors.accent : Colors.textMuted
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     font.weight: Font.Normal
                                     MouseArea { id: aTourMa; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Config.onboardingDone = false; root.open = false; App.showTour = true } }
                                 }
@@ -1962,7 +1962,7 @@ Item {
                                 Text {
                                     text: qsTr("Join our Discord")
                                     color: aDiscordMa.containsMouse ? Colors.accent : Colors.textMuted
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     font.weight: Font.Normal
                                     MouseArea { id: aDiscordMa; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Backend.openExternal(Constants.urlDiscord) }
                                 }
@@ -1970,7 +1970,7 @@ Item {
                                 Text {
                                     text: qsTr("Visit site")
                                     color: aSiteMa.containsMouse ? Colors.accent : Colors.textMuted
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     font.weight: Font.Normal
                                     MouseArea { id: aSiteMa; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Backend.openExternal(Constants.urlSite) }
                                 }
@@ -1980,7 +1980,7 @@ Item {
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
                                 Layout.topMargin: 14
-                                spacing: 10
+                                spacing: Theme.gapCard
 
                                 Rectangle {
                                     width: upBtnLbl.implicitWidth + 28
@@ -1995,7 +1995,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: qsTr("Check for updates")
                                         color: upBtnMa.containsMouse ? Colors.accent : Colors.textSecondary
-                                        font.pixelSize: 11
+                                        font.pixelSize: Theme.fontLabel.pixelSize
                                     }
                                     MouseArea {
                                         id: upBtnMa
@@ -2012,7 +2012,7 @@ Item {
                                     text: Backend.updateDownloadedPath.length > 0 ? qsTr("UPDATE AVAILABLE")
                                          : qsTr("CHECKING…")
                                     color: Colors.accent
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                                     font.family: Theme.fontMono.family
                                     font.letterSpacing: 1.5
                                     Rectangle {
@@ -2045,7 +2045,7 @@ Item {
                                 Layout.alignment: Qt.AlignHCenter
                                 text: qsTr("Powered by Lucy 2")
                                 color: lucyMa.containsMouse ? Colors.accent : Colors.textMuted
-                                font.pixelSize: 10
+                                font.pixelSize: Theme.fontMonoTiny.pixelSize
                                 MouseArea { id: lucyMa; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Backend.openExternal(Constants.urlSite) }
                             }
                             RowLayout {
@@ -2055,21 +2055,21 @@ Item {
                                 Text {
                                     text: qsTr("Terms of Service")
                                     color: aTermsMa.containsMouse ? Colors.accent : Colors.textMuted
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                                     MouseArea { id: aTermsMa; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Backend.openExternal(Constants.urlTerms) }
                                 }
-                                Text { text: "\u00b7"; color: Colors.textMuted20; font.pixelSize: 10 }
+                                Text { text: "\u00b7"; color: Colors.textMuted20; font.pixelSize: Theme.fontMonoTiny.pixelSize }
                                 Text {
                                     text: qsTr("Privacy Policy")
                                     color: aPrivMa.containsMouse ? Colors.accent : Colors.textMuted
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                                     MouseArea { id: aPrivMa; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Backend.openExternal(Constants.urlPrivacy) }
                                 }
-                                Text { text: "\u00b7"; color: Colors.textMuted20; font.pixelSize: 10 }
+                                Text { text: "\u00b7"; color: Colors.textMuted20; font.pixelSize: Theme.fontMonoTiny.pixelSize }
                                 Text {
                                     text: qsTr("Acceptable Use")
                                     color: aAupMa.containsMouse ? Colors.accent : Colors.textMuted
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                                     MouseArea { id: aAupMa; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Backend.openExternal(Constants.urlLegalAup) }
                                 }
                             }
@@ -2079,42 +2079,42 @@ Item {
                                                         SectionHeader {
                                 text: qsTr("DEVELOPER");
                                 Layout.fillWidth: true;
-                                Layout.bottomMargin: 10
+                                Layout.bottomMargin: Theme.gapCard
                             }
                             TextField {
                                 Layout.fillWidth: true
                                 text: Config.apiBaseUrl
                                 placeholderText: qsTr("Backend API base URL")
                                 onEditingFinished: Config.apiBaseUrl = text.trim()
-                                Layout.bottomMargin: 8
+                                Layout.bottomMargin: Theme.spacingSm
                             }
                             TextField {
                                 Layout.fillWidth: true
                                 text: Config.defaultModel
                                 placeholderText: qsTr("Model id (sent to proxy)")
                                 onEditingFinished: Config.defaultModel = text.trim()
-                                Layout.bottomMargin: 8
+                                Layout.bottomMargin: Theme.spacingSm
                             }
                             ToggleRow {
                                 title: qsTr("Start with camera")
                                 desc: qsTr("Open the camera automatically after sign-in.")
                                 checked: Config.startWithCamera
                                 onToggled: (v) => Config.startWithCamera = v
-                                Layout.bottomMargin: 8
+                                Layout.bottomMargin: Theme.spacingSm
                             }
                             ToggleRow {
                                 title: qsTr("Compact chrome")
                                 desc: qsTr("Reduce bar heights on short windows.")
                                 checked: Config.compactChrome
                                 onToggled: (v) => Config.compactChrome = v
-                                Layout.bottomMargin: 8
+                                Layout.bottomMargin: Theme.spacingSm
                             }
                             ToggleRow {
                                 title: qsTr("Identity lock by default")
                                 desc: qsTr("Keep your real face, identity and background unchanged in new sessions.")
                                 checked: Config.identityLockDefault
                                 onToggled: (v) => Config.identityLockDefault = v
-                                Layout.bottomMargin: 8
+                                Layout.bottomMargin: Theme.spacingSm
                             }
                             SecondaryButton {
                                 text: qsTr("Refresh account / balance")

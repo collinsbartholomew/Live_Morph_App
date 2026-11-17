@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QStringList>
 #include <QString>
 #include <QVariantMap>
 #include "DeviceIdentity.h"
@@ -97,8 +98,8 @@ public slots:
     void openSettings();
     void openAccountUsage();
     void requestEscape();
-    Q_INVOKABLE void modalOpened();
-    Q_INVOKABLE void modalClosed();
+    Q_INVOKABLE void modalOpened(const QString &id = QString());
+    Q_INVOKABLE void modalClosed(const QString &id = QString());
     Q_INVOKABLE void requestModalEscape();
     void openBuyCredits();
     void openHelp();
@@ -132,7 +133,7 @@ signals:
     void showTourChanged();
     void accountUsageRequested();
     void escapeRequested();
-    void modalEscapeRequested();
+    void modalEscapeRequested(const QString &id);
     void openModalsChanged();
     void openNotificationsRequested();
     void showDownloadsChanged();
@@ -170,6 +171,7 @@ private:
     QString m_lockTitle;
     QString m_lockMessage;
     int m_openModals = 0;
+    QStringList m_modalStack;
     bool m_lockDismissable = false;
     LockReason m_lockReason = LockReason::Security;
 

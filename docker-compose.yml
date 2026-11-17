@@ -41,9 +41,10 @@ services:
       MONGODB_DB_SECONDARY: ${MONGODB_DB_SECONDARY:-secondary}
       HOST: 0.0.0.0
       PORT: 3874
-      # Required, no defaults — supply real values for a real deploy:
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in the shell env or backend/.env}
-      DECART_API_KEY: ${DECART_API_KEY:?set DECART_API_KEY in the shell env or backend/.env}
+      # JWT_SECRET and DECART_API_KEY have no defaults and come from
+      # ./backend/.env via env_file above (compose interpolation does NOT read
+      # backend/.env — only a shell env var or a repo-root .env). If they are
+      # missing, the backend refuses to boot with its own clear error.
       # The bundled local mongo has no TLS, and Config::validate() rejects a
       # non-TLS mongodb:// URI in production — so this local stack must run
       # in development mode. For a real staging/prod deploy, point

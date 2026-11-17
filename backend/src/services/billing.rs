@@ -404,8 +404,9 @@ pub async fn settle_and_provision(
         match ensure_activation_key(db, &users_coll, order, &user).await {
             Ok(Some(ak)) => {
                 // Surface the minted key on the in-memory order so verify/status
-                // responses can return it to the client immediately.
-                order.access_key = Some(ak.key.clone());
+                // responses can return it to the client exactly once. The field
+                // is serde-skipped, so it is never persisted (hash-at-rest).
+                order.access_key_plain = Some(ak.key.clone());
                 order.plan = Some(ak.plan.clone());
             }
             Ok(None) => {}
@@ -515,7 +516,7 @@ async fn ensure_activation_key(
         .update_one(
             doc! { "_id": &user.id },
             doc! { "$set": {
-                "access_key": &ak.key,
+                "access_key_hash": crate::routes::auth::hash_token(&ak.key),
                 "plan": &plan,
                 "product": ProductId::Secondary.as_str(),
                 "updated_at": Utc::now(),
@@ -527,7 +528,7 @@ async fn ensure_activation_key(
         .collection::<PaymentOrder>("payment_orders")
         .update_one(
             doc! { "_id": &order.id },
-            doc! { "$set": { "access_key": &ak.key, "plan": &plan } },
+            doc! { "$set": { "access_key_hash": crate::routes::auth::hash_token(&ak.key), "plan": &plan } },
         )
         .await?;
     info!(

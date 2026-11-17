@@ -42,9 +42,9 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 24
-        anchors.rightMargin: 24
-        spacing: 10
+        anchors.leftMargin: Theme.spacingXl
+        anchors.rightMargin: Theme.spacingXl
+        spacing: Theme.gapCard
 
         // ── Camera picker button + popover ────────────────────────────
         // Electron: borderless px-2 py-1 rounded-sm; hover /40 wash;
@@ -80,7 +80,7 @@ Rectangle {
                     elide: Text.ElideRight
                     color: camPopup.visible ? Colors.accentHover
                          : (Session.isActive ? Colors.textMuted : Colors.textSecondary)
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Icon {
@@ -121,7 +121,7 @@ Rectangle {
                 // Count-based height: ColumnLayout+Repeater implicitHeight is 0.
                 height: Math.min(300, 32 + CameraCtrl.availableDevices.length * 34
                                  + Math.max(0, CameraCtrl.availableDevices.length - 1) * 2 + 16)
-                padding: 8
+                padding: Theme.spacingSm
                 closePolicy: Popup.CloseOnEscape
                 background: Rectangle {
                     color: Colors.surfaceOverlay
@@ -170,12 +170,12 @@ Rectangle {
                     }
                     Text {
                         anchors.left: parent.left
-                        anchors.leftMargin: 12
+                        anchors.leftMargin: Theme.spacingMd
                         anchors.verticalCenter: parent.verticalCenter
                         text: qsTr("CAMERA SOURCE")
                         color: Colors.textMuted
                         font.family: Theme.fontMono.family
-                        font.pixelSize: 9
+                        font.pixelSize: Theme.fontMicro.pixelSize
                         font.letterSpacing: 1.2
                     }
                 }
@@ -201,9 +201,9 @@ Rectangle {
 
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 8
-                                spacing: 8
+                                anchors.leftMargin: Theme.spacingSm
+                                anchors.rightMargin: Theme.spacingSm
+                                spacing: Theme.spacingSm
                                 Hexagon {
                                     size: 8
                                     lineWidth: 0
@@ -213,7 +213,7 @@ Rectangle {
                                 Text {
                                     text: modelData
                                     color: CameraCtrl.currentDeviceName === modelData ? Colors.textPrimary : Colors.textSecondary
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fontMono.pixelSize
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
                                 }
@@ -327,7 +327,7 @@ Rectangle {
             text: qsTr("ENGINE")
             color: Colors.textMuted
             font.family: Theme.fontMono.family
-            font.pixelSize: 9
+            font.pixelSize: Theme.fontMicro.pixelSize
             font.letterSpacing: 1.5
             Layout.alignment: Qt.AlignVCenter
         }
@@ -386,7 +386,7 @@ Rectangle {
                 anchors.centerIn: parent
                 text: qsTr("%1 cr/sec").arg(ratePill.isHd ? engSeg.hdRate.toFixed(0) : Session.creditsPerSecond.toFixed(0))
                 color: ratePill.isHd ? Colors.accentHover : Colors.textMuted
-                font.pixelSize: 9
+                font.pixelSize: Theme.fontMicro.pixelSize
                 font.family: Theme.fontMono.family
             }
             Tooltip {
@@ -441,7 +441,7 @@ Rectangle {
             Row {
                 id: workRow
                 anchors.centerIn: parent
-                spacing: 8 // gap-2
+                spacing: Theme.spacingSm // gap-2
 
                 // Electron leading slot by state: none = dashed + 9px plus
                 // (muted/40); starter preset w/o image = user icon in accent/20;
@@ -516,7 +516,7 @@ Rectangle {
                 Text {
                     text: workChip.workingLabel
                     color: Colors.textSecondary
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                     font.family: Theme.fontMono.family
                     font.letterSpacing: 1.5
                     font.capitalization: Font.AllUppercase
@@ -592,7 +592,7 @@ Rectangle {
                 text: ""
                 color: Colors.textSecondary
                 font.family: Theme.fontMono.family
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontLabel.pixelSize
                 font.weight: Font.Bold
 
                 Timer {

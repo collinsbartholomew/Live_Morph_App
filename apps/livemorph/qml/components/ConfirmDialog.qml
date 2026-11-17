@@ -12,6 +12,7 @@ import LiveMorph
  */
 Dialog {
     id: root
+    property string modalId: "confirm-dialog"
     property string message: ""
     property string confirmText: qsTr("Confirm")
     property string cancelText: qsTr("Cancel")
@@ -21,7 +22,7 @@ Dialog {
     // this dialog inside narrow panels/drawers where centerIn: parent would
     // misplace it.
     anchors.centerIn: Overlay.overlay
-    width: 380
+    width: Math.min(380, (Overlay.overlay ? Overlay.overlay.width : 1024) * 0.94)
     padding: 0 // Electron px-6 pt-7 pb-6 — Dialog default padding (12) shifts everything
     title: ""
 
@@ -58,19 +59,19 @@ Dialog {
 
     // Register with the global modal stack so the window-level Escape
     // shortcut closes this dialog deterministically.
-    onOpened: App.modalOpened()
-    onClosed: App.modalClosed()
+    onOpened: App.modalOpened(root.modalId)
+    onClosed: App.modalClosed(root.modalId)
     Connections {
         target: App
-        function onModalEscapeRequested() {
-            if (root.visible)
+        function onModalEscapeRequested(id) {
+            if (root.visible && id === root.modalId)
                 root.reject()
         }
     }
 
 
     contentItem: Item {
-        implicitWidth: 380
+        implicitWidth: Math.min(380, (Overlay.overlay ? Overlay.overlay.width : 1024) * 0.94)
         // Dialog height derives from contentItem.implicitHeight — drive it
         // from the column, otherwise the dialog collapses to footer-only.
         implicitHeight: col.implicitHeight
@@ -79,8 +80,8 @@ Dialog {
         IconButton {
             anchors.top: parent.top
             anchors.right: parent.right
-            anchors.topMargin: 12
-            anchors.rightMargin: 12
+            anchors.topMargin: Theme.spacingMd
+            anchors.rightMargin: Theme.spacingMd
             name: "x"
             iconSize: 14
             emphasis: true
@@ -93,10 +94,10 @@ Dialog {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.topMargin: 24
-            anchors.leftMargin: 24
-            anchors.rightMargin: 24
-            spacing: 8
+            anchors.topMargin: Theme.spacingXl
+            anchors.leftMargin: Theme.spacingXl
+            anchors.rightMargin: Theme.spacingXl
+            spacing: Theme.spacingSm
 
             // 48px hexagon badge (error ring for destructive,
             // solid white for informational)
@@ -129,7 +130,7 @@ Dialog {
                 text: root.message
                 color: Colors.textSecondary
                 wrapMode: Text.WordWrap
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSmall.pixelSize
                 lineHeight: 1.5
             }
 
@@ -155,11 +156,11 @@ Dialog {
         RowLayout {
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 24
-            anchors.rightMargin: 24
-            anchors.topMargin: 24
-            anchors.bottomMargin: 24
-            spacing: 10
+            anchors.leftMargin: Theme.spacingXl
+            anchors.rightMargin: Theme.spacingXl
+            anchors.topMargin: Theme.spacingXl
+            anchors.bottomMargin: Theme.spacingXl
+            spacing: Theme.gapCard
 
             SecondaryButton {
                 Layout.fillWidth: true
@@ -189,7 +190,7 @@ Dialog {
                     id: destructiveLabel
                     text: root.confirmText
                     color: !destructiveConfirm.enabled ? Colors.textMuted : Colors.white
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontMono.pixelSize
                     font.weight: Font.Bold
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter

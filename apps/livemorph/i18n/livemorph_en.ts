@@ -140,18 +140,18 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/ActionBar.qml" line="641"/>
+        <location filename="../qml/dashboard/ActionBar.qml" line="645"/>
         <source>Sign in to start a swap</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/ActionBar.qml" line="646"/>
+        <location filename="../qml/dashboard/ActionBar.qml" line="650"/>
         <source>No camera detected — connect one or check Settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/dashboard/ActionBar.qml" line="651"/>
-        <location filename="../qml/dashboard/ActionBar.qml" line="672"/>
+        <location filename="../qml/dashboard/ActionBar.qml" line="655"/>
+        <location filename="../qml/dashboard/ActionBar.qml" line="676"/>
         <source>Please wait %n second before trying again</source>
         <comment>Please wait %n seconds before trying again</comment>
         <translation type="unfinished">
@@ -160,32 +160,32 @@
         </translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/ActionBar.qml" line="655"/>
+        <location filename="../qml/dashboard/ActionBar.qml" line="659"/>
         <source>You need at least %1 credits (about 1 minute of swap) to start.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/ActionBar.qml" line="673"/>
+        <location filename="../qml/dashboard/ActionBar.qml" line="677"/>
         <source>Sign in to start</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/ActionBar.qml" line="674"/>
+        <location filename="../qml/dashboard/ActionBar.qml" line="678"/>
         <source>Waiting for camera…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/ActionBar.qml" line="675"/>
+        <location filename="../qml/dashboard/ActionBar.qml" line="679"/>
         <source>Insufficient credits. Click to top up</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/ActionBar.qml" line="676"/>
+        <location filename="../qml/dashboard/ActionBar.qml" line="680"/>
         <source>Stop swap</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/ActionBar.qml" line="676"/>
+        <location filename="../qml/dashboard/ActionBar.qml" line="680"/>
         <source>Begin swap</source>
         <translation type="unfinished"></translation>
     </message>
@@ -208,98 +208,98 @@
         <translation type="unfinished">Morph session started</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="385"/>
+        <location filename="../src/core/AppController.cpp" line="388"/>
         <source>Session locked</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="385"/>
+        <location filename="../src/core/AppController.cpp" line="388"/>
         <source>Unlock the session to start a swap.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="389"/>
+        <location filename="../src/core/AppController.cpp" line="392"/>
         <source>Not signed in</source>
         <translation type="unfinished">Not signed in</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="389"/>
+        <location filename="../src/core/AppController.cpp" line="392"/>
         <source>Please sign in to start morphing.</source>
         <translation type="unfinished">Please sign in to start morphing.</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="395"/>
+        <location filename="../src/core/AppController.cpp" line="398"/>
         <source>Insufficient credits</source>
         <translation type="unfinished">Insufficient credits</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="395"/>
+        <location filename="../src/core/AppController.cpp" line="398"/>
         <source>Buy more credits to continue.</source>
         <translation type="unfinished">Buy more credits to continue.</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="403"/>
+        <location filename="../src/core/AppController.cpp" line="406"/>
         <source>Low credits</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="404"/>
+        <location filename="../src/core/AppController.cpp" line="407"/>
         <source>Need at least %1 credits to start. Buy more credits.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="414"/>
+        <location filename="../src/core/AppController.cpp" line="417"/>
         <source>Pick a character</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="415"/>
+        <location filename="../src/core/AppController.cpp" line="418"/>
         <source>Pick or upload a character before starting your swap.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/core/AppController.cpp" line="93"/>
-        <location filename="../src/core/AppController.cpp" line="507"/>
+        <location filename="../src/core/AppController.cpp" line="510"/>
         <source>Payment return detected — verifying…</source>
         <translation type="unfinished">Payment return detected — verifying…</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="492"/>
+        <location filename="../src/core/AppController.cpp" line="495"/>
         <source>Ignored link (unrecognized origin)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="515"/>
+        <location filename="../src/core/AppController.cpp" line="518"/>
         <source>Payment reference received — will verify after sign-in</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="517"/>
+        <location filename="../src/core/AppController.cpp" line="520"/>
         <source>Payment reference received</source>
         <translation type="unfinished">Payment reference received</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="525"/>
+        <location filename="../src/core/AppController.cpp" line="528"/>
         <source>Google sign-in failed: %1</source>
         <translation type="unfinished">Google sign-in failed: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="534"/>
+        <location filename="../src/core/AppController.cpp" line="537"/>
         <source>Ignored sign-in link (security state mismatch)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="538"/>
+        <location filename="../src/core/AppController.cpp" line="541"/>
         <source>Completing Google sign-in…</source>
         <translation type="unfinished">Completing Google sign-in…</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="543"/>
+        <location filename="../src/core/AppController.cpp" line="546"/>
         <source>OAuth callback missing ticket</source>
         <translation type="unfinished">OAuth callback missing ticket</translation>
     </message>
     <message>
-        <location filename="../src/core/AppController.cpp" line="554"/>
+        <location filename="../src/core/AppController.cpp" line="557"/>
         <source>Opened link</source>
         <translation type="unfinished">Opened link</translation>
     </message>
@@ -367,22 +367,27 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1177"/>
+        <location filename="../src/core/AuthManager.cpp" line="1081"/>
+        <source>No writable folder available for the export</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/core/AuthManager.cpp" line="1188"/>
         <source>Credits depleted</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1179"/>
+        <location filename="../src/core/AuthManager.cpp" line="1190"/>
         <source>Service capacity exhausted — try again later</source>
         <translation type="unfinished">Service capacity exhausted — try again later</translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1181"/>
+        <location filename="../src/core/AuthManager.cpp" line="1192"/>
         <source>Session ended by an administrator</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/AuthManager.cpp" line="1182"/>
+        <location filename="../src/core/AuthManager.cpp" line="1193"/>
         <source>Session ended</source>
         <translation type="unfinished"></translation>
     </message>
@@ -462,88 +467,118 @@
 <context>
     <name>AuthScreen</name>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="141"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="150"/>
         <source>Step into character.
 Live to OBS.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="154"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="163"/>
         <source>Real-time AI character swap powered by Lucy 2. Bring any character into your stream, for vtubing, gaming, or pure creative play.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="215"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="224"/>
         <source>Social</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="216"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="225"/>
         <source>Email</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="294"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="303"/>
         <source>OR CONTINUE WITH</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="327"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="336"/>
         <source>EMAIL ADDRESS</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="335"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="345"/>
         <source>Works for both new and existing accounts. We&apos;ll email you a magic link.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="346"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="356"/>
         <source>you@example.com</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="365"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="376"/>
         <source>Send Magic Link</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="395"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="390"/>
+        <source>Password</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/AuthScreen.qml" line="400"/>
+        <source>Signing in…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/AuthScreen.qml" line="400"/>
+        <source>Sign In</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/AuthScreen.qml" line="413"/>
+        <source>Forgot password?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/AuthScreen.qml" line="427"/>
+        <source>Use magic link instead</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/AuthScreen.qml" line="447"/>
+        <source>Sign in with password instead</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/AuthScreen.qml" line="485"/>
         <source>Check your email</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="403"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="493"/>
         <source>Enter the %1-digit code we sent to %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="515"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="605"/>
         <source>Signing in</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="538"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="628"/>
         <source>RESEND IN %1S</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="538"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="628"/>
         <source>SEND NEW CODE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="570"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="660"/>
         <source>DIFFERENT EMAIL</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="600"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="690"/>
         <source>The link in that email still works too.</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../qml/pages/AuthScreen.qml" line="636"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="726"/>
         <source>Too many login attempts. Try again in %n second.</source>
         <comment>Too many login attempts. Try again in %n seconds.</comment>
         <translation type="unfinished">
@@ -552,77 +587,79 @@ Live to OBS.</source>
         </translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="637"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="727"/>
         <source>Too many login attempts. Please wait a few minutes.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="688"/>
-        <source>By continuing, you agree to our </source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="689"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="791"/>
         <source>Terms of Service</source>
         <translation type="unfinished">Terms of Service</translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="690"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="792"/>
         <source>Privacy Policy</source>
         <translation type="unfinished">Privacy Policy</translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="691"/>
-        <source>and </source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="692"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="793"/>
         <source>Acceptable Use Policy</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="740"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="855"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="864"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="877"/>
         <source>Please enter a valid email address.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="356"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="366"/>
         <source>Backend offline — set the API URL in Settings to receive codes.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="262"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="271"/>
         <source>Continue with Google</source>
         <translation type="unfinished">Continue with Google</translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="314"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="323"/>
         <source>More sign-in providers (Twitch, TikTok, Kick) coming soon.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="365"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="376"/>
         <source>Sending…</source>
         <translation type="unfinished">Sending…</translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="515"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="605"/>
         <source>Sign in</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="128"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="137"/>
         <source>LIVE</source>
         <translation type="unfinished">LIVE</translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="751"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="784"/>
+        <source>By continuing, you agree to our Terms of Service, Privacy Policy, and Acceptable Use Policy.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/AuthScreen.qml" line="868"/>
+        <source>Password must be at least 8 characters.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/AuthScreen.qml" line="887"/>
         <source>Missing email — go back and try again</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/AuthScreen.qml" line="772"/>
+        <location filename="../qml/pages/AuthScreen.qml" line="911"/>
         <source>Complete Google sign-in in your browser</source>
         <translation type="unfinished">Complete Google sign-in in your browser</translation>
     </message>
@@ -630,145 +667,145 @@ Live to OBS.</source>
 <context>
     <name>BackendClient</name>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="201"/>
-        <location filename="../src/services/BackendClient.cpp" line="267"/>
+        <location filename="../src/services/BackendClient.cpp" line="202"/>
+        <location filename="../src/services/BackendClient.cpp" line="268"/>
         <source>Too many requests — try again in a moment</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="229"/>
-        <location filename="../src/services/BackendClient.cpp" line="294"/>
-        <location filename="../src/services/BackendClient.cpp" line="494"/>
-        <location filename="../src/services/BackendClient.cpp" line="550"/>
+        <location filename="../src/services/BackendClient.cpp" line="230"/>
+        <location filename="../src/services/BackendClient.cpp" line="295"/>
+        <location filename="../src/services/BackendClient.cpp" line="495"/>
+        <location filename="../src/services/BackendClient.cpp" line="551"/>
         <source>Authentication expired — sign in again</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="823"/>
+        <location filename="../src/services/BackendClient.cpp" line="824"/>
         <source>Refusing untrusted update URL</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="1104"/>
+        <location filename="../src/services/BackendClient.cpp" line="1117"/>
         <source>HTTP %1</source>
         <translation type="unfinished">HTTP %1</translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="250"/>
-        <location filename="../src/services/BackendClient.cpp" line="312"/>
-        <location filename="../src/services/BackendClient.cpp" line="512"/>
-        <location filename="../src/services/BackendClient.cpp" line="568"/>
+        <location filename="../src/services/BackendClient.cpp" line="251"/>
+        <location filename="../src/services/BackendClient.cpp" line="313"/>
+        <location filename="../src/services/BackendClient.cpp" line="513"/>
+        <location filename="../src/services/BackendClient.cpp" line="569"/>
         <source>Malformed response from server</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="125"/>
+        <location filename="../src/services/BackendClient.cpp" line="126"/>
         <source>Too many attempts — please wait</source>
         <translation type="unfinished">Too many attempts — please wait</translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="127"/>
+        <location filename="../src/services/BackendClient.cpp" line="128"/>
         <source>Insufficient credits</source>
         <translation type="unfinished">Insufficient credits</translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="129"/>
+        <location filename="../src/services/BackendClient.cpp" line="130"/>
         <source>Invalid credentials</source>
         <translation type="unfinished">Invalid credentials</translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="131"/>
+        <location filename="../src/services/BackendClient.cpp" line="132"/>
         <source>This action is not allowed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="133"/>
+        <location filename="../src/services/BackendClient.cpp" line="134"/>
         <source>Not found</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="135"/>
+        <location filename="../src/services/BackendClient.cpp" line="136"/>
         <source>Invalid request</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="137"/>
+        <location filename="../src/services/BackendClient.cpp" line="138"/>
         <source>Conflict — please try again</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="139"/>
+        <location filename="../src/services/BackendClient.cpp" line="140"/>
         <source>Server error — please try again later</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="142"/>
+        <location filename="../src/services/BackendClient.cpp" line="143"/>
         <source>Request failed — HTTP %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="151"/>
+        <location filename="../src/services/BackendClient.cpp" line="152"/>
         <source>Cannot reach the backend — is it running?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="153"/>
+        <location filename="../src/services/BackendClient.cpp" line="154"/>
         <source>The backend did not respond in time</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="155"/>
+        <location filename="../src/services/BackendClient.cpp" line="156"/>
         <source>Secure connection to the backend failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="157"/>
+        <location filename="../src/services/BackendClient.cpp" line="158"/>
         <source>The backend dropped the connection</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="158"/>
+        <location filename="../src/services/BackendClient.cpp" line="159"/>
         <source>Network error — please check your connection</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="213"/>
-        <location filename="../src/services/BackendClient.cpp" line="279"/>
-        <location filename="../src/services/BackendClient.cpp" line="330"/>
-        <location filename="../src/services/BackendClient.cpp" line="479"/>
-        <location filename="../src/services/BackendClient.cpp" line="535"/>
-        <location filename="../src/services/BackendClient.cpp" line="838"/>
+        <location filename="../src/services/BackendClient.cpp" line="214"/>
+        <location filename="../src/services/BackendClient.cpp" line="280"/>
+        <location filename="../src/services/BackendClient.cpp" line="331"/>
+        <location filename="../src/services/BackendClient.cpp" line="480"/>
+        <location filename="../src/services/BackendClient.cpp" line="536"/>
+        <location filename="../src/services/BackendClient.cpp" line="839"/>
         <source>Response too large</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="883"/>
+        <location filename="../src/services/BackendClient.cpp" line="884"/>
         <source>Blocked URL scheme: %1</source>
         <translation type="unfinished">Blocked URL scheme: %1</translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="1046"/>
+        <location filename="../src/services/BackendClient.cpp" line="1058"/>
         <source>Could not open destination file</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="1064"/>
-        <location filename="../src/services/BackendClient.cpp" line="1075"/>
+        <location filename="../src/services/BackendClient.cpp" line="1076"/>
+        <location filename="../src/services/BackendClient.cpp" line="1087"/>
         <source>Update file exceeds the 512 MiB cap — aborted</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="1118"/>
+        <location filename="../src/services/BackendClient.cpp" line="1132"/>
         <source>Update checksum mismatch — download rejected</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="1124"/>
+        <location filename="../src/services/BackendClient.cpp" line="1140"/>
         <source>Could not finalize update file</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/services/BackendClient.cpp" line="1134"/>
+        <location filename="../src/services/BackendClient.cpp" line="1150"/>
         <source>Could not move update into place</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1306,13 +1343,13 @@ Live to OBS.</source>
 <context>
     <name>ConfirmDialog</name>
     <message>
-        <location filename="../qml/components/ConfirmDialog.qml" line="16"/>
-        <location filename="../qml/components/ConfirmDialog.qml" line="118"/>
+        <location filename="../qml/components/ConfirmDialog.qml" line="17"/>
+        <location filename="../qml/components/ConfirmDialog.qml" line="119"/>
         <source>Confirm</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/ConfirmDialog.qml" line="17"/>
+        <location filename="../qml/components/ConfirmDialog.qml" line="18"/>
         <source>Cancel</source>
         <translation type="unfinished">Cancel</translation>
     </message>
@@ -1320,32 +1357,32 @@ Live to OBS.</source>
 <context>
     <name>Constants</name>
     <message>
-        <location filename="../qml/constants/Constants.qml" line="87"/>
+        <location filename="../qml/constants/Constants.qml" line="94"/>
         <source>4 min</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/constants/Constants.qml" line="88"/>
+        <location filename="../qml/constants/Constants.qml" line="95"/>
         <source>10 min</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/constants/Constants.qml" line="89"/>
+        <location filename="../qml/constants/Constants.qml" line="96"/>
         <source>25 min</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/constants/Constants.qml" line="90"/>
+        <location filename="../qml/constants/Constants.qml" line="97"/>
         <source>1h 6m</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/constants/Constants.qml" line="111"/>
+        <location filename="../qml/constants/Constants.qml" line="118"/>
         <source>Live AI character transformation</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/constants/Constants.qml" line="112"/>
+        <location filename="../qml/constants/Constants.qml" line="119"/>
         <source>LiveMorph Desktop</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1518,93 +1555,93 @@ Live to OBS.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="704"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="705"/>
         <source>Describe the character. Set the scene below.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="705"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="706"/>
         <source>Describe the character transformation...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="743"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="735"/>
         <source>Auto-improve prompts (Optional)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="770"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="762"/>
         <source>Lucy 2 auto-expands short prompts for better scene / background replacement and detail.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="794"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="786"/>
         <source>RESET</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="819"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="811"/>
         <source>Applied</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="819"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="811"/>
         <source>Apply prompt</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="838"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="830"/>
         <source>SAVE AS CHARACTER</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="845"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="837"/>
         <source>Name (optional)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="854"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="846"/>
         <source>Saved</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="855"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="847"/>
         <source>Library full</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="856"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="848"/>
         <source>Save</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="870"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="862"/>
         <source>Saved to Library</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="874"/>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="902"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="866"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="894"/>
         <source>Add a prompt or reference image above to save.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="878"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="870"/>
         <source>Your library is full — delete a character to free a slot.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="901"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="893"/>
         <source>Saves the current prompt and reference image to your Library.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="914"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="906"/>
         <source>Choose a reference image</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/CustomizeForm.qml" line="915"/>
+        <location filename="../qml/dashboard/CustomizeForm.qml" line="907"/>
         <source>Images (*.png *.jpg *.jpeg *.webp)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1622,7 +1659,7 @@ Live to OBS.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/Dashboard.qml" line="181"/>
+        <location filename="../qml/pages/Dashboard.qml" line="180"/>
         <source>Cooldown %1s</source>
         <translation type="unfinished">Cooldown %1s</translation>
     </message>
@@ -1645,12 +1682,22 @@ Live to OBS.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/screens/DownloadsScreen.qml" line="152"/>
+        <location filename="../qml/screens/DownloadsScreen.qml" line="149"/>
+        <source>Download link unavailable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/screens/DownloadsScreen.qml" line="149"/>
+        <source>Only https links can be opened.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/screens/DownloadsScreen.qml" line="173"/>
         <source>Loading downloads…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/screens/DownloadsScreen.qml" line="168"/>
+        <location filename="../qml/screens/DownloadsScreen.qml" line="187"/>
         <source>Nothing here yet — finished recordings and exports appear here.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1917,7 +1964,7 @@ Live to OBS.</source>
 <context>
     <name>InputPiP</name>
     <message>
-        <location filename="../qml/dashboard/InputPiP.qml" line="157"/>
+        <location filename="../qml/dashboard/InputPiP.qml" line="155"/>
         <source>INPUT</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1940,29 +1987,29 @@ Live to OBS.</source>
 <context>
     <name>LockScreen</name>
     <message>
-        <location filename="../qml/components/LockScreen.qml" line="94"/>
+        <location filename="../qml/components/LockScreen.qml" line="93"/>
         <source>SESSION LOCKED</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/LockScreen.qml" line="108"/>
+        <location filename="../qml/components/LockScreen.qml" line="107"/>
         <source>This session was locked for security.
 Sign in again to continue.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/LockScreen.qml" line="116"/>
+        <location filename="../qml/components/LockScreen.qml" line="115"/>
         <source>BUY MORE CREDITS</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/LockScreen.qml" line="116"/>
-        <location filename="../qml/components/LockScreen.qml" line="131"/>
+        <location filename="../qml/components/LockScreen.qml" line="115"/>
+        <location filename="../qml/components/LockScreen.qml" line="130"/>
         <source>RETURN TO LOGIN</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/LockScreen.qml" line="140"/>
+        <location filename="../qml/components/LockScreen.qml" line="139"/>
         <source>Dismiss</source>
         <translation type="unfinished">Dismiss</translation>
     </message>
@@ -2226,22 +2273,22 @@ Sign in again to continue.</source>
 <context>
     <name>PopoutWindow</name>
     <message>
-        <location filename="../qml/pages/PopoutWindow.qml" line="9"/>
+        <location filename="../qml/pages/PopoutWindow.qml" line="10"/>
         <source>%1 Output</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PopoutWindow.qml" line="99"/>
+        <location filename="../qml/pages/PopoutWindow.qml" line="100"/>
         <source>Waiting for output</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PopoutWindow.qml" line="107"/>
+        <location filename="../qml/pages/PopoutWindow.qml" line="108"/>
         <source>Start a morph to begin</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PopoutWindow.qml" line="149"/>
+        <location filename="../qml/pages/PopoutWindow.qml" line="150"/>
         <source>LIVE MORPH OUTPUT</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2389,17 +2436,27 @@ Sign in again to continue.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/PresetGrid.qml" line="683"/>
+        <location filename="../qml/dashboard/PresetGrid.qml" line="695"/>
         <source>Rename character</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/PresetGrid.qml" line="699"/>
+        <location filename="../qml/dashboard/PresetGrid.qml" line="705"/>
         <source>Character name</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/PresetGrid.qml" line="706"/>
+        <location filename="../qml/dashboard/PresetGrid.qml" line="730"/>
+        <source>Cancel</source>
+        <translation type="unfinished">Cancel</translation>
+    </message>
+    <message>
+        <location filename="../qml/dashboard/PresetGrid.qml" line="736"/>
+        <source>Rename</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/dashboard/PresetGrid.qml" line="744"/>
         <source>Renamed</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2407,67 +2464,67 @@ Sign in again to continue.</source>
 <context>
     <name>PreviewWindow</name>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="25"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="30"/>
         <source>Preview Window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="116"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="121"/>
         <source>LiveMorph Live Preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="125"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="130"/>
         <source>Waiting for first frame…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="133"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="138"/>
         <source>Start OBS Stream in the main window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="154"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="159"/>
         <source>Capture this window in OBS using Window Capture</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="163"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="168"/>
         <source>Window title: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="204"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="209"/>
         <source>Show Footer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="204"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="209"/>
         <source>Clean Mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="226"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="231"/>
         <source>Exit Fullscreen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="226"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="231"/>
         <source>Fullscreen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="296"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="301"/>
         <source>LiveMorph Live Preview — %1×%2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="310"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="315"/>
         <source>A product of TheTools Hub</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/pages/PreviewWindow.qml" line="324"/>
+        <location filename="../qml/pages/PreviewWindow.qml" line="329"/>
         <source>Support</source>
         <translation type="unfinished">Support</translation>
     </message>
@@ -2539,167 +2596,167 @@ Sign in again to continue.</source>
 <context>
     <name>SessionManager</name>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="88"/>
-        <location filename="../src/core/SessionManager.cpp" line="840"/>
-        <location filename="../src/core/SessionManager.cpp" line="1013"/>
-        <location filename="../src/core/SessionManager.h" line="212"/>
+        <location filename="../src/core/SessionManager.cpp" line="131"/>
+        <location filename="../src/core/SessionManager.cpp" line="891"/>
+        <location filename="../src/core/SessionManager.cpp" line="1176"/>
+        <location filename="../src/core/SessionManager.h" line="221"/>
         <source>Ready</source>
         <translation type="unfinished">Ready</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="90"/>
-        <location filename="../src/core/SessionManager.cpp" line="872"/>
+        <location filename="../src/core/SessionManager.cpp" line="133"/>
+        <location filename="../src/core/SessionManager.cpp" line="923"/>
         <source>Cooldown %1s</source>
         <translation type="unfinished">Cooldown %1s</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="102"/>
+        <location filename="../src/core/SessionManager.cpp" line="145"/>
         <source>Reconnecting… attempt %1/%2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="147"/>
+        <location filename="../src/core/SessionManager.cpp" line="190"/>
         <source>Reconnection failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="148"/>
+        <location filename="../src/core/SessionManager.cpp" line="191"/>
         <source>Reconnection failed after %1 attempts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="175"/>
+        <location filename="../src/core/SessionManager.cpp" line="218"/>
         <source>Signaling live · %1</source>
         <translation type="unfinished">Signaling live · %1</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="289"/>
+        <location filename="../src/core/SessionManager.cpp" line="340"/>
         <source>Signaling disconnected — reconnecting in %1s…</source>
         <translation type="unfinished">Signaling disconnected — reconnecting in %1s…</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="305"/>
-        <location filename="../src/core/SessionManager.cpp" line="904"/>
+        <location filename="../src/core/SessionManager.cpp" line="356"/>
+        <location filename="../src/core/SessionManager.cpp" line="955"/>
         <source>Out of credits</source>
         <translation type="unfinished">Out of credits</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="307"/>
+        <location filename="../src/core/SessionManager.cpp" line="358"/>
         <source>Service capacity exhausted — try again later</source>
         <translation type="unfinished">Service capacity exhausted — try again later</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="308"/>
+        <location filename="../src/core/SessionManager.cpp" line="359"/>
         <source>Insufficient credits — session ended</source>
         <translation type="unfinished">Insufficient credits — session ended</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="364"/>
+        <location filename="../src/core/SessionManager.cpp" line="415"/>
         <source>Queued: position %1 of %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="369"/>
+        <location filename="../src/core/SessionManager.cpp" line="420"/>
         <source>Morphing…</source>
         <translation type="unfinished">Morphing…</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="491"/>
+        <location filename="../src/core/SessionManager.cpp" line="542"/>
         <source>Media connected · %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="494"/>
+        <location filename="../src/core/SessionManager.cpp" line="545"/>
         <source>WebRTC connection failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="503"/>
+        <location filename="../src/core/SessionManager.cpp" line="554"/>
         <source>WebRTC connection failed — session stopped</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="512"/>
+        <location filename="../src/core/SessionManager.cpp" line="563"/>
         <source>ICE checking…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="525"/>
+        <location filename="../src/core/SessionManager.cpp" line="576"/>
         <source>good</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="525"/>
+        <location filename="../src/core/SessionManager.cpp" line="576"/>
         <source>fair</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="525"/>
+        <location filename="../src/core/SessionManager.cpp" line="576"/>
         <source>poor</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="527"/>
+        <location filename="../src/core/SessionManager.cpp" line="578"/>
         <source>%1 · %2ms</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="535"/>
+        <location filename="../src/core/SessionManager.cpp" line="586"/>
         <source>Media stalled — reconnecting…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="808"/>
+        <location filename="../src/core/SessionManager.cpp" line="859"/>
         <source>Applying scene…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="883"/>
+        <location filename="../src/core/SessionManager.cpp" line="934"/>
         <source>Cooldown — %1s remaining</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="905"/>
+        <location filename="../src/core/SessionManager.cpp" line="956"/>
         <source>You need at least %1 credits (about 1 minute of swap) to start.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="1101"/>
+        <location filename="../src/core/SessionManager.cpp" line="1259"/>
         <source>No video received — session ended</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="1102"/>
+        <location filename="../src/core/SessionManager.cpp" line="1260"/>
         <source>No video received within %1s — ending session</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="910"/>
+        <location filename="../src/core/SessionManager.cpp" line="961"/>
         <source>Sign in required</source>
         <translation type="unfinished">Sign in required</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="935"/>
+        <location filename="../src/core/SessionManager.cpp" line="986"/>
         <source>Connecting to %1…</source>
         <translation type="unfinished">Connecting to %1…</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="917"/>
+        <location filename="../src/core/SessionManager.cpp" line="968"/>
         <source>Signaling unavailable</source>
         <translation type="unfinished">Signaling unavailable</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="918"/>
+        <location filename="../src/core/SessionManager.cpp" line="969"/>
         <source>Realtime signaling client missing</source>
         <translation type="unfinished">Realtime signaling client missing</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="1055"/>
+        <location filename="../src/core/SessionManager.cpp" line="1218"/>
         <source>Applying %1…</source>
         <translation type="unfinished">Applying %1…</translation>
     </message>
     <message>
-        <location filename="../src/core/SessionManager.cpp" line="1075"/>
+        <location filename="../src/core/SessionManager.cpp" line="1233"/>
         <source>Updating prompt…</source>
         <translation type="unfinished">Updating prompt…</translation>
     </message>
@@ -3593,7 +3650,7 @@ Sign in again to continue.</source>
     <name>StageFrame</name>
     <message>
         <location filename="../qml/dashboard/StageFrame.qml" line="118"/>
-        <location filename="../qml/dashboard/StageFrame.qml" line="753"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="766"/>
         <source>Try again</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3623,62 +3680,67 @@ Sign in again to continue.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="428"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="427"/>
         <source>Ready to stream</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="438"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="437"/>
         <source>Pick a character in the workshop, then start the swap.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="448"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="447"/>
         <source>Press</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="464"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="463"/>
         <source>BEGIN SWAP</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="473"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="472"/>
         <source>to transform</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="593"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="592"/>
         <source>Reconnecting…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="593"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="592"/>
         <source>Connecting…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="610"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="609"/>
         <source>NO CREDITS USED YET</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="704"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="711"/>
         <source>Something went wrong. Please try again.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="718"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="727"/>
         <source>A VPN, firewall, or work/school wifi may be blocking it. Try another network. Or switch to the Standard engine in Settings, which works on most networks.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="738"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="747"/>
         <source>No credits charged</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location filename="../qml/dashboard/StageFrame.qml" line="763"/>
+        <source>Top up credits</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <location filename="../qml/dashboard/StageFrame.qml" line="752"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="765"/>
         <source>Try again in %n second</source>
         <comment>Try again in %n seconds</comment>
         <translation type="unfinished">
@@ -3687,12 +3749,12 @@ Sign in again to continue.</source>
         </translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="761"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="778"/>
         <source>Dismiss</source>
         <translation type="unfinished">Dismiss</translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StageFrame.qml" line="771"/>
+        <location filename="../qml/dashboard/StageFrame.qml" line="788"/>
         <source>Contact support</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3700,42 +3762,42 @@ Sign in again to continue.</source>
 <context>
     <name>StatusBar</name>
     <message>
-        <location filename="../qml/dashboard/StatusBar.qml" line="64"/>
+        <location filename="../qml/dashboard/StatusBar.qml" line="66"/>
         <source>OFFLINE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StatusBar.qml" line="65"/>
+        <location filename="../qml/dashboard/StatusBar.qml" line="67"/>
         <source>HD</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StatusBar.qml" line="65"/>
+        <location filename="../qml/dashboard/StatusBar.qml" line="67"/>
         <source>STANDARD</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StatusBar.qml" line="88"/>
+        <location filename="../qml/dashboard/StatusBar.qml" line="90"/>
         <source>AUTO</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StatusBar.qml" line="109"/>
+        <location filename="../qml/dashboard/StatusBar.qml" line="111"/>
         <source>%1 ms</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StatusBar.qml" line="142"/>
+        <location filename="../qml/dashboard/StatusBar.qml" line="144"/>
         <source>Copy stream URL for OBS</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StatusBar.qml" line="186"/>
+        <location filename="../qml/dashboard/StatusBar.qml" line="188"/>
         <source>COPIED</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/StatusBar.qml" line="202"/>
+        <location filename="../qml/dashboard/StatusBar.qml" line="204"/>
         <source>STREAM OUTPUT: NOT STARTED</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3783,7 +3845,7 @@ Sign in again to continue.</source>
         <translation type="unfinished">Insufficient credits</translation>
     </message>
     <message>
-        <location filename="../qml/components/StatusPill.qml" line="92"/>
+        <location filename="../qml/components/StatusPill.qml" line="97"/>
         <source>Session: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3845,80 +3907,80 @@ Sign in again to continue.</source>
 <context>
     <name>TopBar</name>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="78"/>
-        <location filename="../qml/dashboard/TopBar.qml" line="133"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="81"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="136"/>
         <source>Notifications</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="144"/>
-        <location filename="../qml/dashboard/TopBar.qml" line="152"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="147"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="155"/>
         <source>Account</source>
         <translation type="unfinished">Account</translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="404"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="407"/>
         <source>CREDITS</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="428"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="431"/>
         <source>FREE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="452"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="455"/>
         <source>used before paid credits</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="463"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="466"/>
         <source>You&apos;re out of credits — top up to keep morphing.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="496"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="499"/>
         <source>Top up credits</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="497"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="500"/>
         <source>Account &amp; usage</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="498"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="501"/>
         <source>What&apos;s new</source>
         <translation type="unfinished">What&apos;s new</translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="499"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="502"/>
         <source>Help</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="500"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="503"/>
         <source>Settings</source>
         <translation type="unfinished">Settings</translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="501"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="504"/>
         <source>Join our Discord</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="615"/>
-        <location filename="../qml/dashboard/TopBar.qml" line="642"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="618"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="645"/>
         <source>Sign out</source>
         <translation type="unfinished">Sign out</translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="640"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="643"/>
         <source>Sign out?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/dashboard/TopBar.qml" line="641"/>
+        <location filename="../qml/dashboard/TopBar.qml" line="644"/>
         <source>This stops any running swap and turns the camera off.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3926,37 +3988,37 @@ Sign in again to continue.</source>
 <context>
     <name>UploadConsentDialog</name>
     <message>
-        <location filename="../qml/components/UploadConsentDialog.qml" line="91"/>
+        <location filename="../qml/components/UploadConsentDialog.qml" line="92"/>
         <source>Before you upload, read this</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/UploadConsentDialog.qml" line="102"/>
+        <location filename="../qml/components/UploadConsentDialog.qml" line="103"/>
         <source>LiveMorph is powered by Decart Lucy 2. Decart&apos;s Acceptable Use Policy and ours both require you to attest to a few things on every reference image. Take a moment to check each one.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/UploadConsentDialog.qml" line="163"/>
+        <location filename="../qml/components/UploadConsentDialog.qml" line="164"/>
         <source>This image is either a fictional character, OR I have explicit, documented consent from the real person it depicts. I will not use LiveMorph to impersonate anyone without their consent.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/UploadConsentDialog.qml" line="206"/>
+        <location filename="../qml/components/UploadConsentDialog.qml" line="207"/>
         <source>I will disclose to my viewers that my stream is AI-generated (stream title, panel, or scene overlay) and will not present this output as authentic news, real events, or testimony of a real person.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/UploadConsentDialog.qml" line="249"/>
+        <location filename="../qml/components/UploadConsentDialog.qml" line="250"/>
         <source>I have read and agree to both: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/UploadConsentDialog.qml" line="299"/>
+        <location filename="../qml/components/UploadConsentDialog.qml" line="300"/>
         <source>Cancel</source>
         <translation type="unfinished">Cancel</translation>
     </message>
     <message>
-        <location filename="../qml/components/UploadConsentDialog.qml" line="303"/>
+        <location filename="../qml/components/UploadConsentDialog.qml" line="304"/>
         <source>I Agree &amp; Upload</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4009,57 +4071,57 @@ Sign in again to continue.</source>
         <translation type="unfinished">Use OBS Studio’s built-in Virtual Camera with a Browser Source pointed at LiveMorph’s local stream.</translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="112"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="121"/>
         <source>OBS detected: %1</source>
         <translation type="unfinished">OBS detected: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="113"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="122"/>
         <source>OBS not found — install from https://obsproject.com</source>
         <translation type="unfinished">OBS not found — install from https://obsproject.com</translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="145"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="154"/>
         <source>Stream server unavailable</source>
         <translation type="unfinished">Stream server unavailable</translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="153"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="162"/>
         <source>Could not start local stream on port %1</source>
         <translation type="unfinished">Could not start local stream on port %1</translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="163"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="172"/>
         <source>OBS feed live: %1 — add Browser Source in OBS, then Start Virtual Camera</source>
         <translation type="unfinished">OBS feed live: %1 — add Browser Source in OBS, then Start Virtual Camera</translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="171"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="180"/>
         <source>v4l2 loopback detected: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="174"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="183"/>
         <source>OBS not detected — install from obsproject.com</source>
         <translation type="unfinished">OBS not detected — install from obsproject.com</translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="190"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="199"/>
         <source>Virtual camera / OBS helper stopped (MJPEG may still be running)</source>
         <translation type="unfinished">Virtual camera / OBS helper stopped (MJPEG may still be running)</translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="206"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="215"/>
         <source>Copied for OBS Browser Source: %1</source>
         <translation type="unfinished">Copied for OBS Browser Source: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="221"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="230"/>
         <source>OBS not installed — opened download page</source>
         <translation type="unfinished">OBS not installed — opened download page</translation>
     </message>
     <message>
-        <location filename="../src/core/VirtualCameraHelper.cpp" line="233"/>
+        <location filename="../src/core/VirtualCameraHelper.cpp" line="242"/>
         <source>Launching OBS… then add Browser Source → %1</source>
         <translation type="unfinished">Launching OBS… then add Browser Source → %1</translation>
     </message>
@@ -4095,22 +4157,22 @@ Sign in again to continue.</source>
 <context>
     <name>WhatsNewModal</name>
     <message>
-        <location filename="../qml/components/WhatsNewModal.qml" line="107"/>
+        <location filename="../qml/components/WhatsNewModal.qml" line="108"/>
         <source>WHAT&apos;S NEW</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/WhatsNewModal.qml" line="121"/>
+        <location filename="../qml/components/WhatsNewModal.qml" line="122"/>
         <source>v%1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/WhatsNewModal.qml" line="151"/>
+        <location filename="../qml/components/WhatsNewModal.qml" line="152"/>
         <source>This update includes performance improvements and bug fixes.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/components/WhatsNewModal.qml" line="195"/>
+        <location filename="../qml/components/WhatsNewModal.qml" line="196"/>
         <source>Got it</source>
         <translation type="unfinished">Got it</translation>
     </message>
@@ -4126,124 +4188,124 @@ Sign in again to continue.</source>
 <context>
     <name>main</name>
     <message>
-        <location filename="../qml/main.qml" line="176"/>
+        <location filename="../qml/main.qml" line="178"/>
         <source>Can&apos;t reach the LiveMorph API — check that the backend is running and the URL in Settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="185"/>
-        <location filename="../qml/main.qml" line="264"/>
+        <location filename="../qml/main.qml" line="187"/>
+        <location filename="../qml/main.qml" line="265"/>
         <source>Retry</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="250"/>
+        <location filename="../qml/main.qml" line="251"/>
         <source>Under maintenance</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="257"/>
+        <location filename="../qml/main.qml" line="258"/>
         <source>LiveMorph is undergoing scheduled maintenance. Please check back soon.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="319"/>
+        <location filename="../qml/main.qml" line="320"/>
         <source>Cooldown active, %1s left</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="321"/>
+        <location filename="../qml/main.qml" line="322"/>
         <source>Camera is off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="321"/>
+        <location filename="../qml/main.qml" line="322"/>
         <source>Turn the camera on in the stage controls before starting the swap.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="390"/>
+        <location filename="../qml/main.qml" line="391"/>
         <source>Recording stopped</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="395"/>
+        <location filename="../qml/main.qml" line="396"/>
         <source>Recording started</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="447"/>
+        <location filename="../qml/main.qml" line="448"/>
         <source>Recording saved</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="451"/>
+        <location filename="../qml/main.qml" line="452"/>
         <source>Recording error</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="462"/>
+        <location filename="../qml/main.qml" line="463"/>
         <source>Couldn&apos;t switch character</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="462"/>
+        <location filename="../qml/main.qml" line="463"/>
         <source>Your previous look is still running, so try picking it again.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="479"/>
+        <location filename="../qml/main.qml" line="480"/>
         <source>Backend offline — set the API URL in Settings or LIVEMORPH_API_URL env var</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="481"/>
+        <location filename="../qml/main.qml" line="482"/>
         <source>Connected to backend</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="501"/>
+        <location filename="../qml/main.qml" line="502"/>
         <source>Backend request failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="507"/>
+        <location filename="../qml/main.qml" line="508"/>
         <source>Update available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="507"/>
+        <location filename="../qml/main.qml" line="508"/>
         <source>A newer version is ready</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="514"/>
+        <location filename="../qml/main.qml" line="515"/>
         <source>You&apos;re up to date</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="528"/>
-        <location filename="../qml/main.qml" line="530"/>
+        <location filename="../qml/main.qml" line="529"/>
+        <location filename="../qml/main.qml" line="531"/>
         <source>Payment confirmed</source>
         <translation type="unfinished">Payment confirmed</translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="530"/>
+        <location filename="../qml/main.qml" line="531"/>
         <source>Balance updated</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="555"/>
+        <location filename="../qml/main.qml" line="556"/>
         <source>Virtual camera started</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="559"/>
+        <location filename="../qml/main.qml" line="560"/>
         <source>Virtual camera stopped</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../qml/main.qml" line="574"/>
+        <location filename="../qml/main.qml" line="575"/>
         <source>Verifying payment…</source>
         <translation type="unfinished">Verifying payment…</translation>
     </message>

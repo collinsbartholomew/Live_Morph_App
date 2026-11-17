@@ -46,9 +46,9 @@ Rectangle {
 
     Row {
         anchors.left: parent.left
-        anchors.leftMargin: 16
+        anchors.leftMargin: Theme.spacingLg
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 10
+        spacing: Theme.gapCard
 
         // Brand mark: layered hex monogram (shared BrandMark component)
         BrandMark {
@@ -64,7 +64,7 @@ Rectangle {
         Text {
             text: qsTr("LiveMorph")
             color: Colors.textPrimary
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSmall.pixelSize
             font.weight: Font.Bold
             font.letterSpacing: -0.26
             anchors.verticalCenter: parent.verticalCenter
@@ -85,7 +85,7 @@ Rectangle {
                 text: qsTr("LIVE")
                 color: Colors.accent
                 font.family: Theme.fontMono.family
-                font.pixelSize: 8
+                font.pixelSize: Theme.fontMicro.pixelSize
                 font.capitalization: Font.AllUppercase
                 font.letterSpacing: Theme.trackingChip
             }
@@ -94,7 +94,7 @@ Rectangle {
         Text {
             text: qsTr("v%1").arg(App.appVersion)
             color: Colors.textMuted
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontMonoTiny.pixelSize
             font.family: Theme.fontMono.family
             font.letterSpacing: 0.5
             anchors.verticalCenter: parent.verticalCenter

@@ -4,6 +4,7 @@ class QWebSocket;
 
 #include <QObject>
 #include <QString>
+#include <QCryptographicHash>
 #include <QVariantMap>
 #include <QNetworkAccessManager>
 #include <QTimer>
@@ -105,8 +106,12 @@ public slots:
 
     /// True only when `state` matches the in-flight Google OAuth nonce —
     /// deep-link callbacks must be rejected on mismatch (session fixation).
+    /// Constant-time compare: the nonce is a secret-ish value.
     bool verifyGoogleState(const QString &state) const {
-        return !m_googleOAuthState.isEmpty() && state == m_googleOAuthState;
+        if (m_googleOAuthState.isEmpty())
+            return false;
+        return QCryptographicHash::hash(state.toUtf8(), QCryptographicHash::Sha256)
+            == QCryptographicHash::hash(m_googleOAuthState.toUtf8(), QCryptographicHash::Sha256);
     }
 
 signals:

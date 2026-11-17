@@ -219,6 +219,16 @@ target_link_libraries(LiveMorph PRIVATE
     CommonI18n
 )
 
+# Real AES-256-GCM for the Linux SecureStore file vault when OpenSSL is present
+# (falls back to keyed obfuscation, never plaintext, when it is not).
+if(UNIX AND NOT APPLE)
+    find_package(OpenSSL QUIET)
+    if(OpenSSL_FOUND)
+        target_compile_definitions(LiveMorph PRIVATE LIVEMORPH_HAVE_OPENSSL)
+        target_link_libraries(LiveMorph PRIVATE OpenSSL::Crypto)
+    endif()
+endif()
+
 # Smoke tests — run with `ctest` (BUILD_TESTING defaults ON via include(CTest))
 # or directly: QT_QPA_PLATFORM=offscreen ./bin/LiveMorph_smoke_test
 # Only self-contained, dependency-free components (catalog + presets models) are

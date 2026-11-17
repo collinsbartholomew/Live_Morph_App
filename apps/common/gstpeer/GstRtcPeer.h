@@ -168,5 +168,4 @@ private:
     QString m_stun;
     QString m_turn;
     Direction m_direction = Direction::SendRecv;
-    std::atomic<bool> m_stopping{false};
 };

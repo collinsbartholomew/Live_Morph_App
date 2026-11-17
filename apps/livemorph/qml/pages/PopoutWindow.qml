@@ -6,6 +6,7 @@ import LiveMorph
 
 ApplicationWindow {
     id: root
+    font: Theme.fontUi
     title: qsTr("%1 Output").arg(Constants.appName)
     width: 480
     height: 300
@@ -62,7 +63,7 @@ ApplicationWindow {
             id: videoOut
             anchors.fill: parent
             fillMode: VideoOutput.PreserveAspectFit
-            visible: Session.isActive && Session.peerVideoSink !== null
+            visible: Session.isActive && Session.popoutVideoSink !== null
         }
         // (popout sink bound via bindSink above)
         // Feed this output's own sink from the peer's aux-sink fan-out.
@@ -72,7 +73,7 @@ ApplicationWindow {
         Column {
             anchors.centerIn: parent
             spacing: 6
-            visible: !(Session.isActive && Session.peerVideoSink !== null)
+            visible: !(Session.isActive && Session.popoutVideoSink !== null)
 
             Item {
                 width: 44; height: 44
@@ -98,7 +99,7 @@ ApplicationWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: qsTr("Waiting for output")
                 color: Colors.textMuted
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontLabel.pixelSize
                 opacity: 0.45
             }
 
@@ -133,7 +134,7 @@ ApplicationWindow {
 
             Row {
                 anchors.left: parent.left
-                anchors.leftMargin: 12
+                anchors.leftMargin: Theme.spacingMd
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 6
 
@@ -183,7 +184,7 @@ ApplicationWindow {
 
             MouseArea {
                 anchors.fill: parent
-                anchors.rightMargin: 32
+                anchors.rightMargin: Theme.spacing2xl
                 onPressed: function(m) {
                     root.dragOffset = Qt.point(m.x, m.y)
                 }

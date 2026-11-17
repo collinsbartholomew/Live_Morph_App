@@ -29,6 +29,15 @@
 #  include <unistd.h>
 #endif
 
+// Real authenticated encryption for the Linux file vault when OpenSSL is
+// available (CMake defines LIVEMORPH_HAVE_OPENSSL). Without it the v4 XOR
+// obfuscation remains as a fallback, but NEW writes never downgrade.
+#if defined(LIVEMORPH_HAVE_OPENSSL) && defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+#  include <openssl/evp.h>
+#  include <openssl/rand.h>
+#  define LIVEMORPH_AES_GCM 1
+#endif
+
 namespace {
 constexpr auto kService = "com.livemorph.desktop";
 
@@ -231,6 +240,43 @@ QByteArray SecureStore::protect(const QByteArray &plain)
         return QByteArray("v4") + out;
     }
 #else
+#  if defined(LIVEMORPH_AES_GCM)
+    // Linux with OpenSSL: AES-256-GCM keyed by the stretched 0600 random
+    // per-install key. Fail closed — if the CSPRNG or cipher is unavailable,
+    // return empty rather than downgrading new writes to XOR obfuscation.
+    const QByteArray key = stretchedPrivateKey();
+    QByteArray nonce(12, 0);
+    if (RAND_bytes(reinterpret_cast<unsigned char *>(nonce.data()), nonce.size()) != 1)
+        return {};
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx)
+        return {};
+    QByteArray out;
+    bool ok = EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr,
+                                 reinterpret_cast<const unsigned char *>(key.constData()),
+                                 reinterpret_cast<const unsigned char *>(nonce.constData())) == 1;
+    if (ok) {
+        QByteArray ct(plain.size() + 16, 0);
+        int len = 0;
+        ok = EVP_EncryptUpdate(ctx, reinterpret_cast<unsigned char *>(ct.data()), &len,
+                               reinterpret_cast<const unsigned char *>(plain.constData()),
+                               plain.size()) == 1;
+        int total = len;
+        if (ok) {
+            ok = EVP_EncryptFinal_ex(ctx, reinterpret_cast<unsigned char *>(ct.data()) + total, &len) == 1;
+            total += len;
+        }
+        if (ok) {
+            unsigned char tag[16];
+            ok = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, tag) == 1;
+            if (ok)
+                out = QByteArray("v5") + nonce + ct.left(total)
+                      + QByteArray(reinterpret_cast<const char *>(tag), 16);
+        }
+    }
+    EVP_CIPHER_CTX_free(ctx);
+    return ok ? out : QByteArray();
+#  else
     // Linux: keyed with the app-private 0600 random file (v4). The older v3
     // scheme used the world-readable machine-id, which made the "encryption"
     // reversible by any local user; v3 blobs are still readable via unprotect.
@@ -239,6 +285,7 @@ QByteArray SecureStore::protect(const QByteArray &plain)
     for (int i = 0; i < out.size(); ++i)
         out[i] = char(uchar(out[i]) ^ uchar(mk[i % mk.size()]));
     return QByteArray("v4") + out;
+#  endif
 #endif
 }
 
@@ -275,6 +322,46 @@ QByteArray SecureStore::unprotect(const QByteArray &blob)
         return xorWith(blob.mid(2), stretchedKey());
     return blob;
 #else
+    if (blob.startsWith("v5")) {
+#  if defined(LIVEMORPH_AES_GCM)
+        // AES-256-GCM with tag verification: a tampered or forged blob fails
+        // closed (empty) instead of decrypting to garbage.
+        if (blob.size() < 2 + 12 + 16)
+            return {};
+        const QByteArray key = stretchedPrivateKey();
+        const QByteArray nonce = blob.mid(2, 12);
+        const QByteArray ct = blob.mid(14, blob.size() - 14 - 16);
+        const QByteArray tag = blob.right(16);
+        EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+        if (!ctx)
+            return {};
+        bool ok = EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr,
+                                     reinterpret_cast<const unsigned char *>(key.constData()),
+                                     reinterpret_cast<const unsigned char *>(nonce.constData())) == 1;
+        QByteArray pt;
+        if (ok) {
+            pt.resize(ct.size() + 16);
+            int len = 0;
+            ok = EVP_DecryptUpdate(ctx, reinterpret_cast<unsigned char *>(pt.data()), &len,
+                                   reinterpret_cast<const unsigned char *>(ct.constData()), ct.size()) == 1;
+            int total = len;
+            if (ok) {
+                ok = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16,
+                                         reinterpret_cast<void *>(const_cast<char *>(tag.constData()))) == 1;
+            }
+            if (ok) {
+                ok = EVP_DecryptFinal_ex(ctx, reinterpret_cast<unsigned char *>(pt.data()) + total, &len) == 1;
+                total += len;
+                if (ok)
+                    pt.resize(total);
+            }
+        }
+        EVP_CIPHER_CTX_free(ctx);
+        return ok ? pt : QByteArray();
+#  else
+        return {};
+#  endif
+    }
     if (blob.startsWith("v4")) {
         return xorWith(blob.mid(2), stretchedPrivateKey());
     }

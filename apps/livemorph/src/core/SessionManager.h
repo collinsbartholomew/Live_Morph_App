@@ -14,6 +14,8 @@ class BackendClient;
 class WebRtcSignalingClient;
 class GstRtcPeer;
 class CameraManager;
+class QNetworkAccessManager;
+template <typename T> class QFutureWatcher;
 
 class SessionManager : public QObject
 {
@@ -183,6 +185,13 @@ private:
     void scheduleReconnect();
     QString composedPrompt() const;
     int swapFailureCooldown() const;
+    // Reference-image pipeline: validate the source at the C++ boundary, fetch
+    // https images to a capped temp file, and encode off the GUI thread, then
+    // send set_image (or fall back to the raw/composed prompt).
+    void sendCharacterImageOrPrompt(const QString &image, const QString &prompt, bool rawFallback);
+    void startImageEncodeJob(const QString &image, const QString &prompt, bool rawFallback);
+    void fetchRemoteImage(const QString &url, const QString &prompt, bool rawFallback, int depth);
+    void imageJobFailed(const QString &prompt, bool rawFallback);
 
     AuthManager *m_auth = nullptr;
     ConfigManager *m_config = nullptr;
@@ -232,6 +241,9 @@ private:
     QString m_scenePrompt;
     QTimer m_reconnectTimer;
     QTimer m_connectWatchdog; // 15s first-connect timeout (Electron connect timeout)
+    QNetworkAccessManager *m_imgNam = nullptr;
+    QPointer<QFutureWatcher<QString>> m_imgWatcher;
+    int m_imgJob = 0; // single-flight token: only the newest image job may send
     int m_reconnectAttempts = 0;
     // Per-session reconnect total: m_reconnectAttempts resets on every
     // successful connect, so without this a stalling engine loops forever.

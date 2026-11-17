@@ -11,7 +11,10 @@ QtObject {
 
     // ── App identity ────────────────────────────────────────────────
     readonly property string appName: "LiveMorph"
-    readonly property string appVersion: "1.0.0"
+    // Last-resort fallback only — App.appVersion (from the CMake project
+    // version) is authoritative everywhere else. Keep in sync with
+    // CMakeLists.txt project(LiveMorph VERSION ...).
+    readonly property string appVersion: "1.8.0"
     readonly property string organization: "LiveMorph"
     readonly property string domain: "livemorph.com"
 
@@ -44,6 +47,10 @@ QtObject {
     // Library/prompt layout caps (single source; QML must not hardcode them).
     readonly property int maxLibrarySize: 28
     readonly property int maxPromptBarWidth: 880
+    readonly property int maxPromptLength: 1000
+    // ActionBar: horizontal space reserved for the right-side cluster so the
+    // CTA never overlaps it at narrow widths.
+    readonly property int actionBarRightReserve: 265
 
     // ── Session / morph ─────────────────────────────────────────────
     readonly property int cooldownSecs: 3

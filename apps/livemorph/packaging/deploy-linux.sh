@@ -89,6 +89,8 @@ EOF
 
 # Verify the staged binary actually resolves every shared lib — a wrong Qt
 # prefix or missing lib must fail HERE, not with a loader error on the target.
+# Resolve against the STAGED lib dir, not the build host's system libs.
+export LD_LIBRARY_PATH="$OUT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 if ldd "$OUT/LiveMorph" 2>/dev/null | grep -q "not found"; then
   echo "ERROR: staged binary has unresolved libraries:" >&2
   ldd "$OUT/LiveMorph" 2>/dev/null | grep "not found" >&2

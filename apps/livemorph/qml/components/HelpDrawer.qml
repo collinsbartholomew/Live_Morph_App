@@ -164,7 +164,7 @@ Item {
             lineWidth: 1.5
             lineColor: Colors.accent
             anchors.left: parent.left
-            anchors.leftMargin: 12
+            anchors.leftMargin: Theme.spacingMd
             anchors.top: parent.top
             anchors.topMargin: -3
             z: Theme.zLocal1
@@ -174,7 +174,7 @@ Item {
             lineWidth: 1.5
             lineColor: Colors.accent
             anchors.right: parent.right
-            anchors.rightMargin: 12
+            anchors.rightMargin: Theme.spacingMd
             anchors.top: parent.top
             anchors.topMargin: -3
             z: Theme.zLocal1
@@ -207,9 +207,9 @@ Item {
                 }
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 8
-                    spacing: 10
+                    anchors.leftMargin: Theme.spacingLg
+                    anchors.rightMargin: Theme.spacingSm
+                    spacing: Theme.gapCard
                     HexBadge {
                         size: 30
                         iconName: "help-circle"
@@ -290,9 +290,9 @@ Item {
                                 RowLayout {
                                     id: qRow
                                     anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    anchors.rightMargin: 10
-                                    spacing: 8
+                                    anchors.leftMargin: Theme.spacingMd
+                                    anchors.rightMargin: Theme.gapCard
+                                    spacing: Theme.spacingSm
                                     Icon {
                                         name: "message-circle"
                                         size: 13
@@ -301,7 +301,7 @@ Item {
                                     Text {
                                         text: faqItem.item.q
                                         color: faqItem.expanded ? Colors.textPrimary : Colors.textSecondary
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontMono.pixelSize
                                         font.weight: faqItem.expanded ? Font.Bold : Font.Normal
                                         Layout.fillWidth: true
                                         wrapMode: Text.WordWrap
@@ -352,10 +352,10 @@ Item {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.top: parent.top
-                                    anchors.margins: 10
+                                    anchors.margins: Theme.gapCard
                                     text: faqItem.item.a
                                     color: Colors.textMuted
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontLabel.pixelSize
                                     wrapMode: Text.WordWrap
                                     lineHeight: 1.5
                                 }
@@ -384,8 +384,8 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    anchors.margins: 12
-                    spacing: 8
+                    anchors.margins: Theme.spacingMd
+                    spacing: Theme.spacingSm
 
                     Repeater {
                         model: [
@@ -442,7 +442,7 @@ Item {
                                          : modelData.danger ? Colors.statusError
                                          : modelData.accent ? Colors.accentHover
                                          : chipMa.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontMonoTiny.pixelSize
                                     font.weight: Font.Bold
                                     anchors.verticalCenter: parent.verticalCenter
                                 }

@@ -55,6 +55,10 @@ void PresetModel::load()
     // Built-in starter prompts (always present) + user-saved customs merged
     // from disk. The old loader reset to 3 hardcoded rows on every boot —
     // every "Save preset" was silently lost on restart.
+    // Cap the cache read BEFORE beginResetModel — an early return between
+    // begin/endResetModel leaves the model in a reset-in-progress state.
+    QFile f(presetStorePath());
+    const bool tooBig = f.exists() && f.size() > 4 * 1024 * 1024;
     beginResetModel();
     m_items = {
         { QStringLiteral("p1"), QStringLiteral("Cinematic Portrait"),
@@ -67,10 +71,7 @@ void PresetModel::load()
           QStringLiteral("oil painting, thick brush strokes, classical composition"),
           {}, QStringLiteral("prompt") },
     };
-    QFile f(presetStorePath());
-    if (f.open(QIODevice::ReadOnly)) {
-        if (f.size() > 4 * 1024 * 1024)
-            return; // cap: don't parse a tampered/huge cache wholesale
+    if (!tooBig && f.open(QIODevice::ReadOnly)) {
         const auto doc = QJsonDocument::fromJson(f.readAll());
         if (doc.isArray()) {
             const auto arr = doc.array();
