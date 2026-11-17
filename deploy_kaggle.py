@@ -6,16 +6,17 @@ Deploys only the backend (no Qt/QML frontend). Handles:
   - Git clone (private GitHub with embedded token)
   - MongoDB installation & startup
   - Rust 1.88 toolchain & release build
-  - Backend server on 127.0.0.1:3874
+  - Backend server on 127.0.0.1:3874 (port is force-freed on every start)
   - Ngrok tunnel via pyngrok (falls back to localhost on failure)
   - Public URL for Qt client connection
-  - Auto-update monitor: polls GitHub and rebuilds on new commits
+  - Auto-update monitor: polls GitHub, rebuilds, restarts with binary recovery
   - Idempotent admin user seeding (unlimited credits + pro tier)
 
 All env vars are hardcoded as test values (development only).
 """
 
 import os
+import re
 import sys
 import subprocess
 import threading
@@ -183,6 +184,93 @@ def _trunc(obj, n=200):
 
 
 # ---------------------------------------------------------------------------
+# Port cleanup — force-free port before every backend start
+# ---------------------------------------------------------------------------
+def _port_is_listening(port):
+    """Check if any process is listening on `port` (TCP)."""
+    r = sh(["ss", "-lnt"], capture=True)
+    if r.returncode == 0 and r.stdout:
+        for line in r.stdout.splitlines():
+            if not line.strip() or line.startswith("State"):
+                continue
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            local = parts[3]
+            if local.endswith(f":{port}"):
+                return True
+        return False
+    # Fallback to socket probe if ss isn't available
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+def _find_port_holder(port):
+    """Return PID (as string) of the process listening on `port`, or None."""
+    # Try lsof (usually available on Kaggle)
+    r = sh(["lsof", "-ti", f"tcp:{port}", "-sTCP:LISTEN"], capture=True)
+    if r.returncode == 0 and r.stdout.strip():
+        return r.stdout.strip().splitlines()[0].strip()
+
+    # Fall back to parsing `ss -lntp` output
+    r = sh(["ss", "-lntp"], capture=True)
+    if r.returncode == 0 and r.stdout:
+        for line in r.stdout.splitlines():
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            if not parts[3].endswith(f":{port}"):
+                continue
+            m = re.search(r"pid=(\d+)", line)
+            if m:
+                return m.group(1)
+    return None
+
+
+def _free_port(port, timeout=20):
+    """Ensure nothing is listening on `port`. Kill holders until free.
+
+    Returns True if the port is free at the end (either was already free,
+    or was successfully freed). Returns False only if a process survives
+    `kill -9` + `fuser -k` for the whole timeout — practically never.
+    """
+    if not _port_is_listening(port):
+        print(f"[*] Port {port} is already free", flush=True)
+        return True
+
+    print(f"[*] Port {port} is in use — freeing it", flush=True)
+    start = time.time()
+    last_holder = None
+
+    while time.time() - start < timeout:
+        if not _port_is_listening(port):
+            print(f"[*] Port {port} is now free", flush=True)
+            return True
+
+        holder = _find_port_holder(port)
+        if holder and holder != last_holder:
+            print(
+                f"[*] Killing PID {holder} (holding port {port})", flush=True
+            )
+            sh(["kill", "-9", holder], check=False)
+            last_holder = holder
+        else:
+            # Last resort: ask the kernel to kill anything using the socket
+            sh(["fuser", "-k", f"{port}/tcp"], check=False)
+
+        time.sleep(0.5)
+
+    print(f"[!] Could not free port {port} within {timeout}s", flush=True)
+    holder = _find_port_holder(port)
+    if holder:
+        print(f"    Still held by PID {holder}", flush=True)
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Steps
 # ---------------------------------------------------------------------------
 def detect_repo_url():
@@ -211,6 +299,8 @@ def install_system_deps():
                     "wget",
                     "gnupg2",
                     "software-properties-common",
+                    "lsof",
+                    "psmisc",
                 ]
             )
             return
@@ -349,14 +439,25 @@ def install_rust():
     run(["rustup", "default", "1.88"])
 
 
-def build_backend():
+def build_backend(backup_current=False):
+    """Build the backend. If `backup_current`, copy the existing binary to
+    `.bak` first so we can restore it if the new one misbehaves."""
     print("\n=== Building backend (cargo build --release) ===", flush=True)
+    binary = BACKEND_DIR / "target" / "release" / "livemorph-backend"
+
+    if backup_current and binary.exists():
+        backup = binary.with_suffix(".bak")
+        try:
+            shutil.copy2(str(binary), str(backup))
+            print(f"[*] Backed up current binary -> {backup}", flush=True)
+        except Exception as e:
+            print(f"[!] Backup failed (continuing): {e}", flush=True)
+
     env = os.environ.copy()
     env["CARGO_HOME"] = str(Path.home() / ".cargo")
     env["RUSTUP_HOME"] = str(Path.home() / ".rustup")
     run(["cargo", "build", "--release"], cwd=str(BACKEND_DIR), env=env)
 
-    binary = BACKEND_DIR / "target" / "release" / "livemorph-backend"
     if not binary.exists():
         raise RuntimeError(f"Backend binary not found at {binary}")
     print(f"[*] Backend binary: {binary}", flush=True)
@@ -436,14 +537,8 @@ def write_env(use_local_url=False):
     print(f"[*] Wrote {env_path} ({len(env)} vars)", flush=True)
 
 
-def start_backend():
-    print("\n=== Starting backend ===", flush=True)
-    binary = BACKEND_DIR / "target" / "release" / "livemorph-backend"
-    log_path = LOG_DIR / "backend.log"
-
-    sh(["pkill", "-f", "livemorph-backend"], check=False)
-    time.sleep(1)
-
+def _load_env_for_backend():
+    """Build the env dict for the backend process from the current .env file."""
     env = os.environ.copy()
     env_path = BACKEND_DIR / ".env"
     if env_path.exists():
@@ -453,6 +548,57 @@ def start_backend():
                 continue
             k, v = line.split("=", 1)
             env[k] = v
+    return env
+
+
+def _restore_and_start(binary, backup, env, log_path):
+    """Fallback: restore old binary from `.bak` and start it, then raise."""
+    print(f"[!] Restoring backup binary from {backup}", flush=True)
+    shutil.copy2(str(backup), str(binary))
+    sh(["pkill", "-f", "livemorph-backend"], check=False)
+    time.sleep(1)
+    if not _free_port(BACKEND_PORT):
+        raise RuntimeError("Cannot free port for backup restore")
+
+    proc, log_fh = run_bg(
+        [str(binary)], log_file=log_path, cwd=str(BACKEND_DIR), env=env
+    )
+    log_fh.close()
+
+    if not wait_for_port(
+        "127.0.0.1", BACKEND_PORT, timeout=90, service="backend (backup)"
+    ):
+        print(tail_file(log_path, 2000), flush=True)
+        raise RuntimeError("Backup binary also failed to start")
+
+    print("[!] Old binary restored — deploy did NOT apply", flush=True)
+    raise RuntimeError(
+        "New binary failed; old binary restored and running. "
+        "Deploy not applied. Check backend.log and auto_update.log."
+    )
+
+
+def start_backend(recover_from_backup=False):
+    """Start the backend. Always force-frees the port first.
+
+    If `recover_from_backup` is True and a `.bak` exists, restores the old
+    binary when the new one fails to start or dies shortly after startup.
+    """
+    print("\n=== Starting backend ===", flush=True)
+    binary = BACKEND_DIR / "target" / "release" / "livemorph-backend"
+    backup = binary.with_suffix(".bak")
+    log_path = LOG_DIR / "backend.log"
+
+    if not binary.exists():
+        raise RuntimeError(f"Backend binary not found at {binary}")
+
+    # Kill any previous instance AND free the port — handles reruns cleanly.
+    sh(["pkill", "-f", "livemorph-backend"], check=False)
+    time.sleep(1)
+    if not _free_port(BACKEND_PORT):
+        raise RuntimeError(f"Port {BACKEND_PORT} is still in use")
+
+    env = _load_env_for_backend()
 
     proc, log_fh = run_bg(
         [str(binary)],
@@ -468,7 +614,22 @@ def start_backend():
         if log_path.exists():
             print("=== Recent backend log ===", flush=True)
             print(log_path.read_text(errors="replace")[-3000:], flush=True)
+        if recover_from_backup and backup.exists():
+            _restore_and_start(binary, backup, env, log_path)
         raise RuntimeError("Backend failed to start")
+
+    # Stability check: if it dies within 2s of reporting listening, treat as failure.
+    time.sleep(2)
+    if not _port_is_listening(BACKEND_PORT):
+        print(
+            "[!] Backend stopped listening shortly after startup", flush=True
+        )
+        print(tail_file(log_path, 2000), flush=True)
+        if recover_from_backup and backup.exists():
+            _restore_and_start(binary, backup, env, log_path)
+        raise RuntimeError("Backend died shortly after startup")
+
+    print("[*] Backend is running", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -569,7 +730,6 @@ def _db_set_credits(email, amount):
             client.close()
             print(f"[!] User {email} not found in MongoDB", flush=True)
             return False
-        # Detect the credits field
         candidates = [
             "credits",
             "credits_balance",
@@ -627,7 +787,6 @@ def auto_create_admin_user():
     print(f"\n=== Ensuring admin user: {ADMIN_EMAIL} ===", flush=True)
     base = f"http://127.0.0.1:{BACKEND_PORT}/api/v1"
 
-    # Wait for backend HTTP readiness (TCP-only check in start_backend isn't enough)
     if not _wait_for_http(f"{base}/health", timeout=30):
         print(
             "[!] Backend HTTP not ready after 30s — skipping admin user setup",
@@ -673,17 +832,14 @@ def auto_create_admin_user():
                 f"[!] Login returned {login_status}: {_trunc(login_body)}",
                 flush=True,
             )
-        user_exists = True  # 409 = user is in DB
+        user_exists = True
     else:
         print(
             f"[!] Registration returned {status}: {_trunc(body)}", flush=True
         )
-        # Could already exist with a different status; try DB read as fallback
         user_exists = _db_get_user(ADMIN_EMAIL) is not None
         if user_exists:
-            print(
-                f"[*] Confirmed user exists via DB", flush=True
-            )
+            print(f"[*] Confirmed user exists via DB", flush=True)
 
     if not user_exists:
         print(
@@ -692,7 +848,7 @@ def auto_create_admin_user():
         )
         return
 
-    # --- Step 2: Set unlimited credits (try API, fall back to pymongo) ---
+    # --- Step 2: Set unlimited credits (API first, then pymongo fallback) ---
     credits_ok = False
     admin_secret = ENV_VARS.get("ADMIN_SECRET", "")
     api_status, api_body = _post_json(
@@ -716,7 +872,7 @@ def auto_create_admin_user():
         print(f"    Falling back to direct MongoDB write", flush=True)
         credits_ok = _db_set_credits(ADMIN_EMAIL, UNLIMITED_CREDITS)
 
-    # --- Step 3: Upgrade tier via pymongo (no known API) ---
+    # --- Step 3: Upgrade tier via pymongo ---
     tier_ok = _db_set_tier(ADMIN_EMAIL, "pro", "unlimited", True)
 
     # --- Step 4: Report ---
@@ -725,12 +881,14 @@ def auto_create_admin_user():
     print(f"  Password:   {ADMIN_PASSWORD}", flush=True)
     print(
         f"  Credits:    "
-        + (f"✓ {UNLIMITED_CREDITS:,.0f}" if credits_ok else "✗ failed")
-    , flush=True)
+        + (f"✓ {UNLIMITED_CREDITS:,.0f}" if credits_ok else "✗ failed"),
+        flush=True,
+    )
     print(
         f"  Tier:       "
-        + ("✓ pro/unlimited" if tier_ok else "✗ failed")
-    , flush=True)
+        + ("✓ pro/unlimited" if tier_ok else "✗ failed"),
+        flush=True,
+    )
     if not (credits_ok and tier_ok):
         print(
             f"[!] Some admin fields failed to update — check logs above",
@@ -879,7 +1037,13 @@ def _log_line(msg):
 
 
 def auto_update_loop(deployed_sha_ref):
-    """Poll GitHub, rebuild when new commits land. Runs in a daemon thread."""
+    """Poll GitHub, rebuild when new commits land. Runs in a daemon thread.
+
+    On new commit:
+      - Build (with current binary backed up to .bak)
+      - Restart with recovery: if new binary fails, restore old and keep
+        deployed_sha unchanged so we skip the bad SHA going forward.
+    """
     branch = git_current_branch()
     _log_line(
         f"[*] Auto-update monitor started "
@@ -918,7 +1082,7 @@ def auto_update_loop(deployed_sha_ref):
 
             _log_line("=== Rebuilding backend ===")
             try:
-                build_backend()
+                build_backend(backup_current=True)
             except Exception as e:
                 _log_line(f"[!] Build failed: {e}")
                 _log_line(
@@ -926,12 +1090,17 @@ def auto_update_loop(deployed_sha_ref):
                 )
                 continue
 
-            _log_line("=== Restarting backend ===")
+            _log_line("=== Restarting backend (with recovery) ===")
             try:
-                start_backend()
+                start_backend(recover_from_backup=True)
             except Exception as e:
+                # _restore_and_start already raised with details;
+                # deployed_sha_ref is NOT updated, so we retry next poll.
                 _log_line(f"[!] Restart failed: {e}")
-                _log_line("    Will retry on next poll.")
+                _log_line(
+                    "    Old binary restored; this SHA will be retried. "
+                    "Fix the commit upstream or Ctrl-C to stop."
+                )
                 continue
 
             deployed_sha_ref[0] = remote_sha
@@ -1023,7 +1192,7 @@ def main():
         print(f"[*] Cloning repo into {REPO_DIR}", flush=True)
         run(["git", "clone", "--recursive", repo_url, str(REPO_DIR)])
 
-    # 2. System deps
+    # 2. System deps (also installs lsof + psmisc for port cleanup)
     install_system_deps()
 
     # 3. MongoDB
@@ -1039,7 +1208,7 @@ def main():
     # 6. Env (localhost first — ngrok URL updated later if available)
     write_env(use_local_url=True)
 
-    # 7. Start backend
+    # 7. Start backend (force-frees port, kills previous instance)
     start_backend()
 
     # 8. ngrok via pyngrok

@@ -1,7 +1,18 @@
 //! Continuous regression tests for production hardening.
+//!
+//! These tests call the REAL functions from the `livemorph_backend` library
+//! target (src/lib.rs) — never local mirrors, which could drift from the code
+//! they claim to guard. `compute_hmac_signature` is kept only to GENERATE valid
+//! signatures for the verify path under test.
 
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha512;
+
+use livemorph_backend::auth::otp::validate_email;
+use livemorph_backend::models::TokenPackage;
+use livemorph_backend::services::nowpayments;
+use livemorph_backend::services::orders::normalize_provider;
+use livemorph_backend::services::paystack;
 
 type HmacSha512 = Hmac<Sha512>;
 
@@ -11,24 +22,12 @@ fn compute_hmac_signature(secret: &str, body: &[u8]) -> String {
     hex::encode(mac.finalize().into_bytes())
 }
 
-fn verify_hmac_signature(secret: &str, body: &[u8], signature_hex: &str) -> bool {
-    let expected = compute_hmac_signature(secret, body);
-    if expected.len() != signature_hex.len() {
-        return false;
-    }
-    expected
-        .bytes()
-        .zip(signature_hex.bytes())
-        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
-        == 0
-}
-
 #[test]
 fn paystack_webhook_signature_accepts_valid() {
     let secret = "sk_test_secret";
     let body = br#"{"event":"charge.success","data":{"reference":"lm_abc"}}"#;
     let sig = compute_hmac_signature(secret, body);
-    assert!(verify_hmac_signature(secret, body, &sig));
+    assert!(paystack::verify_webhook_signature(secret, body, &sig));
 }
 
 #[test]
@@ -37,31 +36,43 @@ fn paystack_webhook_signature_rejects_tampered() {
     let body = br#"{"event":"charge.success"}"#;
     let sig = compute_hmac_signature(secret, body);
     let tampered = br#"{"event":"charge.success","data":{"amount":1}}"#;
-    assert!(!verify_hmac_signature(secret, tampered, &sig));
+    assert!(!paystack::verify_webhook_signature(secret, tampered, &sig));
 }
 
 #[test]
 fn paystack_webhook_signature_rejects_wrong_secret() {
     let body = br#"{"event":"charge.success"}"#;
     let sig = compute_hmac_signature("sk_correct", body);
-    assert!(!verify_hmac_signature("sk_wrong", body, &sig));
+    assert!(!paystack::verify_webhook_signature("sk_wrong", body, &sig));
+}
+
+#[test]
+fn nowpayments_ipn_signature_roundtrip() {
+    // verify_ipn_signature MACs the sorted-JSON re-serialization of the body;
+    // a flat object already in sorted key order re-serializes identically.
+    let secret = "ipn_secret";
+    let body = br#"{"a":1,"b":2}"#;
+    let sig = compute_hmac_signature(secret, body);
+    assert!(nowpayments::verify_ipn_signature(secret, body, &sig));
+    assert!(!nowpayments::verify_ipn_signature("wrong", body, &sig));
+    assert!(!nowpayments::verify_ipn_signature(secret, b"not json", &sig));
 }
 
 #[test]
 fn token_package_catalog_nonempty_and_positive() {
-    let packs = [
-        ("basic", 500.0_f64, 5.0_f64),
-        ("starter", 1200.0, 10.0),
-        ("mid", 3000.0, 20.0),
-        ("pro", 8000.0, 45.0),
-    ];
-    for (k, credits, price) in packs {
-        assert!(credits > 0.0, "{k}");
-        assert!(price > 0.0, "{k}");
+    // Real catalog from the library target.
+    let packs = TokenPackage::catalog();
+    assert!(!packs.is_empty());
+    for p in &packs {
+        assert!(p.credits > 0.0, "{}", p.key);
+        assert!(p.price_usd > 0.0, "{}", p.key);
         assert!(
-            credits / price >= 50.0,
-            "{k} should offer >= 50 credits per USD"
+            p.credits / p.price_usd >= 50.0,
+            "{} should offer >= 50 credits per USD",
+            p.key
         );
+        // by_key round-trips every catalog key.
+        assert_eq!(TokenPackage::by_key(&p.key).unwrap().key, p.key);
     }
 }
 
@@ -98,45 +109,21 @@ fn production_flags_must_block_dangerous_defaults() {
 
 #[test]
 fn email_validation_rejects_invalid() {
+    // Real validator from the library target.
     // Missing @
-    assert!(validate_email_simple("notanemail").is_err());
+    assert!(validate_email("notanemail").is_err());
     // Missing domain
-    assert!(validate_email_simple("user@").is_err());
+    assert!(validate_email("user@").is_err());
     // Missing local part
-    assert!(validate_email_simple("@domain.com").is_err());
+    assert!(validate_email("@domain.com").is_err());
     // Too long (over 254 chars)
     let too_long = format!("{}@b.com", "a".repeat(250));
     assert!(too_long.len() > 254);
-    assert!(validate_email_simple(&too_long).is_err());
+    assert!(validate_email(&too_long).is_err());
     // Valid emails
-    assert!(validate_email_simple("user@example.com").is_ok());
-    assert!(validate_email_simple("a@b.co").is_ok());
-    assert!(validate_email_simple("test+tag@domain.org").is_ok());
-}
-
-/// Minimal email validation matching the backend's validate_email logic.
-fn validate_email_simple(email: &str) -> Result<(), String> {
-    let email = email.trim();
-    if email.is_empty() {
-        return Err("empty email".into());
-    }
-    if email.len() > 254 {
-        return Err("email too long".into());
-    }
-    let at_count = email.matches('@').count();
-    if at_count != 1 {
-        return Err("invalid email".into());
-    }
-    let parts: Vec<&str> = email.split('@').collect();
-    let local = parts[0];
-    let domain = parts[1];
-    if local.is_empty() || domain.is_empty() {
-        return Err("invalid email".into());
-    }
-    if !domain.contains('.') {
-        return Err("invalid domain".into());
-    }
-    Ok(())
+    assert!(validate_email("user@example.com").is_ok());
+    assert!(validate_email("a@b.co").is_ok());
+    assert!(validate_email("test+tag@domain.org").is_ok());
 }
 
 #[test]
@@ -154,50 +141,33 @@ fn credit_gate_requires_positive_balance() {
 
 #[test]
 fn nowpayments_status_classification() {
-    // Mirror the backend nowpayments module logic — tests verify our understanding
-    // matches the implementation contract: only `finished` (fully settled)
+    // Real classifiers from the library target: only `finished` (fully settled)
     // provisions credits; `confirmed` is still in flight.
-    fn is_paid(s: &str) -> bool {
-        matches!(s.to_ascii_lowercase().as_str(), "finished")
-    }
-    fn is_terminal_failure(s: &str) -> bool {
-        matches!(
-            s.to_ascii_lowercase().as_str(),
-            "failed" | "expired" | "refunded"
-        )
-    }
-    fn is_in_flight(s: &str) -> bool {
-        matches!(
-            s.to_ascii_lowercase().as_str(),
-            "waiting" | "confirming" | "sending" | "partially_paid"
-        )
-    }
-    assert!(is_paid("finished"));
-    assert!(!is_paid("CONFIRMED"));
-    assert!(is_terminal_failure("expired"));
-    assert!(is_in_flight("waiting"));
-    assert!(!is_paid("waiting"));
-    assert!(!is_terminal_failure("confirming"));
-    assert!(is_in_flight("partially_paid"));
-    assert!(!is_paid("failed"));
-    assert!(is_terminal_failure("refunded"));
+    assert!(nowpayments::is_paid("finished"));
+    assert!(!nowpayments::is_paid("CONFIRMED"));
+    assert!(nowpayments::is_terminal_failure("expired"));
+    assert!(nowpayments::is_in_flight("waiting"));
+    assert!(!nowpayments::is_paid("waiting"));
+    assert!(!nowpayments::is_terminal_failure("confirming"));
+    assert!(nowpayments::is_in_flight("partially_paid"));
+    assert!(!nowpayments::is_paid("failed"));
+    assert!(nowpayments::is_terminal_failure("refunded"));
     // Edge: unknown status is none of the above
-    assert!(!is_paid("unknown"));
-    assert!(!is_terminal_failure("unknown"));
-    assert!(!is_in_flight("unknown"));
+    assert!(!nowpayments::is_paid("unknown"));
+    assert!(!nowpayments::is_terminal_failure("unknown"));
+    assert!(!nowpayments::is_in_flight("unknown"));
 }
 
 #[test]
 fn provider_normalize_aliases() {
+    // Real normalizer from the library target.
     let aliases = ["crypto", "usdt", "nowpayments", "CRYPTO", "Usdt"];
     for a in aliases {
-        let lower = a.to_ascii_lowercase();
-        let n = match lower.as_str() {
-            "crypto" | "usdt" | "nowpayments" => "nowpayments",
-            other => other,
-        };
-        assert_eq!(n, "nowpayments");
+        assert_eq!(normalize_provider(a), "nowpayments");
     }
+    assert_eq!(normalize_provider("flutterwave"), "flutterwave");
+    assert_eq!(normalize_provider("FW"), "flutterwave");
+    assert_eq!(normalize_provider("paystack"), "paystack");
 }
 
 #[test]
