@@ -20,6 +20,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
+#include <QThread>
 #include <QDebug>
 #include <QRegularExpression>
 #include <QRandomGenerator>
@@ -57,12 +58,15 @@ QString imageToBase64DataUrl(const QString &pathOrUrl)
         || pathOrUrl.startsWith(QLatin1String("http://")))
         return QString(); // remote images are fetched async by fetchRemoteImage
     QString filePath = pathOrUrl;
-    if (pathOrUrl.startsWith(QLatin1String("qrc:")))
+    if (pathOrUrl.startsWith(QLatin1String("qrc:"))) {
         filePath = QStringLiteral(":") + pathOrUrl.mid(4);
-    else if (pathOrUrl.startsWith(QLatin1String("file://")))
-        filePath = QUrl(pathOrUrl).toLocalFile();
-    else {
-        // Plain path: canonicalize (resolves symlinks) and enforce containment.
+    } else {
+        // Plain path OR file:// URL: canonicalize (resolves symlinks) and enforce
+        // containment so a catalog entry / deep link cannot exfiltrate an
+        // arbitrary local file via set_image. The file:// branch used to skip
+        // this check entirely.
+        if (pathOrUrl.startsWith(QLatin1String("file://")))
+            filePath = QUrl(pathOrUrl).toLocalFile();
         const QString canonical = QFileInfo(filePath).canonicalFilePath();
         if (canonical.isEmpty() || !isAllowedLocalImagePath(canonical))
             return QString();
@@ -639,14 +643,30 @@ void SessionManager::destroyNativePeer()
     if (m_popoutWindowSink) m_peer->removeAuxSink(m_popoutWindowSink);
     if (m_previewWindowSink) m_peer->removeAuxSink(m_previewWindowSink);
     m_peer->stop();
-    // Synchronous delete, not deleteLater(): on the quit path the event loop
-    // never spins again, so a DeferredDelete would run ~GstRtcPeer during
-    // ~QApplication — after QCoreApplication is gone (queued emissions then
-    // dereference freed state). ~GstRtcPeer joins its worker thread, so a
-    // direct delete here is safe and quiesces the media plane before exit.
-    delete m_peer;
+    // ~GstRtcPeer joins its worker thread and drives the pipeline to NULL, which
+    // can block for seconds. Deleting on the GUI thread froze the UI on every
+    // reconnect (line 229 path). Instead hand the peer to a dedicated teardown
+    // thread; ~SessionManager quits+joins that thread while QCoreApplication is
+    // still alive (SessionManager is a child of QApplication, destroyed during
+    // ~QApplication before ~QCoreApplication), so the synchronous-delete safety
+    // the old comment required is preserved at exit.
+    GstRtcPeer *peer = m_peer;
     m_peer = nullptr;
     emit peerVideoSinkChanged();
+    if (!m_teardownThread) {
+        m_teardownThread = new QThread(this);
+        m_teardownThread->start();
+    }
+    QMetaObject::invokeMethod(m_teardownThread, [peer]() { delete peer; }, Qt::QueuedConnection);
+}
+
+SessionManager::~SessionManager()
+{
+    destroyNativePeer();
+    if (m_teardownThread) {
+        m_teardownThread->quit();
+        m_teardownThread->wait();
+    }
 }
 
 QVideoSink *SessionManager::peerVideoSink() const
@@ -1020,10 +1040,10 @@ void SessionManager::sendCharacterImageOrPrompt(const QString &image, const QStr
         fetchRemoteImage(image, prompt, rawFallback, 0);
         return;
     }
-    startImageEncodeJob(image, prompt, rawFallback);
+    startImageEncodeJob(image, prompt, rawFallback, false);
 }
 
-void SessionManager::startImageEncodeJob(const QString &image, const QString &prompt, bool rawFallback)
+void SessionManager::startImageEncodeJob(const QString &image, const QString &prompt, bool rawFallback, bool isTempDownload)
 {
     // Single-flight: a newer character switch supersedes any in-flight encode.
     if (m_imgWatcher) {
@@ -1037,13 +1057,15 @@ void SessionManager::startImageEncodeJob(const QString &image, const QString &pr
     auto *w = new QFutureWatcher<QString>(this);
     m_imgWatcher = w;
     connect(w, &QFutureWatcher<QString>::finished, this,
-            [this, w, job, image, prompt, rawFallback]() {
+            [this, w, job, image, prompt, rawFallback, isTempDownload]() {
         const QString b64 = w->result();
         w->deleteLater();
         if (w == m_imgWatcher.data())
             m_imgWatcher = nullptr;
-        // Drop the temp download copy once encoded.
-        if (image.startsWith(QStandardPaths::writableLocation(QStandardPaths::TempLocation)))
+        // Drop the temp download copy once encoded — but ONLY when this job
+        // created the file. Prefix-matching /tmp here deleted user-owned files
+        // the user picked from the temp dir.
+        if (isTempDownload)
             QFile::remove(image);
         if (job != m_imgJob)
             return; // superseded by a newer switch
@@ -1118,14 +1140,19 @@ void SessionManager::fetchRemoteImage(const QString &url, const QString &prompt,
             imageJobFailed(prompt, rawFallback);
             return;
         }
-        const QString path = dir + QStringLiteral("/ref-%1.img").arg(job);
+        const QString path = dir + QStringLiteral("/ref-%1-%2.img")
+                                 .arg(job)
+                                 .arg(QRandomGenerator::global()->generate64(), 0, 16);
         QFile f(path);
         if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate) || f.write(data) != data.size()) {
             imageJobFailed(prompt, rawFallback);
             return;
         }
+        // Owner-only perms on the downloaded copy (the dir is already 0700, this
+        // is defense in depth so the file itself is never group/world readable).
+        f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         f.close();
-        startImageEncodeJob(path, prompt, rawFallback);
+        startImageEncodeJob(path, prompt, rawFallback, true);
     });
 }
 

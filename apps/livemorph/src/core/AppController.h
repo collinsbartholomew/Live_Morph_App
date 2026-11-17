@@ -13,6 +13,7 @@ class RecordingManager;
 class ConfigManager;
 class CharacterCatalogModel;
 class PresetModel;
+class BackendClient;
 
 class AppController : public QObject
 {
@@ -51,6 +52,7 @@ public:
                            ConfigManager *config,
                            CharacterCatalogModel *catalog,
                            PresetModel *presets,
+                           BackendClient *backend,
                            QObject *parent = nullptr);
 
     QString currentPage() const { return m_currentPage; }
@@ -154,6 +156,7 @@ private:
     ConfigManager *m_config;
     CharacterCatalogModel *m_catalog;
     PresetModel *m_presets;
+    BackendClient *m_backend;
 
     QString m_currentPage = QStringLiteral("auth");
     bool m_isReady = false;

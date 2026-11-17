@@ -15,6 +15,7 @@ class WebRtcSignalingClient;
 class GstRtcPeer;
 class CameraManager;
 class QNetworkAccessManager;
+class QThread;
 template <typename T> class QFutureWatcher;
 
 class SessionManager : public QObject
@@ -71,6 +72,7 @@ public:
     explicit SessionManager(AuthManager *auth, ConfigManager *config, BackendClient *backend,
                             WebRtcSignalingClient *signaling,
                             QObject *parent = nullptr);
+    ~SessionManager() override;
 
     bool isActive() const { return m_active; }
     Status statusEnum() const { return m_status; }
@@ -189,7 +191,7 @@ private:
     // https images to a capped temp file, and encode off the GUI thread, then
     // send set_image (or fall back to the raw/composed prompt).
     void sendCharacterImageOrPrompt(const QString &image, const QString &prompt, bool rawFallback);
-    void startImageEncodeJob(const QString &image, const QString &prompt, bool rawFallback);
+    void startImageEncodeJob(const QString &image, const QString &prompt, bool rawFallback, bool isTempDownload);
     void fetchRemoteImage(const QString &url, const QString &prompt, bool rawFallback, int depth);
     void imageJobFailed(const QString &prompt, bool rawFallback);
 
@@ -244,6 +246,10 @@ private:
     QNetworkAccessManager *m_imgNam = nullptr;
     QPointer<QFutureWatcher<QString>> m_imgWatcher;
     int m_imgJob = 0; // single-flight token: only the newest image job may send
+    // Gst peer teardown (worker-thread join + pipeline NULL transition) can take
+    // seconds; run it on this thread so the GUI thread never blocks. Joined in
+    // ~SessionManager, which runs while QCoreApplication is still alive.
+    QThread *m_teardownThread = nullptr;
     int m_reconnectAttempts = 0;
     // Per-session reconnect total: m_reconnectAttempts resets on every
     // successful connect, so without this a stalling engine loops forever.

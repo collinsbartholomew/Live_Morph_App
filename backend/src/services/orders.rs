@@ -152,6 +152,7 @@ pub async fn create_plan_order(
         claimed_at: None,
         provisioned_at: None,
         credit_applied: None,
+        dev_mode: None,
     };
     let mut dev_mode = false;
 
@@ -276,6 +277,9 @@ pub async fn create_plan_order(
     match init_outcome {
         Ok(()) => {
             // Init succeeded — flip creating → pending with the provider fields.
+            // Persist dev_mode so the webhook can skip the upstream re-verify
+            // for dev-only rows (never possible in production).
+            order.dev_mode = if dev_mode { Some(true) } else { None };
             orders_coll(db, product)
                 .update_one(
                     doc! { "_id": &order.id, "status": "creating" },
@@ -291,6 +295,7 @@ pub async fn create_plan_order(
                         "crypto_status": &order.crypto_status,
                         "currency": &order.currency,
                         "amount_subunit": order.amount_subunit,
+                        "dev_mode": order.dev_mode,
                     }},
                 )
                 .await?;

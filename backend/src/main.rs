@@ -2,16 +2,6 @@
 //! Auth, credits, catalog, stream metadata, and Decart WS signaling proxy.
 //! Media (WebRTC) is peer-to-peer between Qt and Decart — never through this process.
 
-mod auth;
-mod config;
-mod db;
-mod error;
-mod models;
-mod product;
-mod realtime;
-mod routes;
-mod services;
-
 use actix_cors::Cors;
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
@@ -20,16 +10,13 @@ use actix_web::{
     web, App, HttpServer,
 };
 use futures_util::future::{ready, LocalBoxFuture, Ready};
-use config::Config;
-use db::Db;
-use std::sync::{Arc, LazyLock};
+use livemorph_backend::{auth, product, routes};
+use livemorph_backend::config::Config;
+use livemorph_backend::db::Db;
+use std::sync::Arc;
 use tracing_subscriber::{fmt, EnvFilter};
 
-/// Per-process instance id, stamped on every session row this process creates.
-/// The startup orphan reset only ends rows carrying this id (or legacy rows
-/// with none), so multiple replicas can coexist without clobbering each other.
-pub static INSTANCE_ID: LazyLock<String> =
-    LazyLock::new(|| uuid::Uuid::new_v4().simple().to_string());
+use livemorph_backend::INSTANCE_ID;
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
@@ -203,7 +190,7 @@ async fn main() -> anyhow::Result<()> {
     // Per-process instance id stamped on session rows so the startup orphan
     // reset only touches rows owned by THIS process — safe to run with multiple
     // replicas (each only resets its own dead rows).
-    let instance_id = crate::INSTANCE_ID.as_str();
+    let instance_id = INSTANCE_ID.as_str();
 
     let cfg = Arc::new(cfg);
     let bind = cfg.bind_addr();
@@ -212,7 +199,7 @@ async fn main() -> anyhow::Result<()> {
     // Registry of live realtime proxy sessions — used by the shutdown handler
     // to close each WS with 1001 so proxy tasks run their billing tail and
     // mark sessions ended instead of being killed mid-flight.
-    let proxy_tasks = web::Data::new(crate::realtime::ProxyTasks::default());
+    let proxy_tasks = web::Data::new(livemorph_backend::realtime::ProxyTasks::default());
     let proxy_tasks_server = proxy_tasks.clone();
 
     // ── Startup session-claim reset ───────────────────────────────────
@@ -310,7 +297,7 @@ async fn main() -> anyhow::Result<()> {
     // Crash-recovery: credit any paid orders whose provision crashed mid-flight
     // (provisioned + credit_applied set but no purchase ledger row). Uses the
     // unique ledger index as the exactly-once commit, so it is double-credit-proof.
-    match crate::services::billing::reconcile_orphaned_provisions(&db, &cfg).await {
+    match livemorph_backend::services::billing::reconcile_orphaned_provisions(&db, &cfg).await {
         Ok(n) if n > 0 => tracing::warn!(count = n, "startup: reconciled orphaned provisions"),
         Ok(_) => {}
         Err(e) => tracing::error!(error = %e, "startup: provision reconciler failed"),
@@ -345,7 +332,7 @@ async fn main() -> anyhow::Result<()> {
                 // so they are marked ended but never decrement active_sessions.
                 async fn reap_collection(
                     coll: &mongodb::Collection<mongodb::bson::Document>,
-                    users: &mongodb::Collection<crate::models::User>,
+                    users: &mongodb::Collection<livemorph_backend::models::User>,
                     stale_filter: &mongodb::bson::Document,
                 ) -> u64 {
                     use futures_util::TryStreamExt;
@@ -450,12 +437,12 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
                 // Audit reconciler on the same cadence (idempotent, audit-only).
-                if let Err(e) = crate::services::billing::reconcile_orphaned_provisions(&db, &cfg_reaper).await {
+                if let Err(e) = livemorph_backend::services::billing::reconcile_orphaned_provisions(&db, &cfg_reaper).await {
                     tracing::error!(error = %e, "reaper: provision reconciler failed");
                 }
                 // Pending-order sweeper: re-verify upstream so paid orders settle
                 // even if the client never polls (covers providers without an IPN).
-                match crate::routes::payments::sweep_pending_orders(&db, &cfg_reaper).await {
+                match livemorph_backend::routes::payments::sweep_pending_orders(&db, &cfg_reaper).await {
                     Ok(n) if n > 0 => tracing::warn!(count = n, "sweeper: provisioned paid orders"),
                     Ok(_) => {}
                     Err(e) => tracing::error!(error = %e, "sweeper: pending-order sweep failed"),

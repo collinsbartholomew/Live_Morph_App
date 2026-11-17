@@ -61,14 +61,17 @@ if ( cd "$BACKEND" && cargo build ) >/tmp/verify_build.log 2>&1; then
   # Only boot a local gate backend when BASE is the default; with a remote BASE
   # we must not kill or replace whatever is running there.
   if [ "$BASE" = "http://127.0.0.1:3874" ]; then
-    # Kill a previous gate-started backend (recorded PID) and, as a fallback,
-    # ANY debug backend binary — note this also kills a dev backend the user
-    # started themselves from backend/target/debug.
+    # Kill ONLY a previous gate-started backend (recorded PID). Never pkill:
+    # a pattern match also kills a dev backend the user started themselves
+    # from backend/target/debug, which must not be touched by the gate.
     if [ -f /tmp/verify_backend.pid ]; then
       kill "$(cat /tmp/verify_backend.pid)" 2>/dev/null
       sleep 1
     fi
-    pkill -f "target/debug/livemorph-backend" 2>/dev/null; sleep 1
+    # The gate backend is a local development instance: force development mode
+    # so a fresh shell (no RUST_ENV in env, .env without RUST_ENV) does not
+    # default to production and fail closed on dev-only flags.
+    export RUST_ENV=development
     GATE_STARTED_BACKEND=1
     ( cd "$BACKEND" && setsid ./target/debug/livemorph-backend > /tmp/backend.log 2>&1 < /dev/null & echo $! > /tmp/verify_backend.pid; disown )
   else
@@ -197,6 +200,8 @@ fi
 # wait on the tree see the script terminate. Restart any time with:
 #   cd backend && cargo run
 if [ "${GATE_STARTED_BACKEND:-0}" = "1" ]; then
-  pkill -f "target/debug/livemorph-backend" 2>/dev/null
+  # Reap only the gate's own recorded PID — never pkill a pattern, so a
+  # user-started dev backend survives the verify run.
+  [ -f /tmp/verify_backend.pid ] && kill "$(cat /tmp/verify_backend.pid)" 2>/dev/null
 fi
 exit $FAILED

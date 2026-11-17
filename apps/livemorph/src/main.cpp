@@ -290,7 +290,7 @@ int main(int argc, char* argv[]) {
 	auto* catalog = new CharacterCatalogModel(&app);
 	auto* presets = new PresetModel(&app);
 	auto* appCtrl =
-	    new AppController(auth, session, camera, recording, config, catalog, presets, &app);
+	    new AppController(auth, session, camera, recording, config, catalog, presets, backend, &app);
 	auto* notifier = new Notifier(&app);
 
 	// Single notification funnel: C++ signals → Notifier store → toast + center.
@@ -510,7 +510,7 @@ int main(int argc, char* argv[]) {
 				const QString secret = readInstanceSecret();
 				if (!secret.isEmpty())
 					probe.write(secret.toUtf8() + '\n');
-				const QString apiHost = QUrl(config->apiBaseUrl()).host();
+				const QString apiHost = QUrl(backend->baseUrl()).host();
 				for (const QString& arg : app.arguments()) {
 					if (isForwardableLink(arg, apiHost)) {
 						probe.write(arg.toUtf8() + '\n');
@@ -532,9 +532,9 @@ int main(int argc, char* argv[]) {
 		}
 		const QString secret = readInstanceSecret();
 		QObject::connect(
-		    lockServer, &QLocalServer::newConnection, lockServer, [appCtrl, lockServer, secret, config]() {
+		    lockServer, &QLocalServer::newConnection, lockServer, [appCtrl, lockServer, secret, config, backend]() {
 		    // Compute the API host live — Settings can change apiBaseUrl at runtime.
-		    const QString apiHost = QUrl(config->apiBaseUrl()).host();
+		    const QString apiHost = QUrl(backend->baseUrl()).host();
 			    while (QLocalSocket* client = lockServer->nextPendingConnection()) {
 				    // Defense in depth on Linux: SO_PEERCRED proves same uid.
 				    bool sameUser = true;
@@ -559,9 +559,9 @@ int main(int argc, char* argv[]) {
 				client->setReadBufferSize(16 * 1024);
 				QObject::connect(client, &QLocalSocket::disconnected, client,
 				&QLocalSocket::deleteLater);
-				QObject::connect(client, &QLocalSocket::readyRead, client, [client, appCtrl, secret, config]() {
+				QObject::connect(client, &QLocalSocket::readyRead, client, [client, appCtrl, secret, config, backend]() {
 					// Live API host (Settings can change it at runtime).
-					const QString apiHost = QUrl(config->apiBaseUrl()).host();
+					const QString apiHost = QUrl(backend->baseUrl()).host();
 					// Buffer until FULL lines are available — the secret line
 					// may arrive split across segments, and a partial line must
 					// never be compared against the secret.
@@ -807,7 +807,7 @@ int main(int argc, char* argv[]) {
 	// and fight over QSettings/sockets.
 	// Deep links from argv (protocol handler / cold launch) — same process, so
 	// no secret needed, but the same strict link filter applies.
-	const QString apiHost = QUrl(config->apiBaseUrl()).host();
+	const QString apiHost = QUrl(backend->baseUrl()).host();
 	for (const QString& arg : app.arguments()) {
 		if (isForwardableLink(arg, apiHost))
 			appCtrl->handleDeepLink(arg);

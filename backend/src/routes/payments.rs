@@ -62,8 +62,17 @@ async fn webhook_nowpayments(
 #[get("/payments/callback/paystack")]
 async fn paystack_browser_callback(
     db: web::Data<Db>,
+    req: HttpRequest,
     query: web::Query<std::collections::HashMap<String, String>>,
 ) -> HttpResponse {
+    // Unauthenticated GET that runs a cross-DB Mongo lookup on the
+    // attacker-controlled `reference` — rate-limit per IP before that work.
+    {
+        let ip = crate::auth::client_ip(&req);
+        if !crate::auth::check_rate_limit(&ip, "paystack-callback", 120, 60) {
+            return HttpResponse::TooManyRequests().finish();
+        }
+    }
     paystack_browser_callback_impl(db, query).await
 }
 
@@ -234,6 +243,7 @@ async fn create_order(
         claimed_at: None,
         provisioned_at: None,
         credit_applied: None,
+        dev_mode: None,
     };
 
     if provider == "manual" && !cfg.allow_manual_payments {
@@ -508,7 +518,7 @@ pub async fn verify_order_impl(
             if is_secondary {
                 db.payment_orders_secondary()
                     .update_one(
-                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } },
+                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } },
                         doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
                     )
                     .await?;
@@ -516,7 +526,7 @@ pub async fn verify_order_impl(
                 db.db
                     .collection::<PaymentOrder>("payment_orders")
                     .update_one(
-                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } },
+                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } },
                         doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
                     )
                     .await?;
@@ -620,7 +630,7 @@ pub async fn verify_order_impl(
             if is_secondary {
                 db.payment_orders_secondary()
                     .update_one(
-                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } },
+                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } },
                         doc! { "$set": {
                             "status": "paid",
                             "paid_at": order.paid_at,
@@ -632,7 +642,7 @@ pub async fn verify_order_impl(
                 db.db
                     .collection::<PaymentOrder>("payment_orders")
                     .update_one(
-                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } },
+                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } },
                         doc! { "$set": {
                             "status": "paid",
                             "paid_at": order.paid_at,
@@ -664,7 +674,7 @@ pub async fn verify_order_impl(
             if is_secondary {
                 db.payment_orders_secondary()
                     .update_one(
-                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } },
+                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } },
                         doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
                     )
                     .await?;
@@ -672,7 +682,7 @@ pub async fn verify_order_impl(
                 db.db
                     .collection::<PaymentOrder>("payment_orders")
                     .update_one(
-                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } },
+                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } },
                         doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
                     )
                     .await?;
@@ -690,7 +700,7 @@ pub async fn verify_order_impl(
             if is_secondary {
                 db.payment_orders_secondary()
                     .update_one(
-                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } },
+                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } },
                         doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
                     )
                     .await?;
@@ -698,7 +708,7 @@ pub async fn verify_order_impl(
                 db.db
                     .collection::<PaymentOrder>("payment_orders")
                     .update_one(
-                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } },
+                        doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } },
                         doc! { "$set": { "status": "paid", "paid_at": order.paid_at } },
                     )
                     .await?;
@@ -806,7 +816,7 @@ async fn order_status(
                     if is_secondary {
                         let _ = db.payment_orders_secondary()
                             .update_one(
-                                doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } },
+                                doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } },
                                 doc! { "$set": {
                                     "status": "paid",
                                     "paid_at": order.paid_at,
@@ -818,7 +828,7 @@ async fn order_status(
                         let _ = db.db
                             .collection::<PaymentOrder>("payment_orders")
                             .update_one(
-                                doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } },
+                                doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } },
                                 doc! { "$set": {
                                     "status": "paid",
                                     "paid_at": order.paid_at,
@@ -997,6 +1007,16 @@ async fn webhook_paystack_impl(
     req: HttpRequest,
     body: web::Bytes,
 ) -> AppResult<HttpResponse> {
+    // Per-IP rate limit: unauthenticated endpoint (signature-checked below, but
+    // the HMAC still costs CPU and the handler does Mongo reads), so cap
+    // anonymous floods before they reach the signature/Mongo work.
+    {
+        let ip = crate::auth::client_ip(&req);
+        if !crate::auth::check_rate_limit(&ip, "webhook-paystack", 120, 60) {
+            return Err(AppError::RateLimited("too many webhook calls".into(), None));
+        }
+    }
+
     // Verify HMAC SHA512 of raw body using secret (Paystack standard)
     let secret = cfg
         .paystack_webhook_secret
@@ -1034,18 +1054,10 @@ async fn webhook_paystack_impl(
         .and_then(|v| v.as_str())
         .ok_or_else(|| AppError::BadRequest("no reference".into()))?;
 
-    // Re-verify with Paystack for safety. In dev mode (fake/dev_mode orders) the
-    // reference will not exist upstream, so the re-verify is a soft check there.
-    // Re-verify with Paystack and enforce amount + currency against the order —
-    // a charge.success for the wrong amount must never provision full credits.
-    let verified = verify_transaction(&cfg, reference).await.map_err(|e| {
-        tracing::error!(error = %e, "paystack webhook re-verify failed");
-        e
-    })?;
-    if verified.status != "success" {
-        return Err(AppError::BadRequest("payment not successful upstream".into()));
-    }
-
+    // Find the order FIRST so a dev_mode row can skip the upstream re-verify
+    // (its fake reference has no real upstream transaction). The HMAC above
+    // already authenticated the sender, so for dev rows the order row is
+    // authoritative on amount/currency.
     let Some((mut order, is_secondary)) =
         find_order_any_db(&db, doc! { "provider_ref": reference }).await?
     else {
@@ -1056,25 +1068,40 @@ async fn webhook_paystack_impl(
         return Ok(HttpResponse::Ok().json(json!({ "ok": true, "already": true })));
     }
 
-    // Amount/currency must match the order exactly (amount is in subunits).
-    // Currency compare is case-insensitive so a lowercase PAYSTACK_CURRENCY
-    // config cannot silently 400 every webhook while the verify path passes.
-    if verified.amount != order.amount_subunit
-        || !verified.currency.eq_ignore_ascii_case(&order.currency)
-    {
-        tracing::error!(
-            order = %order.id, reference = %reference,
-            expected = order.amount_subunit, got = verified.amount,
-            expected_cur = %order.currency, got_cur = %verified.currency,
-            "paystack webhook amount/currency mismatch"
-        );
-        return Err(AppError::BadRequest(
-            "webhook amount/currency does not match order".into(),
-        ));
+    // Re-verify with Paystack and enforce amount + currency against the order —
+    // a charge.success for the wrong amount must never provision full credits.
+    // Skipped only for dev_mode rows outside production (no upstream txn exists).
+    let dev_row = order.dev_mode.unwrap_or(false) && !cfg.is_production();
+    if !dev_row {
+        let verified = verify_transaction(&cfg, reference).await.map_err(|e| {
+            tracing::error!(error = %e, "paystack webhook re-verify failed");
+            e
+        })?;
+        if verified.status != "success" {
+            return Err(AppError::BadRequest("payment not successful upstream".into()));
+        }
+        // Amount/currency must match the order exactly (amount is in subunits).
+        // Currency compare is case-insensitive so a lowercase PAYSTACK_CURRENCY
+        // config cannot silently 400 every webhook while the verify path passes.
+        if verified.amount != order.amount_subunit
+            || !verified.currency.eq_ignore_ascii_case(&order.currency)
+        {
+            tracing::error!(
+                order = %order.id, reference = %reference,
+                expected = order.amount_subunit, got = verified.amount,
+                expected_cur = %order.currency, got_cur = %verified.currency,
+                "paystack webhook amount/currency mismatch"
+            );
+            return Err(AppError::BadRequest(
+                "webhook amount/currency does not match order".into(),
+            ));
+        }
+    } else {
+        tracing::warn!(order = %order.id, "dev_mode order — skipping upstream re-verify (non-production)");
     }
 
     // CAS: only transition from pending/paid → paid, prevents duplicate provisioning
-    let claim_filter = doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating"] } };
+    let claim_filter = doc! { "_id": &order.id, "status": { "$in": ["pending", "paid", "creating", "cancelled"] } };
     let claim_set = doc! {
         "$set": {
             "status": "paid",
@@ -1380,6 +1407,15 @@ async fn webhook_nowpayments_impl(
     req: HttpRequest,
     body: web::Bytes,
 ) -> AppResult<HttpResponse> {
+    // Per-IP rate limit on the unauthenticated IPN endpoint (same rationale as
+    // the Paystack webhook): cap floods before the signature/Mongo work.
+    {
+        let ip = crate::auth::client_ip(&req);
+        if !crate::auth::check_rate_limit(&ip, "webhook-nowpayments", 120, 60) {
+            return Err(AppError::RateLimited("too many webhook calls".into(), None));
+        }
+    }
+
     // IPN HMAC (x-nowpayments-sig) when secret configured; required in production
     if let Some(secret) = cfg
         .nowpayments_ipn_secret
@@ -1473,7 +1509,7 @@ async fn webhook_nowpayments_impl(
     // CAS: only transition from pending/paid → paid
     let claim_filter = doc! {
         "_id": &order.id,
-        "status": { "$in": ["pending", "paid", "creating"] },
+        "status": { "$in": ["pending", "paid", "creating", "cancelled"] },
     };
     let claim_set = doc! {
         "$set": {
@@ -1524,7 +1560,11 @@ pub async fn sweep_pending_orders(db: &Db, cfg: &Arc<Config>) -> AppResult<usize
         };
         let mut cur = orders_coll
             .find(doc! {
-                "status": { "$in": ["pending", "creating"] },
+                // Include "cancelled": a user can cancel a pending order in the
+                // UI and still complete payment at the provider afterwards —
+                // the money was taken, so the sweeper must re-verify and
+                // provision (never strand a paid order as cancelled).
+                "status": { "$in": ["pending", "creating", "cancelled"] },
                 "created_at": { "$lt": bson::DateTime::from_chrono(cutoff) },
             })
             // Bound each tick so a large backlog can't pin a worker or make an
@@ -1585,7 +1625,7 @@ pub async fn sweep_pending_orders(db: &Db, cfg: &Arc<Config>) -> AppResult<usize
             };
             let claimed = orders_doc
                 .update_one(
-                    doc! { "_id": &order.id, "status": { "$in": ["pending", "creating"] } },
+                    doc! { "_id": &order.id, "status": { "$in": ["pending", "creating", "cancelled"] } },
                     doc! { "$set": { "status": "paid", "paid_at": bson::DateTime::from_chrono(Utc::now()) } },
                 )
                 .await?;

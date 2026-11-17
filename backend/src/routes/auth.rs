@@ -1091,7 +1091,24 @@ async fn upsert_user_by_email(
     }
     let mut user = User::new(email.to_string(), display_name, cfg.signup_bonus_credits);
     user.product = product.as_str().into();
-    user_store(db, product).insert_one(&user).await?;
+    if let Err(e) = user_store(db, product).insert_one(&user).await {
+        // Two concurrent first-logins for the same new email race on the unique
+        // email index — the loser re-reads the winner instead of surfacing a 500.
+        if e.to_string().contains("E11000") {
+            let winner = user_store(db, product)
+                .find_one(doc! { "email": email })
+                .await?
+                .ok_or_else(|| AppError::Internal("user vanished after E11000".into()))?;
+            user_store(db, product)
+                .update_one(
+                    doc! { "_id": &winner.id },
+                    doc! { "$set": { "last_login_at": Utc::now() } },
+                )
+                .await?;
+            return Ok(winner);
+        }
+        return Err(e.into());
+    }
     if cfg.signup_bonus_credits > 0.0 {
         let entry = crate::models::CreditLedgerEntry {
             id: crate::db::new_id(),
@@ -1445,8 +1462,6 @@ async fn oauth_google_exchange(
     if ticket.is_empty() {
         return Err(AppError::BadRequest("missing ticket".into()));
     }
-    let product = ProductId::from_request(&req);
-    let coll = oauth_store(&db, product, "oauth_tickets");
     // The verifier is part of the atomic claim filter: a ticket presented
     // without the matching verifier matches 0 rows → rejected, and the ticket
     // is NOT consumed (so the legitimate client can still retry).
@@ -1456,17 +1471,30 @@ async fn oauth_google_exchange(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .ok_or_else(|| AppError::BadRequest("missing code_verifier".into()))?;
-    let doc = coll
-        .find_one_and_update(
-            doc! {
-                "_id": ticket,
-                "consumed": false,
-                "expires_at": { "$gt": Utc::now() },
-                "verifier": verifier,
-            },
-            doc! { "$set": { "consumed": true } },
-        )
-        .await?
+    // Search BOTH product stores (like oauth_google_poll) so a client that
+    // omits X-Frontend-Id still redeems its ticket. The product that owns the
+    // ticket is then used for the user + refresh stores, keeping the JWT `aud`
+    // and the refresh row in the same product DB (no cross-product drift).
+    let mut found: Option<(ProductId, mongodb::bson::Document)> = None;
+    for prod in [ProductId::LiveMorph, ProductId::Secondary] {
+        let coll = oauth_store(&db, prod, "oauth_tickets");
+        if let Some(d) = coll
+            .find_one_and_update(
+                doc! {
+                    "_id": ticket,
+                    "consumed": false,
+                    "expires_at": { "$gt": Utc::now() },
+                    "verifier": verifier,
+                },
+                doc! { "$set": { "consumed": true } },
+            )
+            .await?
+        {
+            found = Some((prod, d));
+            break;
+        }
+    }
+    let (product, doc) = found
         .ok_or_else(|| AppError::BadRequest("invalid or expired OAuth ticket".into()))?;
 
     let user_id = doc.get_str("user_id").unwrap_or("").to_string();

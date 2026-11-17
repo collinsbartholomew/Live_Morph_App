@@ -71,6 +71,12 @@ pub struct PaymentOrder {
     /// owns the user/wallet $inc, so a crash + reclaim can never double-credit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credit_applied: Option<bool>,
+    /// True when the provider init failed outside production and the order was
+    /// left as a dev-only pending row with a fake reference. The webhook then
+    /// skips the upstream re-verify (there is no real transaction) but still
+    /// requires a valid HMAC signature. Never true in production.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dev_mode: Option<bool>,
 }
 
 impl TokenPackage {

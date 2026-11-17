@@ -2,6 +2,7 @@
 #include <QFile>
 #include <QSaveFile>
 #include <QFileInfo>
+#include <QUrl>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -542,7 +543,39 @@ QString CharacterCatalogModel::addUserCharacter(const QString &name,
              ? QStringLiteral("Character %1").arg(userCount + 1)
              : name.trimmed().left(40);
     e.category = QStringLiteral("custom");
-    e.thumbnail = image;
+    // Scheme allowlist for the stored thumbnail/reference image: only qrc
+    // resources, remote http(s), or a local file inside user-owned dirs may be
+    // kept. Anything else (file://, data:, arbitrary schemes, paths outside
+    // the user roots) is blanked so a malicious catalog entry cannot later
+    // point the session at an arbitrary local file via set_image.
+    QString thumb = image.trimmed();
+    if (!thumb.isEmpty()
+        && !thumb.startsWith(QLatin1String("qrc:"))
+        && !thumb.startsWith(QLatin1String("https://"))
+        && !thumb.startsWith(QLatin1String("http://"))) {
+        const QString local = thumb.startsWith(QLatin1String("file://"))
+                                  ? QUrl(thumb).toLocalFile()
+                                  : thumb;
+        const QString canonical = QFileInfo(local).canonicalFilePath();
+        static const QStringList roots = {
+            QStandardPaths::writableLocation(QStandardPaths::HomeLocation),
+            QStandardPaths::writableLocation(QStandardPaths::PicturesLocation),
+            QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation),
+            QStandardPaths::writableLocation(QStandardPaths::DownloadLocation),
+            QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation),
+            QStandardPaths::writableLocation(QStandardPaths::TempLocation),
+        };
+        bool allowed = false;
+        for (const QString &root : roots) {
+            if (!root.isEmpty() && (canonical == root || canonical.startsWith(root + QLatin1Char('/')))) {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed)
+            thumb.clear();
+    }
+    e.thumbnail = thumb;
     e.description = prompt;
     e.isStarter = false;
     m_all.append(e);

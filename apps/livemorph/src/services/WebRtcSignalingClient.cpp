@@ -123,9 +123,12 @@ void WebRtcSignalingClient::connectToProxy(const QString& wsBaseUrl, const QStri
 	q.addQueryItem(QStringLiteral("device_id"), DeviceIdentity::deviceId());
 	url.setQuery(q);
 
-	// Ensure path hits realtime endpoint if caller passed origin only
-	if (url.path().isEmpty() || url.path() == QLatin1String("/"))
-		url.setPath(QStringLiteral("/api/v1/realtime"));
+	// Always hit the fixed realtime path on the base origin, matching the REST
+	// client (m_baseUrl + "/api/v1/..."). Strip any path the base URL carried so
+	// WS and REST share the same prefix semantics (a base URL with a path would
+	// otherwise make WS miss /api/v1 while REST double-appended it).
+	url.setPath(QStringLiteral("/api/v1/realtime"));
+	url.setFragment(QString());
 
 	m_lastError.clear();
 	m_sessionId.clear();

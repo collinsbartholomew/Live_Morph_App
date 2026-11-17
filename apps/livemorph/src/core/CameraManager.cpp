@@ -188,6 +188,10 @@ void CameraManager::setCurrentDeviceId(const QString &id)
 void CameraManager::setupCamera()
 {
     if (m_camera) {
+        // Disconnect before replacing: deleteLater() defers destruction, so the
+        // old QCamera could still emit errorOccurred/activeChanged into this
+        // object (and touch m_camera, now repointed) until the event loop runs.
+        m_camera->disconnect(this);
         m_camera->deleteLater();
         m_camera = nullptr;
     }

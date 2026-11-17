@@ -30,6 +30,7 @@ AppController::AppController(AuthManager *auth,
                              ConfigManager *config,
                              CharacterCatalogModel *catalog,
                              PresetModel *presets,
+                             BackendClient *backend,
                              QObject *parent)
     : QObject(parent)
     , m_auth(auth)
@@ -39,6 +40,7 @@ AppController::AppController(AuthManager *auth,
     , m_config(config)
     , m_catalog(catalog)
     , m_presets(presets)
+    , m_backend(backend)
 {
     // Restore the persisted engine tier (swapTier) across launches.
     {
@@ -490,7 +492,13 @@ void AppController::handleDeepLink(const QString &url)
     // Origin allowlist: only our custom scheme or the configured API host may be
     // routed — this slot is QML-invokable, so it must not act on arbitrary URLs.
     if (u.scheme() != QLatin1String("livemorph")) {
-        const QString apiHost = m_config ? QUrl(m_config->apiBaseUrl()).host() : QString();
+        // Trusted host comes from the EFFECTIVE backend base URL (which bootstrap
+        // may have adopted from api_base), not the ConfigManager loopback default,
+        // so a payment-return link on the real API host is accepted after a
+        // bootstrap override.
+        const QString baseUrl = m_backend ? m_backend->baseUrl()
+                                          : (m_config ? m_config->apiBaseUrl() : QString());
+        const QString apiHost = QUrl(baseUrl).host();
         if (u.scheme() != QLatin1String("https") || apiHost.isEmpty() || u.host() != apiHost) {
             emit notification(tr("Ignored link (unrecognized origin)"), QStringLiteral("warning"), QString());
             return;
