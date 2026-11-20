@@ -113,3 +113,5 @@ Thumbs.db
 *.appimage
 dist/
 package/
+@OMEGA_MORPH/
+

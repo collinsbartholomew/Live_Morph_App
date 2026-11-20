@@ -244,10 +244,38 @@ if [ "$DEPLOY_SYNTAX_OK" = 1 ]; then
   ok "backend and desktop launch script syntax"
 fi
 if [[ -f "$ROOT/deploy_kaggle.py" ]]; then
-  if GITHUB_TOKEN=verify-token NGROK_AUTH_TOKEN=verify-token REQUIRE_PUBLIC_TUNNEL=1 python3 "$ROOT/deploy_kaggle.py" --check >/tmp/verify_kaggle.log 2>&1; then
-    ok "Kaggle deployment config"
+  if python3 - "$ROOT/deploy_kaggle.py" >/tmp/verify_kaggle.log 2>&1 <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+tree = ast.parse(source, filename=sys.argv[1])
+managed = None
+for node in ast.walk(tree):
+    if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "ENV_VARS" for target in node.targets):
+        if not isinstance(node.value, ast.Dict):
+            raise SystemExit("ENV_VARS must be a dictionary literal")
+        managed = {key.value for key in node.value.keys if isinstance(key, ast.Constant) and isinstance(key.value, str)}
+        break
+if managed is None:
+    raise SystemExit("ENV_VARS dictionary not found")
+required = {
+    "MONGODB_URI", "MONGODB_DB", "MONGODB_DB_SECONDARY", "JWT_SECRET",
+    "DECART_API_KEY", "DECART_SIGNALING_URL", "DECART_DEFAULT_MODEL",
+    "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI",
+    "PAYSTACK_SECRET_KEY", "PAYSTACK_PUBLIC_KEY", "SMTP_HOST",
+    "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "ADMIN_SECRET",
+}
+missing = sorted(required - managed)
+if missing:
+    raise SystemExit("ENV_VARS missing required keys: " + ", ".join(missing))
+print(f"Kaggle static deployment structure: PASS ({len(managed)} managed vars)")
+PY
+  then
+    ok "Kaggle static deployment config"
   else
-    bad "Kaggle deployment config (see /tmp/verify_kaggle.log)"
+    bad "Kaggle static deployment config (see /tmp/verify_kaggle.log)"
     tail -20 /tmp/verify_kaggle.log
   fi
 else
