@@ -62,6 +62,7 @@ node_modules/
 coverage/
 
 # ---- Spike / test scratch output ----
+@OMEGA_MORPH/
 tools/spike-m0/chrome.out
 tools/spike-m0/out/
 *.out

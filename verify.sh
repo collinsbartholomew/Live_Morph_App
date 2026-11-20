@@ -39,6 +39,7 @@ step "3/7 Ensure backend is running at $BASE"
 # The integration suite makes many same-IP auth calls, so run the gate backend
 # with test-scaled rate limits and a fresh in-memory limiter (restart if up).
 if ( cd "$BACKEND" && cargo build ) >/tmp/verify_build.log 2>&1; then
+  EXPLICIT_ADMIN_SECRET="${ADMIN_SECRET:-}"
   # Export .env KEY=VALUE lines safely (values may contain spaces/quotes).
   if [ -f "$BACKEND/.env" ]; then
     while IFS= read -r line; do
@@ -51,8 +52,10 @@ if ( cd "$BACKEND" && cargo build ) >/tmp/verify_build.log 2>&1; then
   # The suites send the test admin secret; .env ships ADMIN_SECRET empty by
   # design, so take it from backend/.test.env (single source of truth) AFTER
   # the .env export loop above.
-  if [ -z "${ADMIN_SECRET:-}" ] && [ -f "$BACKEND/.test.env" ]; then
-    _ts=$(grep -E '^ADMIN_SECRET=' "$BACKEND/.test.env" | head -1 | cut -d= -f2-)
+  if [ -n "${EXPLICIT_ADMIN_SECRET}" ]; then
+    export ADMIN_SECRET="$EXPLICIT_ADMIN_SECRET"
+  elif [ -f "$BACKEND/.test.env" ]; then
+    _ts=$(grep -E '^ADMIN_SECRET=' "$BACKEND/.test.env" | head -1 | cut -d= -f2- | sed 's/^"//; s/"$//')
     [ -n "$_ts" ] && export ADMIN_SECRET="$_ts"
   fi
   # Export BASE so the integration suite targets the same host we health-check
@@ -151,7 +154,7 @@ if [[ "$QUICK" != 1 ]]; then
 fi
 if [[ -x "$APP_DIR/build/bin/LiveMorph" ]]; then
   # QPA=offscreen required; the app sets it when --verify-qml is passed
-  if ( cd "$APP_DIR" && timeout 30 ./build/bin/LiveMorph --verify-qml ) >/tmp/verify_qml_run.log 2>&1; then
+  if ( cd "$APP_DIR" && LIVEMORPH_API_URL="$BASE" timeout 45 ./build/bin/LiveMorph --verify-qml ) >/tmp/verify_qml_run.log 2>&1; then
     ok "QML load: PASS"
   else
     bad "QML load: FAIL (see /tmp/verify_qml_run.log)"
