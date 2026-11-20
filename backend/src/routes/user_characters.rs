@@ -30,19 +30,18 @@ fn valid_image_url(u: &str) -> bool {
     if u.len() > 2000 {
         return false;
     }
-    if u.starts_with("https://") {
-        return true;
+    let Ok(parsed) = url::Url::parse(u) else {
+        return false;
+    };
+    // No embedded credentials (https://user@evil.com style confusion).
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return false;
     }
-    if u.starts_with("http://") {
-        if let Ok(parsed) = url::Url::parse(u) {
-            if parsed.scheme() != "http" {
-                return false;
-            }
-            let h = parsed.host_str().unwrap_or("");
-            return h == "127.0.0.1" || h == "::1" || h == "localhost";
-        }
+    match parsed.scheme() {
+        "https" => parsed.host_str().map(|h| !h.is_empty()).unwrap_or(false),
+        "http" => matches!(parsed.host_str().unwrap_or(""), "127.0.0.1" | "::1" | "localhost"),
+        _ => false,
     }
-    false
 }
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -91,17 +90,48 @@ async fn create_user_character(
         Some(s) => {
             let u = s.trim();
             if !valid_image_url(u) {
-                return Err(AppError::BadRequest("image_url must be https, loopback http, or a local file".into()));
+                return Err(AppError::BadRequest("image_url must be https or loopback http".into()));
             }
             Some(u.chars().take(2000).collect::<String>())
         }
         None => None,
     };
-    // Limit: max 50 user characters per user
-    let count = uc_coll(&db, &req)
-        .count_documents(doc! { "user_id": &auth.user_id })
+    // Limit: max 50 user characters per user, enforced by an ATOMIC counter
+    // reservation on the user document (a count-then-insert race let
+    // concurrent creates bypass the quota).
+    if !crate::auth::check_rate_limit(&auth.user_id, "character-create", 20, 60) {
+        return Err(AppError::RateLimited("too many character creates".into(), None));
+    }
+    let users = match ProductId::from_request(&req) {
+        ProductId::Secondary => db.users_secondary(),
+        ProductId::LiveMorph => db.users(),
+    };
+    // Initialize the counter for legacy rows created before it existed.
+    let missing = users
+        .count_documents(doc! { "_id": &auth.user_id, "character_count": { "$exists": false } })
+        .await?
+        > 0;
+    if missing {
+        let actual = uc_coll(&db, &req)
+            .count_documents(doc! { "user_id": &auth.user_id })
+            .await?;
+        users
+            .update_one(
+                doc! { "_id": &auth.user_id, "character_count": { "$exists": false } },
+                doc! { "$set": { "character_count": actual as i64 } },
+            )
+            .await?;
+    }
+    let reserved = users
+        .update_one(
+            doc! {
+                "_id": &auth.user_id,
+                "$expr": { "$lt": [{ "$ifNull": ["$character_count", 0] }, 50] },
+            },
+            doc! { "$inc": { "character_count": 1 } },
+        )
         .await?;
-    if count >= 50 {
+    if reserved.matched_count == 0 {
         return Err(AppError::BadRequest(
             "maximum 50 custom characters reached".into(),
         ));
@@ -117,7 +147,16 @@ async fn create_user_character(
         created_at: now,
         updated_at: now,
     };
-    uc_coll(&db, &req).insert_one(&character).await?;
+    if let Err(e) = uc_coll(&db, &req).insert_one(&character).await {
+        // Roll the reservation back so a failed insert never leaks quota.
+        let _ = users
+            .update_one(
+                doc! { "_id": &auth.user_id },
+                doc! { "$inc": { "character_count": -1 } },
+            )
+            .await;
+        return Err(e.into());
+    }
     Ok(HttpResponse::Created().json(json!({
         "character": UserCharacterPublic::from(&character),
     })))
@@ -162,12 +201,20 @@ async fn update_user_character(
         }
         set.insert("prompt", prompt);
     }
-    if let Some(Some(ref image_url)) = body.image_url {
-        let u = image_url.trim();
-        if !valid_image_url(u) {
-            return Err(AppError::BadRequest("image_url must be https, loopback http, or a local file".into()));
+    let mut unset = mongodb::bson::Document::new();
+    match body.image_url {
+        Some(Some(ref image_url)) => {
+            let u = image_url.trim();
+            if !valid_image_url(u) {
+                return Err(AppError::BadRequest("image_url must be https or loopback http".into()));
+            }
+            set.insert("image_url", u.to_string());
         }
-        set.insert("image_url", u.to_string());
+        // Explicit null clears the image (nested Option is intentional).
+        Some(None) => {
+            unset.insert("image_url", "");
+        }
+        None => {}
     }
     if let Some(fav) = body.is_favorite {
         set.insert("is_favorite", fav);
@@ -177,7 +224,7 @@ async fn update_user_character(
     let character = uc_coll(&db, &req)
         .find_one_and_update(
             doc! { "_id": path.as_str(), "user_id": &auth.user_id },
-            doc! { "$set": set },
+            doc! { "$set": set, "$unset": unset },
         )
         .with_options(
             FindOneAndUpdateOptions::builder()
@@ -204,5 +251,18 @@ async fn delete_user_character(
     if result.deleted_count == 0 {
         return Err(AppError::NotFound("character".into()));
     }
+    // Release the quota reservation (clamped at zero).
+    let users = match ProductId::from_request(&req) {
+        ProductId::Secondary => db.users_secondary(),
+        ProductId::LiveMorph => db.users(),
+    };
+    let _ = users
+        .update_one(
+            doc! { "_id": &auth.user_id },
+            vec![doc! { "$set": { "character_count": { "$max": [
+                { "$subtract": [{ "$ifNull": ["$character_count", 0] }, 1] }, 0
+            ] } } }],
+        )
+        .await;
     Ok(HttpResponse::Ok().json(json!({ "ok": true })))
 }

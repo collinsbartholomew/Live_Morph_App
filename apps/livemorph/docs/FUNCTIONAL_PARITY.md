@@ -42,6 +42,6 @@
 
 ## Runtime requirements
 
-1. Qt **WebEngine** in the kit for live morph video  
-2. Rust backend on configured `apiBaseUrl` (default `127.0.0.1:3874`)  
+1. GStreamer `webrtcbin` in the kit for live morph video
+2. Rust backend on the API origin configured in the frontend `.env` before compilation
 3. Valid auth JWT for signaling and payments  

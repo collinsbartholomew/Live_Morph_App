@@ -2,7 +2,7 @@
 
 Production Rust API: **auth · MongoDB · credits/tokens · Paystack · Decart WS signaling proxy**.
 
-**Build status:** `cargo check` passes on rustc 1.97 (warnings only, no errors).
+**Toolchain:** Rust 1.88, pinned in `rust-toolchain.toml`. See [the deployment guide](../docs/DEPLOYMENT.md) for production and container workflows.
 
 ## Economic model (what you described)
 
@@ -43,8 +43,13 @@ cp .env.example .env
 # Required: MONGODB_URI, JWT_SECRET, DECART_API_KEY
 # Payments:  PAYSTACK_SECRET_KEY (and optional CALLBACK_URL)
 
-# MongoDB must be reachable
-cargo run --release   # 127.0.0.1:3874
+# Validate without connecting to MongoDB, then build and run.
+bash scripts/check-config.sh release
+./run.sh release     # 127.0.0.1:3874
+
+# Or select a named env file for both preflight and runtime.
+ENV_FILE=.env.production bash scripts/check-config.sh release
+LIVEMORPH_ENV_FILE=.env.production ./run.sh release
 ```
 
 ## Payment API

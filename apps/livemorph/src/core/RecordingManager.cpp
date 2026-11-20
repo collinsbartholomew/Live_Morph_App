@@ -64,19 +64,41 @@ bool isAcceptableOutputDir(const QString &path)
     }
     return false;
 }
+
+QString availableRecordingPath(const QString &path)
+{
+    if (!QFileInfo::exists(path))
+        return path;
+    const QFileInfo info(path);
+    const QString base = info.completeBaseName();
+    const QString suffix = info.suffix();
+    for (int index = 1; index < 10000; ++index) {
+        const QString candidate = info.absolutePath() + QLatin1Char('/') + base + QLatin1Char('-')
+                                  + QString::number(index)
+                                  + (suffix.isEmpty() ? QString() : QLatin1Char('.') + suffix);
+        if (!QFileInfo::exists(candidate))
+            return candidate;
+    }
+    return {};
+}
 } // namespace
 
 RecordingManager::RecordingManager(ConfigManager *config, BackendClient *backend,
                                    CameraManager *camera, SessionManager *session, QObject *parent)
     : QObject(parent), m_config(config), m_backend(backend), m_camera(camera), m_session(session)
 {
-    m_outputDir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
-                  + QStringLiteral("/LiveMorph");
-    // MoviesLocation can be empty on minimal systems — fall back to ~/Videos
-    // or the home dir rather than writing to a root-level "/LiveMorph".
-    if (QStandardPaths::writableLocation(QStandardPaths::MoviesLocation).isEmpty())
-        m_outputDir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation)
-                      + QStringLiteral("/Videos/LiveMorph");
+    const QString movies = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+    const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+    const QString documents = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    if (!movies.isEmpty())
+        m_outputDir = movies + QStringLiteral("/LiveMorph");
+    else if (!home.isEmpty())
+        m_outputDir = home + QStringLiteral("/Videos/LiveMorph");
+    else if (!documents.isEmpty())
+        m_outputDir = documents + QStringLiteral("/LiveMorph");
+    else if (!appData.isEmpty())
+        m_outputDir = appData + QStringLiteral("/recordings");
     // Restore the persisted recordings folder across launches — but validate
     // it like a server-pushed dir: a hand-edited settings file must not be
     // able to redirect recordings outside the user's folders.
@@ -88,7 +110,8 @@ RecordingManager::RecordingManager(ConfigManager *config, BackendClient *backend
         else if (!saved.isEmpty())
             qWarning() << "RecordingManager: rejected persisted output dir:" << saved;
     }
-    QDir().mkpath(m_outputDir);
+    if (!m_outputDir.isEmpty())
+        QDir().mkpath(m_outputDir);
 
     // Morph output frames → MorphRecorder (MP4 via GStreamer). Electron parity:
     // recording captures the REMOTE morph stream, not the camera.
@@ -419,13 +442,13 @@ bool RecordingManager::promoteTempFile()
         return m_lastPath.isEmpty() ? false : QFile::exists(m_lastPath);
     if (m_tempPath == m_lastPath)
         return true;
-    QFile::remove(m_lastPath);
-    if (QFile::rename(m_tempPath, m_lastPath)) {
+    const QString destination = availableRecordingPath(m_lastPath);
+    if (!destination.isEmpty() && QFile::rename(m_tempPath, destination)) {
+        m_lastPath = destination;
         m_tempPath.clear();
         return true;
     }
     setError(tr("Could not finalize recording — kept as .part for recovery"));
-    m_tempPath.clear();
     return false;
 }
 
@@ -588,10 +611,9 @@ void RecordingManager::recoverOrphan(const QString &path)
     }
     if (!hasExt)
         base += QStringLiteral(".mp4");
-    QString dest = m_outputDir + QLatin1Char('/') + base;
-    QFile::remove(dest);
-    if (!QFile::rename(path, dest))
-        return; // rename failed — orphan stays for a later attempt
+    const QString dest = availableRecordingPath(m_outputDir + QLatin1Char('/') + base);
+    if (dest.isEmpty() || !QFile::rename(path, dest))
+        return;
     m_lastPath = dest;
     emit lastRecordingChanged();
     emit recordingSaved(dest);

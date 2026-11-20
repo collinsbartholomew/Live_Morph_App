@@ -85,6 +85,7 @@ Dialog {
             name: "x"
             iconSize: 14
             emphasis: true
+            accessibleName: qsTr("Cancel and close")
             onClicked: root.reject()
             z: Theme.zLocal5
         }
@@ -154,8 +155,7 @@ Dialog {
         // Electron: both buttons flex-1, gap-2.5, cancel OUTLINED + focused;
         // mt-6 row with pb-6 → inline footer padding 24/24.
         RowLayout {
-            anchors.left: parent.left
-            anchors.right: parent.right
+            anchors.fill: parent
             anchors.leftMargin: Theme.spacingXl
             anchors.rightMargin: Theme.spacingXl
             anchors.topMargin: Theme.spacingXl
@@ -176,24 +176,28 @@ Dialog {
                 Layout.fillWidth: true
                 height: 40
                 flat: true
+                text: root.confirmText
                 background: Rectangle {
                     radius: Theme.radiusSm
                     color: !destructiveConfirm.enabled ? Colors.surfaceElevated
+                         : !root.destructive ? (destructiveConfirm.pressed ? Colors.brandB : Colors.accent)
                          : destructiveConfirm.pressed ? Colors.dangerPressed
                          : destructiveConfirm.hovered ? Colors.statusError80
                          : Colors.statusError
                     border.width: 1
-                    border.color: destructiveConfirm.enabled ? Colors.statusError : Colors.surfaceBorderSubtle
+                    border.color: destructiveConfirm.enabled ? (root.destructive ? Colors.statusError : Colors.accent) : Colors.surfaceBorderSubtle
                     FocusRing { shown: destructiveConfirm.activeFocus; ringRadius: Theme.radiusSm }
                 }
                 contentItem: Text {
                     id: destructiveLabel
                     text: root.confirmText
-                    color: !destructiveConfirm.enabled ? Colors.textMuted : Colors.white
+                    color: !destructiveConfirm.enabled ? Colors.textMuted : root.destructive ? Colors.white : Colors.textOnAccent
                     font.pixelSize: Theme.fontMono.pixelSize
                     font.weight: Font.Bold
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
+                    width: Math.min(implicitWidth, Math.max(0, destructiveConfirm.availableWidth))
+                    elide: Text.ElideRight
                 }
                 onClicked: root.accept()
             }

@@ -2,58 +2,60 @@ import QtQuick
 import LiveMorph
 
 /**
- * BrandingFooter (Electron `ce`, ground truth):
- *   single horizontal row: "Built by" + 14px logo (opacity .5)
- *   + "TheTools Hub" link (10px muted, hover accent)
- *   → https://linktr.ee/thetoolshub
- * The legal links live in the auth terms paragraph above (Electron shows
- * the terms ONCE — the old footer duplicated them).
+ * BrandingFooter:
+ *   single horizontal row: "Built by" + logo mark + "Omega Revelation PLC" link
+ *   → https://omegarevelation.com
  */
 Item {
-    id: root
-    implicitHeight: 16
+   id: root
+   implicitHeight: 16
 
-    Row {
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 5
+   Row {
+       anchors.horizontalCenter: parent.horizontalCenter
+       spacing: 5
 
-        Text {
-            text: qsTr("Built by")
-            color: Colors.textMuted
-            font.pixelSize: Theme.fontMonoTiny.pixelSize
-            anchors.verticalCenter: parent.verticalCenter
-        }
+       Text {
+           text: qsTr("Built by")
+           color: Colors.textMuted
+           font.pixelSize: Theme.fontMonoTiny.pixelSize
+           anchors.verticalCenter: parent.verticalCenter
+       }
 
-        // 16px hex logo mark (opacity .5)
-        Hexagon {
-            size: 16
-            lineWidth: 1.5
-            lineColor: Colors.accent
-            fillColor: Colors.accent
-            opacity: 0.5
-            anchors.verticalCenter: parent.verticalCenter
-            Text {
-                anchors.centerIn: parent
-                text: "T"
-                color: Colors.textOnAccent
-                font.pixelSize: Theme.fontMicro.pixelSize
-                font.bold: true
-            }
-        }
+       // 16px hex logo mark
+       Hexagon {
+           size: 16
+           lineWidth: 1.5
+           lineColor: Colors.accent
+           fillColor: Colors.accent
+           anchors.verticalCenter: parent.verticalCenter
+           Text {
+               anchors.centerIn: parent
+               text: "O"
+               color: Colors.textOnAccent
+               font.pixelSize: Theme.fontMicro.pixelSize
+               font.bold: true
+           }
+       }
 
-        Text {
-            text: qsTr("TheTools Hub")
-            color: brandMa.containsMouse ? Colors.accent : Colors.textMuted
-            font.pixelSize: Theme.fontMonoTiny.pixelSize
-            anchors.verticalCenter: parent.verticalCenter
+       Text {
+           text: qsTr("Omega Revelation PLC")
+           color: brandMa.containsMouse || activeFocus ? Colors.accent : Colors.textMuted
+           font.pixelSize: Theme.fontMonoTiny.pixelSize
+           font.underline: brandMa.containsMouse || activeFocus
+           anchors.verticalCenter: parent.verticalCenter
+           activeFocusOnTab: true
+           Accessible.role: Accessible.Link
+           Accessible.name: qsTr("Omega Revelation PLC website")
+           Keys.onReturnPressed: Backend.openExternal(Constants.urlSite)
+           Keys.onSpacePressed: Backend.openExternal(Constants.urlSite)
 
-            MouseArea {
-                id: brandMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Backend.openExternal(Constants.urlLinktree)
-            }
-        }
-    }
+           MouseArea {
+               id: brandMa
+               anchors.fill: parent
+               hoverEnabled: true
+               cursorShape: Qt.PointingHandCursor
+               onClicked: Backend.openExternal(Constants.urlSite)
+           }
+       }
+   }
 }

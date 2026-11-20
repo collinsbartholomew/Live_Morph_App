@@ -67,7 +67,8 @@ WebRtcSignalingClient::WebRtcSignalingClient(QObject* parent) : QObject(parent) 
 }
 
 void WebRtcSignalingClient::connectToProxy(const QString& wsBaseUrl, const QString& token,
-                                           const QString& model, const QString& tier) {
+                                           const QString& model, const QString& tier,
+                                           const QString& intentSessionId) {
 	m_userDisconnect = false;
 	// m_autoReconnect is a sticky policy flag (setAutoReconnect) — do NOT reset
 	// it here, or one explicit reconnect silently disables auto-reconnect.
@@ -75,6 +76,7 @@ void WebRtcSignalingClient::connectToProxy(const QString& wsBaseUrl, const QStri
 	m_token = token;
 	m_model = model.isEmpty() ? QStringLiteral("lucy-2.1") : model;
 	m_tier = tier.isEmpty() ? QStringLiteral("standard") : tier;
+	m_intentSessionId = intentSessionId;
 	m_reconnectTimer.stop();
 
 	if (m_socket.state() != QAbstractSocket::UnconnectedState) {
@@ -120,6 +122,8 @@ void WebRtcSignalingClient::connectToProxy(const QString& wsBaseUrl, const QStri
 	q.addQueryItem(QStringLiteral("frontend_id"), QStringLiteral("livemorph"));
 	q.addQueryItem(QStringLiteral("model"), m_model);
 	q.addQueryItem(QStringLiteral("tier"), m_tier);
+	if (!m_intentSessionId.isEmpty())
+		q.addQueryItem(QStringLiteral("session_id"), m_intentSessionId);
 	q.addQueryItem(QStringLiteral("device_id"), DeviceIdentity::deviceId());
 	url.setQuery(q);
 

@@ -42,8 +42,8 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: Theme.spacingXl
-        anchors.rightMargin: Theme.spacingXl
+        anchors.leftMargin: Theme.spacingLg
+        anchors.rightMargin: Theme.spacingLg
         spacing: Theme.gapCard
 
         // ── Camera picker button + popover ────────────────────────────
@@ -76,7 +76,7 @@ Rectangle {
                 }
                 Text {
                     text: CameraCtrl.currentDeviceName
-                    width: 130 // Electron max-w-[130px]
+                    width: root.width < 780 ? 96 : 130
                     elide: Text.ElideRight
                     color: camPopup.visible ? Colors.accentHover
                          : (Session.isActive ? Colors.textMuted : Colors.textSecondary)
@@ -373,7 +373,7 @@ Rectangle {
             // Neutral for Standard; HD gets the white accent (a tier, not a
             // warning — amber is reserved for functional states only).
             property bool isHd: App.swapTier === "hd"
-            visible: !Session.isActive
+            visible: !Session.isActive && root.width > 680
             height: 20
             width: rateLbl.implicitWidth + 12
             radius: Theme.radiusFull
@@ -416,7 +416,7 @@ Rectangle {
             property bool hasCharacter: workingLabel !== qsTr("No character")
             // Narrow stage strip: drop the chip (the character is visible in
             // the workshop anyway) instead of clipping the row.
-            visible: parent.width > Theme.stageControlsNarrow
+            visible: parent.width > 840
             Layout.alignment: Qt.AlignVCenter
             readonly property bool activeIsStarter: {
                 const id = Session.activeCharacterId

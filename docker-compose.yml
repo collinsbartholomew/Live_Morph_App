@@ -10,7 +10,7 @@ services:
     volumes:
       - mongo_data:/data/db
     ports:
-      - "127.0.0.1:27017:27017"
+      - "${MONGO_BIND:-127.0.0.1}:${MONGO_PORT:-27017}:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -20,23 +20,24 @@ services:
   api:
     build: ./backend
     restart: unless-stopped
+    init: true
     depends_on:
       mongo:
         condition: service_healthy
     ports:
       # Local dev stack only — publish on loopback so the API is never exposed
       # off-host (the container itself still listens on HOST=0.0.0.0 inside).
-      - "127.0.0.1:3874:3874"
+      - "${LIVEMORPH_API_BIND:-127.0.0.1}:${LIVEMORPH_API_PORT:-3874}:3874"
     env_file:
       # Optional: when ./backend/.env is missing the api container still needs
       # JWT_SECRET and DECART_API_KEY (they have no defaults) — provide them
       # via the environment: section below or a shell env var. Compose >= 2.24
       # long syntax.
-      - path: ./backend/.env
+      - path: ${LIVEMORPH_BACKEND_ENV_FILE:-./backend/.env}
         required: false
     environment:
-      MONGODB_URI: mongodb://mongo:27017
-      MONGODB_DB: livemorph
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017}
+      MONGODB_DB: ${MONGODB_DB:-livemorph}
       SECONDARY_PRODUCT_ID: ${SECONDARY_PRODUCT_ID:-secondary}
       MONGODB_DB_SECONDARY: ${MONGODB_DB_SECONDARY:-secondary}
       HOST: 0.0.0.0
@@ -50,12 +51,13 @@ services:
       # in development mode. For a real staging/prod deploy, point
       # MONGODB_URI at a TLS-enabled Mongo (mongodb+srv:// or ?tls=true) and
       # set RUST_ENV=production here.
-      RUST_ENV: development
+      RUST_ENV: ${RUST_ENV:-development}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3874/api/v1/health"]
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 6m
 
 volumes:
   mongo_data:

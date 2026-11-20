@@ -74,6 +74,7 @@ public:
     /// normalization as apiBaseUrl() — a set-but-invalid value must NOT count
     /// as an override (single source of truth for the env check).
     static bool envApiUrlOverrideActive();
+    static QString normalizeApiBaseUrl(const QString &raw);
     /// Raw LIVEMORPH_TURN_URLS value (validated downstream by GstRtcPeer's
     /// ICE-URI check before it reaches webrtcbin).
     static QByteArray turnUrlsEnv();

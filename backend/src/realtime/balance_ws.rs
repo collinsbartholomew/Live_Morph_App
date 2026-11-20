@@ -102,15 +102,25 @@ pub async fn balance_ws(
         return Err(actix_web::error::ErrorForbidden("cross-origin websocket rejected"));
     }
 
+    // Bound long-lived balance sockets globally, not just by handshake rate.
+    static SLOTS: std::sync::LazyLock<tokio::sync::Semaphore> =
+        std::sync::LazyLock::new(|| tokio::sync::Semaphore::new(1024));
+    let slot = SLOTS
+        .try_acquire()
+        .map_err(|_| actix_web::error::ErrorTooManyRequests("too many balance sockets"))?;
+
     let (res, mut session, mut msg_stream) = actix_ws::handle(&req, stream)?;
     let db = db.clone();
     let user_id = claims.sub.clone();
     let product_str = product.as_str().to_string();
     let min_credits = cfg.min_credits_to_start;
+    let expected_ver = claims.ver;
 
     info!(%user_id, product = %product_str, "balance WS connected");
 
     actix_web::rt::spawn(async move {
+        // The semaphore permit is released when this task exits for ANY reason.
+        let _slot = slot;
         let cfg_rev =
             crate::config::config_revision();
         let base = cfg.public_base_url.clone();
@@ -130,7 +140,8 @@ pub async fn balance_ws(
 
         let mut tick = tokio::time::interval(Duration::from_secs(10));
         let mut n = 0u32;
-        let mut last_total: Option<f64> = None;
+        let mut last_state: Option<(f64, f64, Option<String>, i64, bool)> = None;
+        let mut last_config_rev = cfg_rev;
         let force_sent = false;
         loop {
             tokio::select! {
@@ -144,10 +155,20 @@ pub async fn balance_ws(
                         }
                     };
                     let Some(u) = user else { break; };
+                    if !u.is_active || u.token_version != expected_ver {
+                        let _ = session.close(Some(actix_ws::CloseReason {
+                            code: actix_ws::CloseCode::Policy,
+                            description: Some("session revoked".into()),
+                        })).await;
+                        break;
+                    }
                     let total = u.total_credits();
-                    let changed = last_total.map(|p| (p - total).abs() > 1e-6).unwrap_or(true);
+                    let state = (total, u.credit_balance, u.plan.clone(), u.token_version, u.is_active);
+                    // Compare the full visible state: equal totals can still
+                    // hide a bonus purchase, a burn, or a plan change.
+                    let changed = last_state.as_ref() != Some(&state);
                     if changed {
-                        last_total = Some(total);
+                        last_state = Some(state);
                         let msg = json!({
                             "type": "balance_update",
                             "product": product_str,
@@ -181,16 +202,19 @@ pub async fn balance_ws(
                         break;
                     }
                     n += 1;
-                    if n.is_multiple_of(3) { // ~30s at 10s ticks
-                        // ~30s — tell clients to re-fetch bootstrap if revision moved
+                    if n.is_multiple_of(3) {
+                        // Notify only on an actual revision change, not every 30s.
                         let cfg_rev = crate::config::config_revision();
-                        let _ = session.text(json!({
-                            "type": "config_update",
-                            "product": product_str,
-                            "user_id": user_id,
-                            "config_revision": cfg_rev,
-                            "action": "refetch_bootstrap",
-                        }).to_string()).await;
+                        if cfg_rev != last_config_rev {
+                            last_config_rev = cfg_rev;
+                            let _ = session.text(json!({
+                                "type": "config_update",
+                                "product": product_str,
+                                "user_id": user_id,
+                                "config_revision": cfg_rev,
+                                "action": "refetch_bootstrap",
+                            }).to_string()).await;
+                        }
                     }
                 }
                 // Silence bound: a peer that vanished without a TCP FIN is only

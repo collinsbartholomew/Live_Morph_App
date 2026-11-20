@@ -45,7 +45,7 @@ public:
 
 public slots:
     /// token = JWT access token from AuthManager; model e.g. "lucy-2.1"; tier e.g. "standard" or "hd"
-    void connectToProxy(const QString &wsBaseUrl, const QString &token, const QString &model, const QString &tier = {});
+    void connectToProxy(const QString &wsBaseUrl, const QString &token, const QString &model, const QString &tier = {}, const QString &intentSessionId = {});
     void disconnectFromProxy();
     void setAutoReconnect(bool enabled);
     /// Optional fresh-token source — the reconnect ladder calls it at dial
@@ -100,6 +100,7 @@ private:
     std::function<QString()> m_tokenProvider;
     QString m_model;
     QString m_tier;
+    QString m_intentSessionId;
     bool m_autoReconnect = false;
     bool m_userDisconnect = false;
     int m_reconnectAttempt = 0;

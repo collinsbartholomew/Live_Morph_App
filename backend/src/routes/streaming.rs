@@ -75,6 +75,11 @@ async fn session_start(
     let character_id: String = body.character_id.clone().unwrap_or_default().chars().take(64).collect();
     let tier = body.tier.clone().unwrap_or_else(|| "standard".into());
     let tier = if tier == "hd" || tier == "standard" { tier } else { "standard".into() };
+    if tier == "hd" && !user.hd_entitled() {
+        return Err(crate::error::AppError::Forbidden(
+            "HD tier requires an eligible paid plan".into(),
+        ));
+    }
     let session_doc = doc! {
         "_id": &sid,
         "user_id": &auth.user_id,
@@ -130,6 +135,12 @@ async fn session_end(
 ) -> AppResult<HttpResponse> {
     let product_id = product(&req);
     let auth = require_user(&req)?;
+    let body = {
+        let mut b = body.into_inner();
+        b.reason = b.reason.map(|r| r.chars().take(256).collect());
+        b.session_id = b.session_id.map(|s| s.chars().take(128).collect());
+        b
+    };
     let tasks = req
         .app_data::<web::Data<crate::realtime::ProxyTasks>>()
         .cloned();

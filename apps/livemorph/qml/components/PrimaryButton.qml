@@ -1,97 +1,98 @@
 import QtQuick
 import QtQuick.Controls as Controls
+import QtQuick.Layouts
 import LiveMorph
 
-/**
- * Obsidian Hex primary button: solid white fill with black uppercase-mono
- * label and a small hex glyph — no gradient, no glow halo, crisp near-square
- * corners with a 1px white hairline. Disabled = flat elevated surface.
- * All state changes instant (animations banned project-wide).
- */
 Controls.Button {
     id: control
 
     property bool busy: false
-    property bool cta: false // ActionBar "START MORPH" style variant
-    property int heightOverride: 0 // callers that need a non-standard height
-    // Transient state overrides (save-button saved/error flashes).
+    property bool cta: false
+    property int heightOverride: 0
+    property string iconName: ""
     property var stateBg: undefined
     property var stateBorder: undefined
     property var stateFg: undefined
 
-    implicitHeight: heightOverride > 0 ? heightOverride : (cta ? 48 : 36)
-    leftPadding: cta ? 24 : 16
-    rightPadding: cta ? 24 : 16
+    implicitHeight: heightOverride > 0 ? heightOverride : (cta ? 52 : 40)
+    implicitWidth: Math.max(104, contentRow.implicitWidth + leftPadding + rightPadding)
+    leftPadding: cta ? 24 : 18
+    rightPadding: cta ? 24 : 18
+    topPadding: 0
+    bottomPadding: 0
     font: Theme.fontUi
+    hoverEnabled: true
 
     background: Item {
-        // Solid inverted fill for the enabled primary state
-        Rectangle {
-            anchors.fill: parent
-            radius: Theme.radiusMd
-            visible: control.stateBg === undefined && control.enabled
-            color: Colors.accent
-            border.width: 1
-            border.color: Colors.accent
-            // Pressed dim (instant, no animation)
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                color: Colors.black
-                opacity: control.pressed ? 0.18 : 0
-            }
-        }
         Rectangle {
             anchors.fill: parent
             radius: Theme.radiusMd
             color: control.stateBg !== undefined ? control.stateBg
-                 : !control.enabled ? Colors.surfaceElevated : Colors.transparent
+                 : !control.enabled ? Colors.surfaceElevated
+                 : control.pressed ? Colors.brandB
+                 : control.hovered ? Colors.white : Colors.accent
             border.width: 1
             border.color: control.stateBorder !== undefined ? control.stateBorder
-                 : !control.enabled ? Colors.surfaceBorderSubtle
-                 : Colors.transparent
+                        : !control.enabled ? Colors.surfaceBorder : Colors.accent
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 3
+                color: !control.enabled || control.stateBg !== undefined ? Colors.transparent : Colors.textOnAccent
+                opacity: control.hovered || control.activeFocus ? 0.9 : 0.35
+            }
         }
-        // Hex-tech corner frame on hover/focus over the solid inverted fill
+
         CornerTicks {
             anchors.fill: parent
-            visible: (control.hovered || control.activeFocus) && control.enabled && control.stateBg === undefined
-            inset: 4
-            tickSize: 6
-            thickness: 1.5
-            color: Colors.textOnAccent
-            opacity: 0.85
+            visible: control.enabled
+            inset: 5
+            tickSize: control.cta ? 8 : 6
+            thickness: 1
+            color: control.stateFg !== undefined ? control.stateFg : Colors.textOnAccent
+            opacity: control.hovered || control.activeFocus || control.cta ? 0.8 : 0.3
         }
+
         FocusRing {
             shown: control.activeFocus
             ringRadius: Theme.radiusMd
         }
     }
 
-    contentItem: Row {
+    contentItem: RowLayout {
+        id: contentRow
         spacing: Theme.spacingSm
-        anchors.centerIn: parent
-        // Clamp to the button's inner width so a long/translated label elides
-        // instead of painting outside the button bounds.
-        width: Math.min(implicitWidth, Math.max(0, control.width - control.leftPadding - control.rightPadding))
-        clip: true
+
+        Item { Layout.fillWidth: true; visible: control.cta }
 
         Hexagon {
-            size: 9
+            visible: !control.busy && control.iconName.length === 0
+            size: control.cta ? 11 : 9
             lineWidth: 1.5
             lineColor: control.stateFg !== undefined ? control.stateFg
                      : !control.enabled ? Colors.textMuted : Colors.textOnAccent
-            anchors.verticalCenter: parent.verticalCenter
-            visible: !control.busy
+            Layout.alignment: Qt.AlignVCenter
+        }
+
+        Icon {
+            visible: !control.busy && control.iconName.length > 0
+            name: control.iconName
+            size: control.cta ? Theme.iconMd : Theme.iconSm
+            color: control.stateFg !== undefined ? control.stateFg
+                 : !control.enabled ? Colors.textMuted : Colors.textOnAccent
+            Layout.alignment: Qt.AlignVCenter
         }
 
         Hexagon {
-            size: 10
-            lineWidth: 0
-            fillColor: control.stateFg !== undefined ? control.stateFg
-                     : !control.enabled ? Colors.textMuted : Colors.textOnAccent
-            opacity: 0.85
-            anchors.verticalCenter: parent.verticalCenter
             visible: control.busy
+            size: 10
+            lineWidth: 1.5
+            lineColor: control.stateFg !== undefined ? control.stateFg
+                     : !control.enabled ? Colors.textMuted : Colors.textOnAccent
+            fillColor: Colors.transparent
+            Layout.alignment: Qt.AlignVCenter
         }
 
         Text {
@@ -99,16 +100,18 @@ Controls.Button {
             color: control.stateFg !== undefined ? control.stateFg
                  : !control.enabled ? Colors.textMuted : Colors.textOnAccent
             font.family: control.font.family
-            font.pixelSize: control.cta ? 14 : Theme.fontUi.pixelSize
+            font.pixelSize: control.cta ? 14 : Theme.fontSmall.pixelSize
             font.weight: Font.Bold
             font.capitalization: control.cta ? Font.AllUppercase : Font.MixedCase
-            font.letterSpacing: control.cta ? Theme.trackingCta : 0
-            anchors.verticalCenter: parent.verticalCenter
+            font.letterSpacing: control.cta ? 1.2 : 0
             horizontalAlignment: Text.AlignHCenter
-            width: Math.min(implicitWidth, Math.max(0, parent.width - 19))
+            verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
+            maximumLineCount: 1
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
         }
-    }
 
-    scale: control.pressed ? 0.98 : 1.0
+        Item { Layout.fillWidth: true; visible: control.cta }
+    }
 }

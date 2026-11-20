@@ -47,9 +47,14 @@ Item {
     // Feature hex frame at the focus
     property real featureHex: 0
     property real featureHexAlpha: 0.6
+    property int depthEvery: 0
+    property int circuitEvery: 0
+    property real depthAlpha: 0.12
+    property var circuitNodes: []
 
     onCellSizeChanged: canvas.requestPaint()
     onLineColorChanged: canvas.requestPaint()
+    onLineColorStrongChanged: canvas.requestPaint()
     onLineWidthChanged: canvas.requestPaint()
     onFillColorChanged: canvas.requestPaint()
     onHighlightCellsChanged: canvas.requestPaint()
@@ -67,6 +72,9 @@ Item {
     onConstellationAlphaChanged: canvas.requestPaint()
     onFeatureHexChanged: canvas.requestPaint()
     onFeatureHexAlphaChanged: canvas.requestPaint()
+    onDepthEveryChanged: canvas.requestPaint()
+    onCircuitEveryChanged: canvas.requestPaint()
+    onDepthAlphaChanged: canvas.requestPaint()
 
     Canvas {
         id: canvas
@@ -94,6 +102,54 @@ Item {
             return 1 - t * t
         }
 
+        function paintPrism(ctx, cx, cy, s, alpha) {
+            var depth = s * 0.24
+            var rightX = cx + s
+            var rightY = cy
+            var lowerRightX = cx + s * 0.5
+            var lowerRightY = cy + Math.sqrt(3) * s * 0.5
+            var lowerLeftX = cx - s * 0.5
+            var lowerLeftY = lowerRightY
+            ctx.beginPath()
+            ctx.moveTo(rightX, rightY)
+            ctx.lineTo(lowerRightX, lowerRightY)
+            ctx.lineTo(lowerRightX, lowerRightY + depth)
+            ctx.lineTo(rightX, rightY + depth)
+            ctx.closePath()
+            ctx.fillStyle = Qt.rgba(0, 0, 0, 0.7 * alpha)
+            ctx.fill()
+            ctx.beginPath()
+            ctx.moveTo(lowerRightX, lowerRightY)
+            ctx.lineTo(lowerLeftX, lowerLeftY)
+            ctx.lineTo(lowerLeftX, lowerLeftY + depth)
+            ctx.lineTo(lowerRightX, lowerRightY + depth)
+            ctx.closePath()
+            ctx.fillStyle = Qt.rgba(root.lineColorStrong.r, root.lineColorStrong.g, root.lineColorStrong.b, root.depthAlpha * alpha)
+            ctx.fill()
+            canvas.hexPath(ctx, cx, cy, s - root.lineWidth / 2)
+            ctx.fillStyle = Qt.rgba(root.lineColorStrong.r, root.lineColorStrong.g, root.lineColorStrong.b, root.depthAlpha * 0.45 * alpha)
+            ctx.fill()
+        }
+
+        function paintCircuits(ctx) {
+            var nodes = root.circuitNodes
+            if (nodes.length < 2)
+                return
+            ctx.strokeStyle = root.lineColorStrong
+            ctx.lineWidth = root.lineWidth
+            ctx.globalAlpha = 0.34
+            for (var i = 0; i + 1 < nodes.length; i += 2) {
+                var a = nodes[i]
+                var b = nodes[i + 1]
+                ctx.beginPath()
+                ctx.moveTo(a.x, a.y)
+                ctx.lineTo(b.x, a.y)
+                ctx.lineTo(b.x, b.y)
+                ctx.stroke()
+            }
+            ctx.globalAlpha = 1
+        }
+
         function paintGrid(ctx, size, alphaScale, fx, fy, fade, isPrimary, hl) {
             var s = size / 2
             var hStep = 1.5 * s
@@ -110,6 +166,14 @@ Item {
                     var key = c + "," + r
                     var hot = isPrimary && hl[key] === true
                     var hash = Math.abs(c * 31 + r * 17) // deterministic per-cell
+                    var dimensional = isPrimary && root.depthEvery > 0 && hash % root.depthEvery === 0
+                    if (dimensional)
+                        paintPrism(ctx, cx, cy, s - root.lineWidth / 2, alpha)
+                    if (isPrimary && root.circuitEvery > 0 && hash % root.circuitEvery === 0) {
+                        var nodes = root.circuitNodes.slice()
+                        nodes.push({ x: cx, y: cy })
+                        root.circuitNodes = nodes
+                    }
 
                     canvas.hexPath(ctx, cx, cy, s - root.lineWidth / 2)
 
@@ -183,7 +247,9 @@ Item {
             }
 
             // 4) primary lattice with spotlight fade + sparkle + emphasis + constellation
+            root.circuitNodes = []
             paintGrid(ctx, root.cellSize, 1.0, fx, fy, fade, true, hl)
+            paintCircuits(ctx)
         }
         Component.onCompleted: requestPaint()
         onWidthChanged: requestPaint()

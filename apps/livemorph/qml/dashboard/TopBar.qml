@@ -23,7 +23,8 @@ Rectangle {
     // Tour anchor export + open hook (Electron topup step opens the menu)
     property var tourAccount: accountBtn
     function openAccountMenuForTour() {
-        accountMenu.visible ? accountMenu.close() : accountMenu.open()
+        if (!accountMenu.visible)
+            accountMenu.open()
     }
     function closeAccountMenu() {
         if (accountMenu.visible)
@@ -37,7 +38,7 @@ Rectangle {
     signal openNotifications()
     signal openWhatsNew()
 
-    color: Colors.surfaceBase
+    color: Colors.surfaceRaised
     implicitHeight: Theme.topBarHeight
 
     Rectangle {
@@ -52,7 +53,48 @@ Rectangle {
         anchors.fill: parent
         anchors.leftMargin: Theme.spacingLg
         anchors.rightMargin: Theme.spacingLg
-        spacing: Theme.spacingSm
+        spacing: Theme.spacingMd
+
+        HexBadge {
+            size: 34
+            iconName: "wand-sparkles"
+            iconSize: 16
+            lineColor: Colors.accent30
+            fillColor: Colors.accent10
+            iconColor: Colors.accent
+            Layout.alignment: Qt.AlignVCenter
+        }
+
+        Column {
+            Layout.preferredWidth: root.narrow ? 176 : 210
+            Layout.maximumWidth: 210
+            Layout.alignment: Qt.AlignVCenter
+            spacing: 2
+            Row {
+                spacing: 6
+                Hexagon {
+                    size: 7
+                    lineWidth: 0
+                    fillColor: Session.isActive ? Colors.statusSuccess : Colors.textMuted
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    text: qsTr("CREATIVE WORKSPACE")
+                    color: Colors.textMuted
+                    font.family: Theme.fontMicro.family; font.pixelSize: Theme.fontMicro.pixelSize
+                    font.letterSpacing: 1
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+            Text {
+                width: parent.width
+                text: Session.activeCharacterName.length ? Session.activeCharacterName : qsTr("Choose your next reality")
+                color: Colors.textPrimary
+                font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                font.weight: Font.Bold
+                elide: Text.ElideRight
+            }
+        }
 
         StatusPill {
             visible: !root.narrow
@@ -71,10 +113,75 @@ Rectangle {
             Layout.fillWidth: true
         }
 
+        Button {
+            id: creditsButton
+            text: qsTr("Top up credits")
+            Accessible.name: text
+            Layout.preferredWidth: root.narrow ? 112 : 148
+            Layout.preferredHeight: 40
+            Layout.alignment: Qt.AlignVCenter
+            padding: 0
+            hoverEnabled: true
+            onClicked: root.openBuyCredits()
+            background: Rectangle {
+                color: creditsButton.hovered ? Colors.surfaceElevated : Colors.surfaceBase
+                border.color: creditsButton.activeFocus ? Colors.accent : Colors.surfaceBorder
+                border.width: 1
+                radius: Theme.radiusMd
+                FocusRing { shown: creditsButton.activeFocus; ringRadius: Theme.radiusMd }
+            }
+            contentItem: RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: Theme.spacingSm
+                Icon {
+                    name: "coins"
+                    size: Theme.iconSm
+                    color: Colors.textSecondary
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 0
+                    Text {
+                        text: (Auth.creditBalance + Auth.bonusBalance).toLocaleString(Qt.locale(I18n.uiLocaleName()), 'f', 0) + " CR"
+                        color: Auth.creditBalance + Auth.bonusBalance <= 0 ? Colors.statusError : Colors.textPrimary
+                        font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                        font.weight: Font.Bold
+                        width: parent.width
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        visible: !root.narrow
+                        text: qsTr("TOP UP")
+                        color: Colors.textMuted
+                        font.family: Theme.fontMicro.family; font.pixelSize: Theme.fontMicro.pixelSize
+                        font.letterSpacing: 1
+                    }
+                }
+                Icon {
+                    name: "plus"
+                    size: 12
+                    color: Colors.textMuted
+                    Layout.alignment: Qt.AlignVCenter
+                }
+            }
+        }
+
+        IconButton {
+            name: "help-circle"
+            accessibleName: qsTr("Help and keyboard shortcuts")
+            width: 36
+            height: 36
+            Layout.alignment: Qt.AlignVCenter
+            onClicked: root.openHelp()
+        }
+
         // ── Notifications bell (28×28 bordered translucent rest-state) ──
         Rectangle {
-            width: 28
-            height: 28
+            width: 36
+            height: 36
             radius: Theme.radiusMd
             activeFocusOnTab: true
             Accessible.role: Accessible.Button
@@ -156,8 +263,8 @@ Rectangle {
                 shown: accountMa.containsMouse && !accountMenu.visible
             }
 
-            width: root.narrow ? 28 : 48
-            height: 28
+            width: root.narrow ? 40 : 160
+            height: 40
             radius: Theme.radiusMd
             readonly property bool lowCredits: Auth.isAuthenticated && Auth.creditBalance <= 0
             color: accountMenu.visible ? Colors.accent12
@@ -202,6 +309,16 @@ Rectangle {
                         font.pixelSize: Theme.fontMonoTiny.pixelSize
                         font.weight: Font.Bold
                     }
+                }
+
+                Text {
+                    visible: !root.narrow
+                    text: Auth.displayName || Auth.email || qsTr("Account")
+                    color: Colors.textSecondary
+                    font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                    width: 82
+                    elide: Text.ElideRight
+                    anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Icon {

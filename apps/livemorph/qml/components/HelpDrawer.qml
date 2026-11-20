@@ -147,7 +147,7 @@ Item {
             anchors.fill: parent
             cellSize: Theme.honeycombCell
             lineColor: Colors.honeycombLineFaint
-            opacity: 0.4
+            opacity: 0.16
         }
 
         // Panel hairline — solid white rule with hex ticks at the ends

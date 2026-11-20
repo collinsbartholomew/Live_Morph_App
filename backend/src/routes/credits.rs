@@ -102,24 +102,42 @@ async fn admin_add(
             .find_one(doc! { "_id": &auth.user_id })
             .await?
             .ok_or_else(|| AppError::NotFound("user".into()))?;
-        // Atomic claim: a key can only be redeemed once, and only by the product it was issued for.
-        let claimed = credit_keys_coll(&db, product)
-            .find_one_and_update(
-                doc! { "key_hash": hash_token(&key), "product": product.as_str(), "used": false },
-                doc! {
-                    "$set": {
-                        "used": true,
-                        "user_id": &user.id,
-                        "redeemed_at": Utc::now(),
-                    }
-                },
-            )
-            .await?;
-        let Some(kd) = claimed else {
+        let key_hash = hash_token(&key);
+        let keys = credit_keys_coll(&db, product);
+        let kd = keys
+            .find_one(doc! { "key_hash": &key_hash, "product": product.as_str() })
+            .await?
+            .ok_or_else(|| AppError::Conflict(
+                "credit key is invalid or has already been used".into(),
+            ))?;
+        let used = kd.get_bool("used").unwrap_or(false);
+        let owner = kd.get_str("user_id").ok();
+        if used && owner != Some(user.id.as_str()) {
             return Err(AppError::Conflict(
                 "credit key is invalid or has already been used".into(),
             ));
-        };
+        }
+        if !used {
+            // Atomic claim: a key can only be redeemed once, and only by the
+            // product it was issued for.
+            let claimed = keys
+                .find_one_and_update(
+                    doc! { "key_hash": &key_hash, "product": product.as_str(), "used": false },
+                    doc! {
+                        "$set": {
+                            "used": true,
+                            "user_id": &user.id,
+                            "redeemed_at": Utc::now(),
+                        }
+                    },
+                )
+                .await?;
+            if claimed.is_none() {
+                return Err(AppError::Conflict(
+                    "credit key is invalid or has already been used".into(),
+                ));
+            }
+        }
         let credits = kd
             .get_f64("credits")
             .ok()
@@ -129,23 +147,40 @@ async fn admin_add(
                 _ => None,
             }))
             .unwrap_or(0.0);
-        if credits <= 0.0 {
+        if !credits.is_finite() || credits <= 0.0 {
             return Err(AppError::Internal("credit key has no balance".into()));
         }
-        users_coll
-            .update_one(
-                doc! { "_id": &user.id },
+        // Exactly-once credit anchored on the USER document: the key claim
+        // above may succeed and the process crash before the increment — a
+        // retry then resumes here (the key is owned by this user) and the
+        // redeemed_credit_keys marker guarantees the increment lands once.
+        use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+        let updated = users_coll
+            .find_one_and_update(
+                doc! { "_id": &user.id, "redeemed_credit_keys": { "$ne": &key_hash } },
                 doc! {
                     "$inc": { "credit_balance": credits },
+                    "$push": { "redeemed_credit_keys": { "$each": [&key_hash], "$slice": -10_000 } },
                     "$set": { "updated_at": Utc::now() },
                 },
             )
+            .with_options(
+                FindOneAndUpdateOptions::builder()
+                    .return_document(ReturnDocument::After)
+                    .build(),
+            )
             .await?;
-        let fresh = users_coll
-            .find_one(doc! { "_id": &user.id })
-            .await?
-            .ok_or_else(|| AppError::NotFound("user".into()))?;
-        ledger_coll
+        let (fresh, already) = match updated {
+            Some(u) => (u, false),
+            None => {
+                // Marker already present: this key was fully redeemed before
+                // (not a crash-resume) — preserve the original 409 contract.
+                return Err(AppError::Conflict(
+                    "credit key is invalid or has already been used".into(),
+                ));
+            }
+        };
+        if let Err(e) = ledger_coll
             .insert_one(CreditLedgerEntry {
                 id: new_id(),
                 user_id: user.id.clone(),
@@ -153,14 +188,20 @@ async fn admin_add(
                 balance_after: fresh.total_credits(),
                 kind: "credit_key".into(),
                 // Store only the hash — a DB dump must not reveal redeemable keys.
-                ref_id: Some(hash_token(&key)),
+                ref_id: Some(key_hash.clone()),
                 note: Some("manual credit key redemption".into()),
                 created_at: bson::DateTime::from_chrono(Utc::now()),
             })
-            .await?;
+            .await
+        {
+            if !e.to_string().contains("E11000") {
+                tracing::warn!(error = %e, "credit-key ledger insert failed");
+            }
+        }
         return Ok(HttpResponse::Ok().json(json!({
             "ok": true,
-            "credits_added": credits,
+            "already": already,
+            "credits_added": if already { 0.0 } else { credits },
             "credit_balance": fresh.credit_balance,
             "bonus_balance": fresh.bonus_balance,
             "total": fresh.total_credits(),
@@ -213,6 +254,13 @@ async fn admin_add(
         }
     }
 
+    for v in [body.amount, body.set_total].into_iter().flatten() {
+        if !v.is_finite() || v.abs() > 1_000_000.0 {
+            return Err(AppError::BadRequest(
+                "amount/set_total must be finite and within ±1000000".into(),
+            ));
+        }
+    }
     let (delta, label) = if let Some(total) = body.set_total {
         (total - target.total_credits(), "admin_set_total".to_string())
     } else if let Some(amount) = body.amount {
@@ -370,6 +418,9 @@ async fn credits_keys_issue(
     let provided = body.admin_secret.as_deref().unwrap_or("");
     if expected.is_empty() || !bool::from(subtle::ConstantTimeEq::ct_eq(expected.as_bytes(), provided.as_bytes())) {
         return Err(AppError::Forbidden("admin secret required".into()));
+    }
+    if !body.credits.unwrap_or(1000.0).is_finite() {
+        return Err(AppError::BadRequest("credits must be finite".into()));
     }
     let credits = body.credits.unwrap_or(1000.0).clamp(10.0, 500_000.0);
     let count = body.count.unwrap_or(1).clamp(1, 100);
@@ -569,18 +620,41 @@ async fn burn_credits(
     body: web::Json<BurnBody>,
 ) -> AppResult<HttpResponse> {
     let auth = require_user(&req)?;
+    if !crate::auth::check_rate_limit(&auth.user_id, "credits-burn", 30, 60) {
+        return Err(AppError::RateLimited("too many burn requests".into(), None));
+    }
     let product = ProductId::from_request(&req);
     let amount = body.amount;
-    if amount <= 0.0 || !amount.is_finite() {
-        return Err(AppError::BadRequest("amount must be positive".into()));
+    // Minimum charge quantum: sub-quantum f64 burns would round back to an
+    // unchanged balance while still appending ledger rows (free DB spam).
+    if !amount.is_finite() || amount < 0.001 {
+        return Err(AppError::BadRequest(
+            "amount must be finite and >= 0.001 credits".into(),
+        ));
     }
-    // Select the correct user collection and ledger based on product
-    let (_users_coll_name, ledger_coll) = match product {
-        ProductId::Secondary => ("users_secondary", db.ledger_secondary()),
-        _ => ("users", db.ledger()),
+    if amount > 1_000_000.0 {
+        return Err(AppError::BadRequest("amount too large".into()));
+    }
+    let reason = body
+        .reason
+        .as_deref()
+        .or(body.product.as_deref())
+        .map(|s| s.chars().take(256).collect::<String>());
+    let session_id = body
+        .session_id
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.chars().take(128).collect::<String>());
+    let ledger_coll = match product {
+        ProductId::Secondary => db.ledger_secondary(),
+        _ => db.ledger(),
     };
-    // Atomic debit: only matches if total credits >= amount (prevents double-spend races)
-    let filter = doc! {
+    let users_coll = match product {
+        ProductId::Secondary => db.users_secondary(),
+        _ => db.users(),
+    };
+    let balance_filter = doc! {
         "_id": &auth.user_id,
         "$expr": {
             "$gte": [
@@ -592,48 +666,111 @@ async fn burn_credits(
             ]
         }
     };
-    let users_coll = match product {
-        ProductId::Secondary => db.users_secondary(),
-        _ => db.users(),
-    };
-    // Atomic debit via a single aggregation-pipeline update: take from bonus
-    // first, then credit, clamping each field at zero. This removes the
-    // read-then-split TOCTOU that could otherwise drive a field negative under
-    // concurrent burns. The `$expr` filter above still bounds the *total*.
-    let pipeline = vec![
-        doc! {
-            "$set": {
-                "bonus_balance": {
-                    "$max": [
-                        { "$subtract": ["$bonus_balance", amount] },
-                        0.0,
-                    ]
-                },
-                "credit_balance": {
-                    "$max": [
+    let mut debit_stage = doc! {
+        "bonus_balance": {
+            "$max": [
+                { "$subtract": ["$bonus_balance", amount] },
+                0.0,
+            ]
+        },
+        "credit_balance": {
+            "$max": [
+                {
+                    "$subtract": [
+                        "$credit_balance",
                         {
                             "$subtract": [
-                                "$credit_balance",
-                                {
-                                    "$subtract": [
-                                        amount,
-                                        { "$min": ["$bonus_balance", amount] },
-                                    ]
-                                },
+                                amount,
+                                { "$min": ["$bonus_balance", amount] },
                             ]
                         },
-                        0.0,
                     ]
                 },
-                "updated_at": chrono::Utc::now(),
+                0.0,
+            ]
+        },
+        "updated_at": chrono::Utc::now(),
+    };
+
+    if let Some(sid) = session_id.clone() {
+        // Exactly-once burn keyed by session_id: the user document itself is
+        // the idempotency anchor. The atomic update only matches when this
+        // session was never burned AND the balance covers the amount; the same
+        // write records the session marker, so a retry (or a crash between the
+        // debit and the audit insert) can never double-debit.
+        use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+        let mut filter = balance_filter.clone();
+        filter.insert("burn_sessions", doc! { "$ne": &sid });
+        debit_stage.insert(
+            "burn_sessions",
+            doc! { "$slice": [
+                { "$concatArrays": [ { "$ifNull": ["$burn_sessions", []] }, [sid.clone()] ] },
+                -10_000
+            ] },
+        );
+        let updated = users_coll
+            .find_one_and_update(filter, vec![doc! { "$set": debit_stage }])
+            .with_options(
+                FindOneAndUpdateOptions::builder()
+                    .return_document(ReturnDocument::After)
+                    .build(),
+            )
+            .await?;
+        let Some(fresh) = updated else {
+            // Distinguish an idempotent replay from insufficient funds.
+            let replayed = users_coll
+                .count_documents(doc! { "_id": &auth.user_id, "burn_sessions": &sid })
+                .await?
+                > 0;
+            if replayed {
+                let fresh = users_coll
+                    .find_one(doc! { "_id": &auth.user_id })
+                    .await?
+                    .ok_or_else(|| AppError::NotFound("user".into()))?;
+                return Ok(HttpResponse::Ok().json(serde_json::json!({
+                    "ok": true,
+                    "already": true,
+                    "credit_balance": fresh.credit_balance,
+                    "bonus_balance": fresh.bonus_balance,
+                    "total": fresh.total_credits(),
+                    "product": fresh.product,
+                })));
+            }
+            return Err(AppError::InsufficientCredits);
+        };
+        let entry = crate::models::CreditLedgerEntry {
+            id: crate::db::new_id(),
+            user_id: auth.user_id.clone(),
+            delta: -amount,
+            balance_after: fresh.total_credits(),
+            kind: "burn".into(),
+            ref_id: Some(sid),
+            note: reason,
+            created_at: bson::DateTime::from_chrono(chrono::Utc::now()),
+        };
+        // Audit-only: a duplicate ledger row must never fail the (already
+        // committed, exactly-once) debit.
+        if let Err(e) = ledger_coll.insert_one(&entry).await {
+            if !e.to_string().contains("E11000") {
+                tracing::warn!(error = %e, "burn ledger insert failed");
             }
         }
-    ];
-    let result = users_coll.update_one(filter, pipeline).await?;
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "ok": true,
+            "credit_balance": fresh.credit_balance,
+            "bonus_balance": fresh.bonus_balance,
+            "total": fresh.total_credits(),
+            "product": fresh.product,
+        })));
+    }
+
+    // No idempotency key supplied: plain atomic debit (legacy behavior).
+    let result = users_coll
+        .update_one(balance_filter, vec![doc! { "$set": debit_stage }])
+        .await?;
     if result.matched_count == 0 {
         return Err(AppError::InsufficientCredits);
     }
-    // Re-fetch to get the actual post-debit balance for the ledger + response.
     let fresh = users_coll
         .find_one(doc! { "_id": &auth.user_id })
         .await?
@@ -645,8 +782,8 @@ async fn burn_credits(
         delta: -amount,
         balance_after,
         kind: "burn".into(),
-        ref_id: body.session_id.clone(),
-        note: body.reason.clone().or_else(|| body.product.clone()),
+        ref_id: None,
+        note: reason,
         created_at: bson::DateTime::from_chrono(chrono::Utc::now()),
     };
     ledger_coll.insert_one(&entry).await?;

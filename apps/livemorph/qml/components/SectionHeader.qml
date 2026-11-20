@@ -33,6 +33,8 @@ Item {
             text: root.text.toUpperCase()
             color: root.labelColor
             font: Theme.fontLabel
+            width: Math.min(implicitWidth, Math.max(0, root.width - 32))
+            elide: Text.ElideRight
             anchors.verticalCenter: parent.verticalCenter
         }
     }

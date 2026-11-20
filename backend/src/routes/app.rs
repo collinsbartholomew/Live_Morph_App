@@ -13,21 +13,29 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(support_tickets);
 }
 
-fn update_payload(_cfg: &Config) -> serde_json::Value {
-    let latest =
-        std::env::var("APP_LATEST_VERSION").unwrap_or_else(|_| env!("CARGO_PKG_VERSION").into());
+fn update_payload(cfg: &Config) -> serde_json::Value {
+    use crate::runtime_env as renv;
+    let latest = renv::app_latest_version();
     let current = env!("CARGO_PKG_VERSION");
-    let download = std::env::var("APP_DOWNLOAD_URL").unwrap_or_default();
-    let notes = std::env::var("APP_UPDATE_NOTES").unwrap_or_default();
+    let download = renv::app_download_url();
+    let notes = renv::app_update_notes();
     // sha256 of the download artifact — the client refuses to install an update
     // whose digest doesn't match (or isn't provided) when a URL is set.
-    let sha256 = std::env::var("APP_UPDATE_SHA256").unwrap_or_default();
-    let force = std::env::var("APP_FORCE_UPDATE")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
-    let available = latest != current && !latest.is_empty();
+    let sha256 = renv::app_update_sha256();
+    let force = renv::app_force_update();
+    // Never announce an update the client cannot actually install: the
+    // artifact must be HTTPS in production and carry a valid SHA-256 digest.
+    let url_ok = if cfg.is_production() {
+        download.starts_with("https://")
+    } else {
+        download.starts_with("https://") || download.starts_with("http://")
+    };
+    let sha_ok = sha256.len() == 64 && sha256.chars().all(|c| c.is_ascii_hexdigit());
+    let artifact_ready = url_ok && sha_ok;
+    let available = latest != current && !latest.is_empty() && artifact_ready;
     json!({
         "update_available": available,
+        "artifact_ready": artifact_ready,
         "force": force,
         "forceUpdate": force,
         "current_version": current,
@@ -39,6 +47,29 @@ fn update_payload(_cfg: &Config) -> serde_json::Value {
         "notes": notes,
         "products": [ProductId::LiveMorph.as_str(), ProductId::Secondary.as_str()],
     })
+}
+
+fn apply_client_version(payload: &mut serde_json::Value, client_version: &str) {
+    let client_version = client_version.trim();
+    if client_version.is_empty() {
+        return;
+    }
+    let latest = payload
+        .get("latest_version")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let artifact_ready = payload
+        .get("artifact_ready")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if let Some(obj) = payload.as_object_mut() {
+        obj.insert("current_version".into(), json!(client_version));
+        obj.insert(
+            "update_available".into(),
+            json!(!latest.is_empty() && latest != client_version && artifact_ready),
+        );
+    }
 }
 
 #[derive(Deserialize)]
@@ -59,10 +90,32 @@ async fn check_updates(
     if let Some(body) = body {
         if let Some(obj) = p.as_object_mut() {
             obj.insert("platform".into(), json!(body.platform));
-            obj.insert("current".into(), json!(body.version));
         }
+        apply_client_version(&mut p, body.version.as_deref().unwrap_or_default());
     }
     HttpResponse::Ok().json(p)
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::*;
+
+    #[test]
+    fn update_is_evaluated_against_the_client_version() {
+        let mut payload = json!({
+            "latest_version": "1.9.0",
+            "artifact_ready": true,
+            "update_available": false,
+        });
+        apply_client_version(&mut payload, "1.8.0");
+        assert_eq!(payload["update_available"], json!(true));
+        assert_eq!(payload["current_version"], json!("1.8.0"));
+        apply_client_version(&mut payload, "1.9.0");
+        assert_eq!(payload["update_available"], json!(false));
+        payload["artifact_ready"] = json!(false);
+        apply_client_version(&mut payload, "1.8.0");
+        assert_eq!(payload["update_available"], json!(false));
+    }
 }
 
 #[derive(Deserialize)]
@@ -105,9 +158,42 @@ async fn support_tickets(
     let user_id = Some(user.user_id.clone());
     let ticket_id = Uuid::new_v4().to_string();
     let subject_raw = body.subject.clone().unwrap_or_else(|| "General".into());
-    let subject: String = subject_raw.chars().take(200).collect();
+    let subject: String = subject_raw.trim().chars().take(200).collect();
     let message_raw = body.message.clone().unwrap_or_default();
-    let message: String = message_raw.chars().take(4000).collect();
+    let message: String = message_raw.trim().chars().take(4000).collect();
+    if subject.is_empty() || message.is_empty() {
+        return HttpResponse::BadRequest().json(json!({
+            "ok": false,
+            "error": "subject and message must not be empty",
+        }));
+    }
+    // Per-user open-ticket quota (on top of the per-IP burst limit) so one
+    // account cannot persist unlimited email-bearing tickets over time.
+    let coll = match product {
+        ProductId::Secondary => db
+            .db_secondary
+            .collection::<mongodb::bson::Document>("support_tickets"),
+        ProductId::LiveMorph => db.db.collection::<mongodb::bson::Document>("support_tickets"),
+    };
+    match coll
+        .count_documents(mongodb::bson::doc! { "user_id": &user_id, "status": "open" })
+        .await
+    {
+        Ok(open) if open >= 20 => {
+            return HttpResponse::TooManyRequests().json(json!({
+                "ok": false,
+                "error": "too many open tickets — wait for support to respond",
+            }));
+        }
+        Ok(_) => {}
+        Err(e) => {
+            tracing::warn!(error = %e, "support ticket quota check failed");
+            return HttpResponse::InternalServerError().json(json!({
+                "ok": false,
+                "error": "failed to save ticket",
+            }));
+        }
+    }
     let created_at = chrono::Utc::now();
     let doc = json!({
         "_id": &ticket_id,
@@ -119,12 +205,6 @@ async fn support_tickets(
         "status": "open",
         "created_at": created_at.to_rfc3339(),
     });
-    let coll = match product {
-        ProductId::Secondary => db
-            .db_secondary
-            .collection::<mongodb::bson::Document>("support_tickets"),
-        ProductId::LiveMorph => db.db.collection::<mongodb::bson::Document>("support_tickets"),
-    };
     match mongodb::bson::to_document(&doc) {
         Ok(bson_doc) => {
             if let Err(e) = coll.insert_one(bson_doc).await {
@@ -147,9 +227,5 @@ async fn support_tickets(
     HttpResponse::Ok().json(json!({
         "ok": true,
         "ticket_id": ticket_id,
-        "subject": subject,
-        "message": message,
-        "email": email,
-        "user_id": user_id,
     }))
 }

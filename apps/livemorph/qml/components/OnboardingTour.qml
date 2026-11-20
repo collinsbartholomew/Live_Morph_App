@@ -38,10 +38,12 @@ Item {
             targetPrompts = top.prompts || null
             targetPrivacy = top.privacy || null
             targetObs = top.obs || null
-            if (top.topup && top.topup.openAccountMenuForTour)
+            if (top.topup && top.topup.openAccountMenuForTour) {
                 topupHook = top.topup
-            else
+                targetTopup = top.topup.tourAccount || top.topup
+            } else {
                 targetTopup = top.topup || null
+            }
         } else {
             targetTop = top; targetStage = stage; targetWorkshop = workshop; targetAction = action
             targetEngine = engine || null
@@ -67,18 +69,18 @@ Item {
             // Electron onboarding.addCharacter (act: become)
             title: qsTr("Who you become"),
             body: qsTr("Drop in a photo of any face or character to become it, or pick one of the ready-made characters above."),
-            key: "stage"
+            key: "workshop"
         },
         {
             // Electron onboarding.hitBeginSwap (act: go live)
             title: qsTr("One button, live"),
             body: qsTr("Begin Swap starts the transformation. Your camera drops to a corner and the swapped output takes the Stage."),
-            key: "engine"
+            key: "action"
         },
         {
             // Electron onboarding.swapModes (act: go live) — interpolates live rates
             title: qsTr("Standard or HD"),
-            body: qsTr("Standard is watermark-free at %1 credits/sec. HD adds smooth 30fps at the same %2 credits/sec. Switch here between swaps.")
+            body: qsTr("Standard costs %1 credits/sec. HD delivers smooth 30fps at %2 credits/sec. Switch engines between swaps.")
                 .arg(Session.creditsPerSecond.toFixed(0))
                 .arg((Session.creditsPerSecond * (Backend.hdMultiplier || 1)).toFixed(0)),
             key: "engine"
@@ -87,19 +89,19 @@ Item {
             // Electron onboarding.liveEdit (act: go live)
             title: qsTr("Change it mid-swap"),
             body: qsTr("Open the prompt bar to adjust your look without stopping, and the background bar to put yourself somewhere else. Both apply to the live swap."),
-            key: "stage"
+            key: "prompts"
         },
         {
             // Electron onboarding.privacy (act: become)
             title: qsTr("Private by default"),
             body: qsTr("This keeps your real camera off the output between swaps, so viewers only ever see the swapped result."),
-            key: "stage"
+            key: "privacy"
         },
         {
             // Electron onboarding.streamOBS (act: on stream)
             title: qsTr("Straight into your stream"),
             body: qsTr("The OBS button starts a stream your broadcast app can capture, or drag it straight into an OBS scene. The output also works as a virtual camera in Zoom and Discord."),
-            key: "engine"
+            key: "obs"
         },
         {
             // Electron onboarding.credits (act: on stream) — opens the account menu
@@ -174,8 +176,8 @@ Item {
         if (root.step === 0) { // welcome — no anchor in Electron
             hx = -9999; hy = -9999; hw = 0; hh = 0
             card.x = Math.max(16, (root.width - Math.min(root.width - 48, 320)) / 2)
-            card.y = Math.max(16, (root.height - card.implicitHeight) / 2)
-            card.width = Math.min(root.width - 48, 320)
+            card.y = Math.max(16, (root.height - card.height) / 2)
+            card.width = Math.min(root.width - 48, 360)
             return
         }
         hx = r.x; hy = r.y; hw = r.width; hh = r.height
@@ -185,8 +187,8 @@ Item {
     function positionCard() {
         // Prefer below hole; if no room, above; clamp to margins
         var margin = 16
-        var cw = Math.min(root.width - 48, 320)
-        var ch = card.implicitHeight
+        var cw = Math.min(root.width - 48, 360)
+        var ch = card.height
         var cx = hx + (hw - cw) / 2
         cx = Math.max(margin, Math.min(root.width - cw - margin, cx))
         var cy = hy + hh + 16
@@ -200,11 +202,18 @@ Item {
     }
 
     onStepChanged: {
+        cardScroll.contentY = 0
         Qt.callLater(refreshHole)
         onStepChangedEnsureMenu()
-        Qt.callLater(card.forceActiveFocus) // Electron: autofocus after mount
+        Qt.callLater(nextButton.forceActiveFocus)
     }
-    onOpenChanged: if (open) Qt.callLater(refreshHole)
+    onOpenChanged: {
+        if (open) {
+            Qt.callLater(refreshHole)
+        } else if (topupHook && topupHook.closeAccountMenu) {
+            topupHook.closeAccountMenu()
+        }
+    }
     onWidthChanged: if (open) Qt.callLater(refreshHole)
     onHeightChanged: if (open) Qt.callLater(refreshHole)
 
@@ -290,7 +299,7 @@ Item {
         Config.onboardingDone = true
         root.open = false
     }
-    Keys.onTabPressed: card.forceActiveFocus() // trap Tab inside the card
+    Keys.onTabPressed: nextButton.forceActiveFocus()
     Keys.onReturnPressed: advance()
     Keys.onRightPressed: advance()
     Keys.onLeftPressed: root.step = Math.max(0, root.step - 1)
@@ -308,9 +317,11 @@ Item {
     // Card
     Rectangle {
         id: card
-        width: 320
+        width: 360
         implicitHeight: cardCol.implicitHeight + 32
-        height: implicitHeight
+        height: Math.min(implicitHeight, root.height - 32)
+        Accessible.role: Accessible.Dialog
+        Accessible.name: (root.steps[root.step] || {title: ""}).title
         radius: Theme.radiusLg
         color: Colors.surfaceOverlay
         border.color: Colors.surfaceBorder
@@ -365,13 +376,21 @@ Item {
             z: Theme.zLocal3
         }
 
-        ColumnLayout {
-            id: cardCol
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: Theme.padSection
-            spacing: Theme.spacingMd
+        Flickable {
+            id: cardScroll
+            anchors.fill: parent
+            contentWidth: width
+            contentHeight: cardCol.implicitHeight + Theme.padSection * 2
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: StyledScrollBar { thin: true }
+
+            ColumnLayout {
+                id: cardCol
+                x: Theme.padSection
+                y: Theme.padSection
+                width: cardScroll.width - Theme.padSection * 2
+                spacing: Theme.spacingMd
 
             RowLayout {
                 Layout.fillWidth: true
@@ -403,25 +422,15 @@ Item {
                 }
                 Item { Layout.fillWidth: true }
                 // Electron: X-icon skip with tooltip
-                Rectangle {
-                    width: 24; height: 24; radius: Theme.radiusMd
-                    color: skipXMa.containsMouse ? Colors.textMuted10 : Colors.transparent
-                    Icon {
-                        anchors.centerIn: parent
-                        name: "x"
-                        size: 12
-                        color: skipXMa.containsMouse ? Colors.textPrimary
-                             : Colors.textMuted60
-                    }
-                    MouseArea {
-                        id: skipXMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            Config.onboardingDone = true
-                            root.open = false
-                        }
+                IconButton {
+                    name: "x"
+                    iconSize: 12
+                    width: 28
+                    height: 28
+                    accessibleName: qsTr("Skip tour")
+                    onClicked: {
+                        Config.onboardingDone = true
+                        root.open = false
                     }
                 }
             }
@@ -485,44 +494,25 @@ Item {
                 Layout.topMargin: Theme.spacingSm
                 Layout.fillWidth: true
                 // Back: icon-only (Electron)
-                Rectangle {
-                    width: 26; height: 26; radius: Theme.radiusMd
-                    color: backMa.containsMouse && root.step > 0 ? Colors.overlay30 : Colors.transparent
-                    opacity: root.step > 0 ? 1 : 0.25
-                    Icon {
-                        anchors.centerIn: parent
-                        name: "chevron-left"
-                        size: 14
-                        color: Colors.textSecondary
-                    }
-                    MouseArea {
-                        id: backMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        enabled: root.step > 0
-                        onClicked: root.step = Math.max(0, root.step - 1)
-                    }
+                IconButton {
+                    name: "chevron-left"
+                    iconSize: 14
+                    width: 30
+                    height: 30
+                    accessibleName: qsTr("Previous step")
+                    enabled: root.step > 0
+                    onClicked: root.step = Math.max(0, root.step - 1)
                 }
-                Text {
+                GhostButton {
                     text: qsTr("Skip tour")
-                    color: skipMa.containsMouse ? Colors.textSecondary : Colors.textMuted
-                    font.pixelSize: Theme.fontLabel.pixelSize
-                    MouseArea {
-                        id: skipMa
-                        anchors.fill: parent
-                        anchors.margins: -4
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            Config.onboardingDone = true
-                            root.open = false
-                        }
+                    onClicked: {
+                        Config.onboardingDone = true
+                        root.open = false
                     }
                 }
                 Item { Layout.fillWidth: true }
                 PrimaryButton {
-                    // Electron final-step label
+                    id: nextButton
                     text: root.step === root.steps.length - 1 ? qsTr("Got it") : qsTr("Next")
                     implicitHeight: 30
                     onClicked: {
@@ -536,6 +526,14 @@ Item {
                 }
             }
         }
+        }
+    }
+
+    Timer {
+        interval: 250
+        repeat: true
+        running: root.open
+        onTriggered: root.refreshHole()
     }
 
     function start() {

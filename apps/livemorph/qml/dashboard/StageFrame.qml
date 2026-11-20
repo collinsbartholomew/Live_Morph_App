@@ -368,7 +368,7 @@ Rectangle {
         anchors.fill: parent
         // Electron: empty/swap-only state — camera-off now renders the
         // camera-error pill instead of this content.
-        visible: !Config.showCameraBeforeSwap && !Session.isActive && CameraCtrl.isActive
+        visible: !Session.isActive && (!CameraCtrl.isActive || !Config.showCameraBeforeSwap)
         z: Theme.zLocal4
 
         Rectangle { anchors.fill: parent; color: Colors.surfaceBase }
@@ -400,31 +400,15 @@ Rectangle {
             width: Math.min(320, parent.width - 48)
 
             // Brand monogram cell with a play glyph (shared BrandMark)
-            Item {
-                width: 64
-                height: 64
+            HexSculpture {
+                size: 148
+                illuminated: false
                 anchors.horizontalCenter: parent.horizontalCenter
-                BrandMark {
-                    anchors.centerIn: parent
-                    size: 64
-                    letter: ""
-                    lineWidth: 1.5
-                    lineColor: Colors.white
-                    fillColor: Colors.white
-                    letterColor: Colors.black
-                }
-                Icon {
-                    anchors.centerIn: parent
-                    name: "play"
-                    size: 24
-                    color: Colors.black
-                    emphasis: true
-                }
             }
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: qsTr("Ready to stream")
+                text: qsTr("Your stage is ready")
                 color: Colors.textPrimary
                 font: Theme.fontHeading
             }
@@ -764,8 +748,8 @@ Rectangle {
                               : (Session.cooldownActive
                                  ? qsTr("Try again in %n second", "Try again in %n seconds", Session.cooldownRemainingSec)
                                  : qsTr("Try again"))
-                        enabled: Session.status !== SessionManager.InsufficientCredits
-                                 && !Session.cooldownActive
+                        enabled: Session.status === SessionManager.InsufficientCredits
+                                 || !Session.cooldownActive
                         onClicked: {
                             root.errorDismissed = true
                             if (Session.status === SessionManager.InsufficientCredits)

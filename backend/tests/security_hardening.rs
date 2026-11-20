@@ -145,6 +145,7 @@ fn nowpayments_status_classification() {
     // provisions credits; `confirmed` is still in flight.
     assert!(nowpayments::is_paid("finished"));
     assert!(!nowpayments::is_paid("CONFIRMED"));
+    assert!(nowpayments::is_in_flight("CONFIRMED"));
     assert!(nowpayments::is_terminal_failure("expired"));
     assert!(nowpayments::is_in_flight("waiting"));
     assert!(!nowpayments::is_paid("waiting"));

@@ -171,6 +171,37 @@ SessionManager::SessionManager(AuthManager *auth, ConfigManager *config, Backend
         }
     });
 
+    if (m_backend) {
+        connect(m_backend, &BackendClient::streamingSessionStarted, this,
+                [this](quint64 requestId, const QVariantMap &result) {
+            const QString sessionId = result.value(QStringLiteral("session_id")).toString();
+            if (!m_sessionStartPending || requestId != m_sessionStartRequestId || !m_active) {
+                if (!sessionId.isEmpty())
+                    m_backend->endStreamingSession(sessionId, QStringLiteral("superseded"));
+                return;
+            }
+            m_sessionStartPending = false;
+            m_restSessionId = sessionId;
+            QString model = result.value(QStringLiteral("model")).toString();
+            if (model.isEmpty())
+                model = m_config ? m_config->defaultModel() : QStringLiteral("lucy-2.6");
+            m_connectingProactively = true;
+            m_reconnectTimer.stop();
+            m_signaling->connectToProxy(wsBaseUrl(), m_auth->accessToken(), model, m_tier, m_restSessionId);
+            m_connectWatchdog.start(kConnectTimeoutMs);
+        });
+        connect(m_backend, &BackendClient::streamingSessionStartFailed, this,
+                [this](quint64 requestId, const QString &message) {
+            if (!m_sessionStartPending || requestId != m_sessionStartRequestId)
+                return;
+            m_sessionStartPending = false;
+            m_sessionStartRequestId = 0;
+            setStatus(Status::Error, message, ErrorKind::Connection);
+            emit error(message);
+            stopSession();
+        });
+    }
+
     wireSignaling();
 }
 
@@ -240,6 +271,10 @@ void SessionManager::wireSignaling()
             emit firstFrameChanged();
             // Apply character / prompt to live session
             pushActiveTargetsToProvider();
+            if (!m_sessionAnnounced) {
+                m_sessionAnnounced = true;
+                emit sessionStarted();
+            }
         } else if (!m_signalingConnected && m_active && m_wantReconnect) {
             // Unexpected drop — unless WE closed the socket to reconnect
             // (the close of an in-flight handshake must not re-arm us).
@@ -477,8 +512,13 @@ void SessionManager::createNativePeer()
             else
                 qWarning() << "SessionManager: rejecting malformed STUN URL from backend";
         } else if (u.startsWith(QLatin1String("turn"))) {
-            if (iceUriRe.match(u).hasMatch())
-                turn = u;
+            QString normalized = u;
+            if (u.startsWith(QLatin1String("turns:")))
+                normalized = QStringLiteral("turns://") + u.mid(6);
+            else if (u.startsWith(QLatin1String("turn:")))
+                normalized = QStringLiteral("turn://") + u.mid(5);
+            if (iceUriRe.match(normalized).hasMatch())
+                turn = normalized;
             else
                 qWarning() << "SessionManager: rejecting malformed TURN URL from backend";
         }
@@ -490,9 +530,7 @@ void SessionManager::createNativePeer()
     // provides credentials (ICE: "turn:host:3478?transport=udp" →
     // webrtcbin: "turn://user:cred@host:3478?transport=udp").
     if (!turn.isEmpty() && m_backend && !m_backend->turnUser().isEmpty()) {
-        QString rest = turn.startsWith(QLatin1String("turns:"))
-            ? QStringLiteral("turns://") + turn.mid(6)
-            : QStringLiteral("turn://") + turn.mid(5);
+        QString rest = turn;
         const int schemeEnd = rest.indexOf(QLatin1String("://")) + 3;
         // Percent-encode the credentials: they go into a gst_parse_launch URI,
         // so a raw space/!/= would inject extra pipeline elements.
@@ -830,6 +868,13 @@ void SessionManager::setSceneEnabled(bool v)
     if (m_sceneEnabled == v) return;
     m_sceneEnabled = v;
     emit sceneEnabledChanged();
+    if (!v && m_active && m_signaling && m_signaling->isConnected()) {
+        if (!m_characterImage.isEmpty())
+            sendCharacterImageOrPrompt(m_characterImage, composedPrompt(), true);
+        else
+            m_signaling->sendPrompt(composedPrompt(), m_enhance);
+        return;
+    }
     pushSceneToProvider();
 }
 
@@ -885,6 +930,12 @@ void SessionManager::setIdentityLockEnabled(bool v)
     if (m_identityLock == v) return;
     m_identityLock = v;
     emit identityLockChanged();
+    if (m_active && m_signaling && m_signaling->isConnected()) {
+        if (!m_characterImage.isEmpty())
+            sendCharacterImageOrPrompt(m_characterImage, composedPrompt(), true);
+        else if (!composedPrompt().trimmed().isEmpty())
+            m_signaling->sendPrompt(composedPrompt(), m_enhance);
+    }
 }
 
 void SessionManager::setEnhancePrompts(bool v)
@@ -896,7 +947,7 @@ void SessionManager::setEnhancePrompts(bool v)
 
 void SessionManager::setHdActive(bool v)
 {
-    if (m_hd == v) return;
+    if (m_hd == v || m_active) return;
     m_hd = v;
     updateRates();
     emit hdActiveChanged();
@@ -984,12 +1035,16 @@ void SessionManager::startSession(const QString &provider, const QString &tier)
     // Validate wiring BEFORE flipping m_active/sessionStarted — the else branch
     // below used to emit sessionStarted first, so AppController's auto-record
     // started a recording that nothing ever stopped.
-    if (!m_signaling || !m_auth) {
+    if (!m_signaling || !m_auth || !m_backend) {
         setStatus(Status::Error, tr("Signaling unavailable"), ErrorKind::Connection);
         emit error(tr("Realtime signaling client missing"));
         return;
     }
 
+    m_restSessionId.clear();
+    m_sessionAnnounced = false;
+    m_sessionStartPending = false;
+    m_sessionStartRequestId = 0;
     m_frames = 0;
     emit firstFrameChanged(); // hasFrames back to false
     m_sessionReconnects = 0; // fresh session: reconnect budget resets here only
@@ -1007,7 +1062,6 @@ void SessionManager::startSession(const QString &provider, const QString &tier)
     qInfo() << "SessionManager: startSession provider=" << provider << "tier=" << tier << "hd=" << m_hd;
     emit isActiveChanged();
     emit engineLabelChanged();
-    emit sessionStarted();
 
     // Auth + credits gated above. JWT → Rust proxy WS → Decart (key stays on server).
     {
@@ -1016,9 +1070,8 @@ void SessionManager::startSession(const QString &provider, const QString &tier)
         QString model = m_config ? m_config->defaultModel() : QStringLiteral("lucy-2.6");
         if (m_hd && (model.isEmpty() || model == QLatin1String("lucy-2.1")))
             model = QStringLiteral("lucy-2.5");
-        m_connectingProactively = true;
-        m_reconnectTimer.stop();
-        m_signaling->connectToProxy(wsBaseUrl(), m_auth->accessToken(), model, m_tier);
+        m_sessionStartPending = true;
+        m_sessionStartRequestId = m_backend->startStreamingSession(model, m_characterId, m_tier);
     }
 
     // Connect-timeout watchdog (15s): a proxy that never completes the
@@ -1049,9 +1102,7 @@ void SessionManager::startImageEncodeJob(const QString &image, const QString &pr
     if (m_imgWatcher) {
         QFutureWatcher<QString> *old = m_imgWatcher.data();
         m_imgWatcher = nullptr;
-        old->disconnect();
         old->cancel();
-        old->deleteLater();
     }
     const int job = ++m_imgJob;
     auto *w = new QFutureWatcher<QString>(this);
@@ -1094,7 +1145,9 @@ void SessionManager::fetchRemoteImage(const QString &url, const QString &prompt,
     }
     if (!m_imgNam)
         m_imgNam = new QNetworkAccessManager(this);
+    m_imgNam->setTransferTimeout(15000);
     QNetworkRequest req{QUrl(url)};
+    req.setTransferTimeout(15000);
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     QNetworkReply *reply = m_imgNam->get(req);
     const int job = ++m_imgJob;
@@ -1196,7 +1249,13 @@ void SessionManager::stopSession()
 {
     if (!m_active) return;
     qInfo() << "SessionManager: stopSession elapsed=" << m_timer.elapsed() << "ms frames=" << m_frames;
+    ++m_imgJob;
     m_active = false;
+    m_sessionStartPending = false;
+    m_sessionStartRequestId = 0;
+    m_sessionAnnounced = false;
+    const QString restSessionId = m_restSessionId;
+    m_restSessionId.clear();
     m_wantReconnect = false;
     m_connectingProactively = false;
     m_reconnecting = false;
@@ -1208,6 +1267,8 @@ void SessionManager::stopSession()
     destroyNativePeer();
     if (m_signaling)
         m_signaling->disconnectFromProxy();
+    if (!restSessionId.isEmpty() && m_backend && m_auth && !m_auth->accessToken().isEmpty())
+        m_backend->endStreamingSession(restSessionId, QStringLiteral("client"));
     if (m_status != Status::Error && m_status != Status::InsufficientCredits)
         setStatus(Status::Idle, tr("Ready"));
     emit isActiveChanged();

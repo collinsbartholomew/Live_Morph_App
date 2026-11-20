@@ -22,6 +22,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(keys_validate)
         .service(keys_lookup)
         .service(keys_status)
+        .service(keys_status_post)
         .service(keys_dev_issue);
 }
 
@@ -46,14 +47,16 @@ fn resolve_license_key(body: &ValidateKeyBody) -> String {
 }
 
 fn resolve_device_id(req: &HttpRequest, body_device: Option<&str>) -> String {
+    // Device ids are persisted on keys/users — cap them so a crafted request
+    // cannot embed an unbounded string in every later document.
     if let Some(d) = body_device.map(str::trim).filter(|s| !s.is_empty()) {
-        return d.to_string();
+        return d.chars().take(128).collect();
     }
     for h in ["x-device-id", "X-Device-Id"] {
         if let Some(v) = req.headers().get(h).and_then(|v| v.to_str().ok()) {
             let t = v.trim();
             if !t.is_empty() {
-                return t.to_string();
+                return t.chars().take(128).collect();
             }
         }
     }
@@ -150,8 +153,10 @@ async fn validate_license_key_inner(
         }
     }
 
-    // 2) Claim the credits atomically (only if still unclaimed). The guard
-    //    `credits_granted > 0` + ownership filter prevents cross-account rebinds.
+    // 2) Claim the grant atomically (only if still unclaimed). The guard
+    //    `credits_granted > 0` + ownership filter prevents cross-account
+    //    rebinds. The original amount is preserved in credits_consumed so a
+    //    crash between this claim and the user increment is resumable.
     let mut grant = 0.0;
     if ak.credits_granted > 0.0 {
         let claimed = db
@@ -163,17 +168,19 @@ async fn validate_license_key_inner(
                     "device_id": &device_id,
                     "activated_at": bson_now,
                     "credits_granted": 0.0,
+                    "credits_consumed": ak.credits_granted,
                 }},
             )
             .await?;
         match claimed {
             Some(_) => {
-                grant = plans::activation_plan(&ak.plan)
-                    .map(|p| p.credits)
-                    .unwrap_or_else(|| plans::credit_plan(&ak.plan).map(|p| p.credits).unwrap_or(0.0));
+                // Grant EXACTLY the amount stored on the key (custom-amount
+                // issues must not be recomputed from the plan catalog).
+                grant = ak.credits_granted;
             }
             None => {
-                // Another request claimed it concurrently; re-read and validate state.
+                // Another request claimed it concurrently; re-read and validate
+                // the FULL state (ownership AND device), not just ownership.
                 let latest = db
                     .access_keys_secondary()
                     .find_one(doc! { "key_hash": &key_hash, "active": true })
@@ -186,17 +193,48 @@ async fn validate_license_key_inner(
                         "license key was activated concurrently by another request".into(),
                     ));
                 }
+                if let Some(ref bound) = latest.device_id {
+                    if !bound.is_empty() && *bound != device_id {
+                        return Err(AppError::Forbidden(
+                            "this license is activated on another device — sign in on the original device or contact support to transfer".into(),
+                        ));
+                    }
+                }
                 grant = 0.0;
             }
         }
     } else {
-        // Already activated for this account/device — refresh binding idempotently.
+        // Zero-grant keys (paid activations) must bind to the first activating
+        // device too — otherwise every later device passes validation.
+        db.access_keys_secondary()
+            .update_one(
+                doc! { "_id": &ak.id, "$or": [ { "device_id": { "$exists": false } }, { "device_id": "" } ] },
+                doc! { "$set": {
+                    "device_id": &device_id,
+                    "user_id": &auth.user_id,
+                    "activated_at": bson_now,
+                }},
+            )
+            .await?;
         db.access_keys_secondary()
             .update_one(
                 doc! { "_id": &ak.id },
                 doc! { "$set": { "activated_at": bson_now } },
             )
             .await?;
+        // Resume an interrupted redemption: the key was claimed by THIS user
+        // (amount preserved in credits_consumed) but the credit may never have
+        // reached the user document.
+        if ak.credits_consumed > 0.0 && ak.user_id == auth.user_id {
+            let already = db
+                .users_secondary()
+                .count_documents(doc! { "_id": &auth.user_id, "redeemed_access_keys": &ak.id })
+                .await?
+                > 0;
+            if !already {
+                grant = ak.credits_consumed;
+            }
+        }
     }
 
     let user = db
@@ -206,11 +244,16 @@ async fn validate_license_key_inner(
         .ok_or_else(|| AppError::NotFound("user".into()))?;
 
     if grant > 0.0 {
-        db.users_secondary()
-            .update_one(
-                doc! { "_id": &user.id },
+        // Exactly-once credit anchored on the user document: the
+        // redeemed_access_keys marker makes retries/crash-resume idempotent.
+        use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+        let credited = db
+            .users_secondary()
+            .find_one_and_update(
+                doc! { "_id": &user.id, "redeemed_access_keys": { "$ne": &ak.id } },
                 doc! {
                     "$inc": { "credit_balance": grant },
+                    "$push": { "redeemed_access_keys": { "$each": [&ak.id], "$slice": -10_000 } },
                     "$set": {
                         "access_key_hash": crate::routes::auth::hash_token(&key),
                         "plan": &ak.plan,
@@ -220,18 +263,34 @@ async fn validate_license_key_inner(
                     }
                 },
             )
+            .with_options(
+                FindOneAndUpdateOptions::builder()
+                    .return_document(ReturnDocument::After)
+                    .build(),
+            )
             .await?;
-        db.ledger_secondary().insert_one(CreditLedgerEntry {
-            id: new_id(),
-            user_id: user.id.clone(),
-            delta: grant,
-            balance_after: user.total_credits() + grant,
-            kind: "access_key".into(),
-            ref_id: Some(ak.id.clone()),
-            note: Some(format!("plan={}", ak.plan)),
-            created_at: bson_now,
-        })
-        .await?;
+        let balance_after = credited
+            .as_ref()
+            .map(|u| u.total_credits())
+            .unwrap_or_else(|| user.total_credits());
+        if credited.is_some() {
+            if let Err(e) = db.ledger_secondary().insert_one(CreditLedgerEntry {
+                id: new_id(),
+                user_id: user.id.clone(),
+                delta: grant,
+                balance_after,
+                kind: "access_key".into(),
+                ref_id: Some(ak.id.clone()),
+                note: Some(format!("plan={}", ak.plan)),
+                created_at: bson_now,
+            })
+            .await
+            {
+                if !e.to_string().contains("E11000") {
+                    tracing::warn!(error = %e, "access-key ledger insert failed");
+                }
+            }
+        }
     } else {
         db.users_secondary()
             .update_one(
@@ -253,22 +312,34 @@ async fn validate_license_key_inner(
         .find_one(doc! { "_id": &user.id })
         .await?
         .unwrap_or(user);
+    // Return the PERSISTED binding (the concurrent-claim winner's device),
+    // never the caller-supplied device echo.
+    let ak_final = db
+        .access_keys_secondary()
+        .find_one(doc! { "_id": &ak.id })
+        .await?
+        .unwrap_or(ak);
+    let bound_device = ak_final
+        .device_id
+        .clone()
+        .filter(|d| !d.is_empty())
+        .unwrap_or_else(|| device_id.clone());
 
     Ok(HttpResponse::Ok().json(json!({
         "ok": true,
         "valid": true,
         "access_key": &key,
         "key": &key,
-        "plan": ak.plan,
-        "device_id": device_id,
-        "expires_at": expires_at_string(ak.expires_at),
+        "plan": ak_final.plan,
+        "device_id": bound_device,
+        "expires_at": expires_at_string(ak_final.expires_at),
         "credits": {
             "total": user.total_credits(),
             "used": 0.0,
             "remaining": user.total_credits(),
             "credit_balance": user.credit_balance,
             "bonus_balance": user.bonus_balance,
-            "plan": ak.plan,
+            "plan": ak_final.plan,
         },
         "product": ProductId::Secondary.as_str(),
     })))
@@ -370,6 +441,38 @@ async fn keys_status(
     req: HttpRequest,
     query: web::Query<std::collections::HashMap<String, String>>,
 ) -> AppResult<HttpResponse> {
+    keys_status_impl(
+        db,
+        req,
+        query.get("key").cloned(),
+        query.get("device_id").cloned(),
+    )
+    .await
+}
+
+/// POST variant: keeps the license key out of reverse-proxy/browser logs and
+/// request-history tooling (query strings are retained by intermediaries).
+#[post("/keys/status")]
+async fn keys_status_post(
+    db: web::Data<Db>,
+    req: HttpRequest,
+    body: web::Json<LookupBody>,
+) -> AppResult<HttpResponse> {
+    keys_status_impl(
+        db,
+        req,
+        body.key.clone().or(body.access_key.clone()),
+        body.device_id.clone(),
+    )
+    .await
+}
+
+async fn keys_status_impl(
+    db: web::Data<Db>,
+    req: HttpRequest,
+    key_raw: Option<String>,
+    device_raw: Option<String>,
+) -> AppResult<HttpResponse> {
     let _auth = require_user(&req)?;
     require_secondary(&req)?;
     let auth = _auth;
@@ -378,7 +481,11 @@ async fn keys_status(
         return Err(AppError::RateLimited(
             "too many status attempts — try again in 60 seconds".into(), None));
     }
-    let key = query.get("key").map(|s| s.trim().to_uppercase());
+    let device_check = device_raw
+        .as_deref()
+        .map(|d| d.trim().to_string())
+        .filter(|d| !d.is_empty());
+    let key = key_raw.as_deref().map(|s| s.trim().to_uppercase());
     let key_supplied = key.as_ref().map(|k| !k.is_empty()).unwrap_or(false);
     let key_hash = key.as_deref().filter(|k| !k.is_empty()).map(crate::routes::auth::hash_token);
     let ak = if let Some(ref kh) = key_hash {
@@ -409,6 +516,21 @@ async fn keys_status(
                 })));
             }
             let device_id = if own { ak.device_id.clone() } else { None };
+            // A supplied device id must match the persisted binding — a key
+            // bound to another machine is not valid on THIS machine.
+            if own {
+                if let (Some(bound), Some(supplied)) = (&ak.device_id, &device_check) {
+                    if !bound.is_empty() && bound != supplied {
+                        return Ok(HttpResponse::Ok().json(json!({
+                            "valid": false,
+                            "found": true,
+                            "reason": "device_mismatch",
+                            "expired": expired,
+                            "product": ProductId::Secondary.as_str(),
+                        })));
+                    }
+                }
+            }
             let key_out = if let Some(ref k) = key {
                 k.clone()
             } else {

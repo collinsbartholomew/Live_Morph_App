@@ -43,8 +43,8 @@ constexpr auto kService = "com.livemorph.desktop";
 
 QString secureDir()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
-           + QStringLiteral("/secure");
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return base.isEmpty() ? QString() : base + QStringLiteral("/secure");
 }
 
 // Create the vault dir private to the owning user (0700) on unix.
@@ -104,7 +104,7 @@ QByteArray privateKeyFile()
         if (fd >= 0) {
             QByteArray rnd(32, 0);
             for (int i = 0; i < 32; ++i)
-                rnd[i] = char(QRandomGenerator::global()->bounded(256));
+                rnd[i] = char(QRandomGenerator::system()->bounded(256));
             const QByteArray hex = rnd.toHex();
             const bool wrote = ::write(fd, hex.constData(), size_t(hex.size())) == hex.size();
             if (wrote)
@@ -138,7 +138,7 @@ QByteArray privateKeyFile()
         }
         QByteArray rnd(32, 0);
         for (int i = 0; i < 32; ++i)
-            rnd[i] = char(QRandomGenerator::global()->bounded(256));
+            rnd[i] = char(QRandomGenerator::system()->bounded(256));
         const QByteArray hex = rnd.toHex();
         if (sf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
             sf.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
@@ -207,8 +207,9 @@ bool SecureStore::isOsBacked()
 
 QString SecureStore::filePath(const QString &key)
 {
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
-                         + QStringLiteral("/secure");
+    const QString base = secureDir();
+    if (base.isEmpty())
+        return {};
     ensurePrivateDir(base);
     const QByteArray h = QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha256).toHex();
     return base + QLatin1Char('/') + QString::fromLatin1(h);
@@ -450,6 +451,8 @@ bool SecureStore::osRemove(const QString &key)
 
 void SecureStore::fileWrite(const QString &key, const QString &value)
 {
+    if (filePath(key).isEmpty())
+        return;
     const QByteArray blob = protect(value.toUtf8());
     // Never overwrite a good stored secret with an empty blob (e.g. DPAPI
     // failure on Windows returning {}) — that would silently log the user out.

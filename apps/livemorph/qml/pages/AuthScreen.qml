@@ -1,827 +1,859 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import LiveMorph
 
-/**
- * AuthScreen — Obsidian Hex redesign: a single full-bleed honeycomb field
- * (radial spotlight + sparkle cells) with one centered hex-framed card.
- * No photo hero, no split panes — the brand mark, wordmark and LIVE chip sit
- * above the card; the OTP phase renders the code as a row of hex cells.
- * All logic (magic link, OTP distribute/auto-submit/paste, rate limit,
- * resend cooldown) is unchanged.
- */
 Item {
     id: root
     anchors.fill: parent
 
-    property string phase: "email" // email | code
-    property string authTab: "social" // social | email
-    property bool usePassword: false // email phase: magic link vs password sign-in
-    // When Google OAuth is unavailable the social tab renders an empty card —
-    // land on the email tab instead.
-    Connections {
-        target: Auth
-        function onGoogleAvailableChanged() {
-            if (!Auth.googleAuthAvailable && root.authTab === "social")
-                root.authTab = "email"
-        }
-    }
+    property string phase: "email"
+    property string authTab: "email"
+    property bool usePassword: false
+    property bool passwordVisible: false
     property string pendingEmail: ""
     property int resendCooldown: 0
-    property string otpCode: ""
+    property alias otpCode: otpInput.text
     readonly property int otpLength: Auth.otpCodeLength > 0 ? Auth.otpCodeLength : Constants.otpLength
-    readonly property int minCodeLength: root.otpLength // backend requires the FULL code
+    readonly property int minCodeLength: root.otpLength
     property bool rateLimited: false
     property int rateLimitSeconds: 0
-    property var digits: {
-        var a = []
-        for (var i = 0; i < root.otpLength; i++) a.push("")
-        return a
+    property string fieldError: ""
+    property string resetFeedback: ""
+    property bool resetInFlight: false
+    readonly property bool showHero: width >= 940
+    readonly property int heroWidth: showHero ? Math.max(390, width * 0.44) : 0
+
+    function submitEmail() {
+        if (Auth.isLoading || root.rateLimited)
+            return
+        root.fieldError = ""
+        root.resetFeedback = ""
+        if (root.usePassword)
+            root.signInWithPassword()
+        else
+            root.sendMagicLink()
     }
 
-    // ── Canvas: true black + spotlight honeycomb (the whole backdrop) ──
+    function sendMagicLink() {
+        if (Auth.isLoading || root.rateLimited)
+            return
+        var email = emailField.text.trim()
+        if (!Auth.isValidEmail(email)) {
+            root.fieldError = qsTr("Enter a valid email address to continue.")
+            emailField.forceActiveFocus()
+            return
+        }
+        root.fieldError = ""
+        Auth.requestOtp(email)
+    }
+
+    function signInWithPassword() {
+        if (Auth.isLoading || root.rateLimited)
+            return
+        var email = emailField.text.trim()
+        if (!Auth.isValidEmail(email)) {
+            root.fieldError = qsTr("Enter a valid email address to continue.")
+            emailField.forceActiveFocus()
+            return
+        }
+        if (passwordField.text.length < 8) {
+            root.fieldError = qsTr("Password must be at least 8 characters.")
+            passwordField.forceActiveFocus()
+            return
+        }
+        root.fieldError = ""
+        Auth.signInWithEmail(email, passwordField.text)
+    }
+
+    function forgotPassword() {
+        if (Auth.isLoading || root.rateLimited)
+            return
+        var email = emailField.text.trim()
+        if (!Auth.isValidEmail(email)) {
+            root.fieldError = qsTr("Enter your account email first, then request a reset.")
+            emailField.forceActiveFocus()
+            return
+        }
+        root.fieldError = ""
+        root.resetFeedback = ""
+        root.resetInFlight = true
+        Auth.requestPasswordReset(email)
+    }
+
+    function verifyCode() {
+        if (Auth.isLoading || root.otpCode.length < root.minCodeLength || root.rateLimited)
+            return
+        var email = (root.pendingEmail || Auth.pendingEmail || "").trim()
+        if (!email) {
+            root.phase = "email"
+            root.authTab = "email"
+            root.fieldError = qsTr("Your email is missing. Enter it again to request a new code.")
+            return
+        }
+        Auth.verifyOtp(email, root.otpCode)
+    }
+
+    function returnToEmail() {
+        root.phase = "email"
+        root.authTab = "email"
+        root.otpCode = ""
+        root.fieldError = ""
+        Auth.clearError()
+        Auth.resetOtpFlow()
+        Qt.callLater(emailField.forceActiveFocus)
+    }
+
     Rectangle {
         anchors.fill: parent
         color: Colors.surfaceBase
-        z: Theme.zUnder2
-    }
-    Honeycomb {
-        anchors.fill: parent
-        cellSize: Theme.honeycombCellLg
-        cellSize2: Theme.honeycombCellLg * 3
-        cellSize2Alpha: 0.45
-        lineColor: Colors.honeycombOnBlack
-        // Spotlight + soft light pool on the brand block, fading to the edges
-        focusX: width / 2
-        focusY: height * 0.30
-        fadeRadius: Math.max(width, height) * 0.85
-        sparkleEvery: 21
-        sparkleAlpha: 0.08
-        emphasisEvery: 6
-        constellationEvery: 47
-        constellationAlpha: 0.22
-        // Large feature hex frame at the spotlight center (premium brand frame)
-        featureHex: 210
-        featureHexAlpha: 0.55
-        highlightCells: ["5,2", "6,2", "5,3", "7,3", "6,4"]
-        z: Theme.zUnder2
     }
 
-    Flickable {
-        anchors.fill: parent
-        contentWidth: width
-        contentHeight: contentCol.height + 48
+    Item {
+        id: hero
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: root.heroWidth
+        visible: root.showHero
         clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: StyledScrollBar { thin: true }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Colors.surfaceRaised
+        }
+
+        Honeycomb {
+            anchors.fill: parent
+            cellSize: Theme.honeycombCellLg
+            cellSize2: Theme.honeycombCellLg * 3
+            cellSize2Alpha: 0.32
+            lineColor: Colors.honeycombOnBlack
+            focusX: width * 0.62
+            focusY: height * 0.62
+            fadeRadius: Math.max(width, height) * 0.8
+            sparkleEvery: 19
+            sparkleAlpha: 0.08
+            emphasisEvery: 6
+            constellationEvery: 41
+            constellationAlpha: 0.22
+            depthEvery: 13
+            circuitEvery: 17
+        }
+
+        Rectangle {
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1
+            color: Colors.surfaceBorder
+        }
+
+        Row {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.margins: 32
+            spacing: Theme.spacingMd
+            BrandMark {
+                size: 30
+                letter: "LM"
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+                text: Constants.appName.toUpperCase()
+                color: Colors.textPrimary
+                font.family: Theme.fontTitle.family
+                font.pixelSize: Theme.fontTitle.pixelSize
+                font.weight: Font.Bold
+                font.letterSpacing: 0.5
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Rectangle {
+                width: liveText.implicitWidth + 12
+                height: 22
+                color: Colors.accent
+                radius: Theme.radiusXs
+                anchors.verticalCenter: parent.verticalCenter
+                Text {
+                    id: liveText
+                    anchors.centerIn: parent
+                    text: qsTr("LIVE")
+                    color: Colors.textOnAccent
+                    font.family: Theme.fontMicro.family; font.pixelSize: Theme.fontMicro.pixelSize
+                    font.weight: Font.Bold
+                    font.letterSpacing: 1
+                }
+            }
+        }
 
         Column {
-            id: contentCol
-            x: (parent.width - width) / 2
-            y: Math.max(24, (parent.height - height) / 2)
-            width: Math.min(440, parent.width - 48)
-            spacing: 0
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.leftMargin: 32
+            anchors.rightMargin: 32
+            anchors.topMargin: Math.max(100, hero.height * 0.16)
+            spacing: Theme.spacingLg
 
-            // ── Brand block: layered hex monogram + wordmark + LIVE chip ──
-            Column {
+            Text {
+                text: qsTr("REAL-TIME CHARACTER ENGINE")
+                color: Colors.textMuted
+                font.family: Theme.fontLabel.family; font.pixelSize: Theme.fontLabel.pixelSize; font.weight: Theme.fontLabel.weight
+                font.letterSpacing: 1.4
+            }
+
+            Text {
                 width: parent.width
-                spacing: Theme.spacingLg
+                text: qsTr("Your face.\nAny universe.")
+                color: Colors.textPrimary
+                font.family: Theme.fontAuthHeadline.family
+                font.pixelSize: hero.width < 460 ? 38 : Theme.fontAuthHeadline.pixelSize
+                font.weight: Font.Bold
+                font.letterSpacing: -1.2
+                lineHeight: 1.02
+                wrapMode: Text.WordWrap
+            }
 
-                // Monogram in a double hex frame (outer faint ring + mark)
-                Item {
-                    width: 92; height: 92
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    Hexagon {
-                        anchors.centerIn: parent
-                        size: 88
-                        lineWidth: 1
-                        lineColor: Colors.accent15
+            Text {
+                width: Math.min(parent.width, 400)
+                text: qsTr("A live AI character studio for streams, scenes, and every reality you can imagine.")
+                color: Colors.textSecondary
+                font.family: Theme.fontUi.family; font.pixelSize: Theme.fontUi.pixelSize
+                lineHeight: 1.45
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        HexSculpture {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.horizontalCenterOffset: parent.width * 0.08
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Math.max(92, parent.height * 0.12)
+            size: Math.min(parent.width * 0.7, parent.height * 0.38, 300)
+            illuminated: true
+        }
+
+        RowLayout {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 32
+            spacing: Theme.spacingLg
+            Repeater {
+                model: [
+                    { value: qsTr("P2P"), label: qsTr("MEDIA") },
+                    { value: qsTr("30"), label: qsTr("FPS HD") },
+                    { value: qsTr("OBS"), label: qsTr("READY") }
+                ]
+                delegate: Column {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: modelData.value
+                        color: Colors.textPrimary
+                        font: Theme.fontTitle
                     }
-                    Hexagon {
-                        anchors.centerIn: parent
-                        size: 80
-                        lineWidth: 1
-                        lineColor: Colors.accent30
-                    }
-                    BrandMark {
-                        anchors.centerIn: parent
-                        size: 64
-                        letter: "LM"
+                    Text {
+                        text: modelData.label
+                        color: Colors.textMuted
+                        font.family: Theme.fontMicro.family; font.pixelSize: Theme.fontMicro.pixelSize
+                        font.letterSpacing: 1
                     }
                 }
+            }
+        }
+    }
+
+    Item {
+        id: accessPane
+        anchors.left: hero.right
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+
+        Rectangle {
+            anchors.fill: parent
+            color: Colors.surfaceBase
+        }
+
+        Honeycomb {
+            visible: !root.showHero
+            anchors.fill: parent
+            cellSize: Theme.honeycombCellLg
+            lineColor: Colors.honeycombLineFaint
+            focusX: width / 2
+            focusY: height * 0.3
+            fadeRadius: Math.max(width, height) * 0.7
+            depthEvery: 19
+            opacity: 0.55
+        }
+
+        Flickable {
+            anchors.fill: parent
+            contentWidth: width
+            contentHeight: accessColumn.height + 48
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: StyledScrollBar { thin: true }
+
+            Column {
+                id: accessColumn
+                x: (parent.width - width) / 2
+                y: Math.max(24, (parent.height - height) / 2)
+                width: Math.min(432, parent.width - 48)
+                spacing: Theme.spacingXl
 
                 Row {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: Theme.gapCard
+                    visible: !root.showHero
+                    spacing: Theme.spacingMd
+                    BrandMark { size: 32; letter: "LM" }
                     Text {
                         text: Constants.appName
                         color: Colors.textPrimary
-                        font.family: Theme.fontHeadline.family
-                        font.pixelSize: Theme.fontHeadline.pixelSize
-                        font.weight: Font.Bold
-                        font.letterSpacing: Theme.trackingDisplay
+                        font: Theme.fontHeading
                         anchors.verticalCenter: parent.verticalCenter
                     }
-                    Rectangle {
-                        anchors.verticalCenter: parent.verticalCenter
-                        height: 20
-                        width: liveLab.implicitWidth + 14
-                        radius: Theme.radiusFull
-                        color: Colors.accent12
-                        border.color: Colors.accent30
-                        border.width: 1
-                        Text {
-                            id: liveLab
-                            anchors.centerIn: parent
-                            text: qsTr("LIVE")
-                            color: Colors.accentHover
-                            font.pixelSize: Theme.fontMicro.pixelSize
-                            font.family: Theme.fontMono.family
-                            font.weight: Font.Bold
-                            font.letterSpacing: 1.35
-                        }
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: Theme.spacingSm
+                    Text {
+                        text: root.phase === "code" ? qsTr("VERIFICATION / 02") : qsTr("SECURE ACCESS / 01")
+                        color: Colors.textMuted
+                        font.family: Theme.fontLabel.family; font.pixelSize: Theme.fontLabel.pixelSize; font.weight: Theme.fontLabel.weight
+                        font.letterSpacing: 1.4
+                    }
+                    Text {
+                        width: parent.width
+                        text: root.phase === "code" ? qsTr("Verify it's you") : qsTr("Enter the studio")
+                        color: Colors.textPrimary
+                        font.family: Theme.fontHeadline.family; font.pixelSize: Theme.fontHeadline.pixelSize; font.weight: Theme.fontHeadline.weight
+                        font.letterSpacing: -0.8
+                        wrapMode: Text.WordWrap
+                    }
+                    Text {
+                        width: parent.width
+                        text: root.phase === "code"
+                              ? qsTr("Your account is one code away from the stage.")
+                              : qsTr("Sign in to create, stream, and save your character library.")
+                        color: Colors.textSecondary
+                        font.family: Theme.fontUi.family; font.pixelSize: Theme.fontUi.pixelSize
+                        lineHeight: 1.4
+                        wrapMode: Text.WordWrap
                     }
                 }
 
-                Text {
-                    width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("Step into character.\nLive to OBS.")
-                    color: Colors.textPrimary
-                    font.family: Theme.fontAuthHeadline.family
-                    font.pixelSize: Theme.fontAuthHeadline.pixelSize
-                    font.weight: Theme.fontAuthHeadline.weight
-                    font.letterSpacing: Theme.trackingDisplay
-                    wrapMode: Text.WordWrap
-                    lineHeight: 1.05
-                }
-
-                Text {
-                    width: parent.width
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("Real-time AI character swap powered by Lucy 2. Bring any character into your stream, for vtubing, gaming, or pure creative play.")
-                    color: Colors.textSecondary
-                    font.pixelSize: Theme.fontSmall.pixelSize
-                    wrapMode: Text.WordWrap
-                    lineHeight: 1.625
-                }
-            }
-
-            Item { width: 1; height: 28 }
-
-            // ── Hex-framed card holding the auth flow ────────────────────
-            Rectangle {
-                width: parent.width
-                implicitHeight: cardCol.implicitHeight + 56
-                radius: Theme.radiusLg
-                color: Colors.surfaceRaised
-                border.color: Colors.surfaceBorder
-                border.width: 1
-                clip: true
-
-                // Honeycomb wash inside the card (small cells, own spotlight)
-                Honeycomb {
-                    anchors.fill: parent
-                    cellSize: Theme.honeycombCell
-                    lineColor: Colors.honeycombLineFaint
-                    focusX: width / 2
-                    focusY: 0
-                    fadeRadius: width * 0.9
-                    sparkleEvery: 31
-                    sparkleAlpha: 0.06
-                    opacity: 0.7
-                }
                 Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    height: 1
-                    color: Colors.insetHighlightSoft
-                }
-                CornerTicks {
-                    anchors.fill: parent
-                    inset: 10
-                    tickSize: 9
-                    thickness: 1.5
-                    color: Colors.accent40
-                }
+                    width: parent.width
+                    height: formColumn.implicitHeight + 48
+                    color: Colors.surfaceRaised
+                    border.color: Colors.surfaceBorder
+                    border.width: 1
+                    radius: Theme.radiusLg
 
-                ColumnLayout {
-                    id: cardCol
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: 28
-                    spacing: 0
-
-                    // Tabs (social | email)
-                    SegmentedControl {
-                        Layout.fillWidth: true
-                        Layout.bottomMargin: Theme.spacingLg
-                        equalWidths: true
-                        model: [
-                            { "label": qsTr("Social"), "value": "social" },
-                            { "label": qsTr("Email"), "value": "email" }
-                        ]
-                        currentValue: root.authTab
-                        onActivated: (v) => { root.authTab = v }
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        width: 72
+                        height: 2
+                        color: Colors.accent
                     }
 
-                    // ── Social phase ────────────────────────────────────
-                    ColumnLayout {
-                        visible: root.authTab === "social" && root.phase === "email"
-                        Layout.fillWidth: true
-                        spacing: Theme.gapCard
+                    CornerTicks {
+                        anchors.fill: parent
+                        inset: 8
+                        tickSize: 8
+                        thickness: 1
+                        color: Colors.accent30
+                    }
 
-                        // Google button: white icon tile + bold label on a bordered card
-                        Rectangle {
-                            visible: Auth.googleAuthAvailable
+                    ColumnLayout {
+                        id: formColumn
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 24
+                        spacing: Theme.spacingLg
+
+                        SegmentedControl {
+                            visible: root.phase === "email"
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 48
-                            radius: Theme.radiusMd
-                            color: googleMa.containsMouse ? Colors.surfaceHover : Colors.surfaceElevated
-                            border.color: googleMa.containsMouse ? Colors.brandGoogleBorder : Colors.surfaceBorder
-                            border.width: 1
-                            CornerTicks {
-                                anchors.fill: parent
-                                visible: googleMa.containsMouse
-                                inset: 4
-                                tickSize: 6
-                                thickness: 1
-                                color: Colors.brandGoogleBorder
+                            equalWidths: true
+                            model: Auth.googleAuthAvailable
+                                   ? [
+                                       { label: qsTr("Email"), value: "email" },
+                                       { label: qsTr("Social"), value: "social" }
+                                     ]
+                                   : [{ label: qsTr("Email"), value: "email" }]
+                            currentValue: root.authTab
+                            onActivated: function(value) {
+                                root.authTab = value
+                                root.fieldError = ""
+                                Auth.clearError()
                             }
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: Theme.spacingMd
-                                Rectangle {
-                                    width: 32; height: 32
-                                    radius: Theme.radiusSm
-                                    color: Colors.white
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "G"
-                                        color: Colors.brandGoogle
-                                        font.pixelSize: Theme.fontUi.pixelSize
-                                        font.weight: Font.Bold
-                                    }
+                        }
+
+                        RowLayout {
+                            visible: root.phase === "code"
+                            Layout.fillWidth: true
+                            spacing: Theme.spacingMd
+                            IconButton {
+                                name: "chevron-left"
+                                accessibleName: qsTr("Use a different email")
+                                onClicked: root.returnToEmail()
+                            }
+                            Column {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text {
+                                    text: qsTr("CODE DELIVERED")
+                                    color: Colors.textPrimary
+                                    font.family: Theme.fontLabel.family; font.pixelSize: Theme.fontLabel.pixelSize; font.weight: Theme.fontLabel.weight
                                 }
                                 Text {
-                                    text: qsTr("Continue with Google")
-                                    color: Colors.textPrimary
-                                    font.pixelSize: Theme.fontSmall.pixelSize
-                                    font.weight: Font.Bold
-                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width
+                                    text: root.pendingEmail || Auth.pendingEmail
+                                    color: Colors.textMuted
+                                    font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                                    elide: Text.ElideMiddle
                                 }
                             }
-                            MouseArea {
-                                id: googleMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                enabled: !Auth.isLoading
-                                onClicked: Auth.signInWithGoogle()
+                            HexBadge {
+                                size: 34
+                                iconName: "mail"
+                                iconSize: 16
+                                lineColor: Colors.accent30
+                                fillColor: Colors.accent10
+                                iconColor: Colors.accent
                             }
                         }
 
-                        // OR CONTINUE WITH divider (hex-bulleted)
-                        RowLayout {
-                            visible: Auth.googleAuthAvailable
+                        ColumnLayout {
+                            visible: root.phase === "email" && root.authTab === "social"
                             Layout.fillWidth: true
-                            Layout.topMargin: Theme.spacingXs
-                            Layout.bottomMargin: Theme.spacingXs
-                            spacing: Theme.gapCard
-                            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBorderSubtle }
-                            Hexagon {
-                                size: 7
-                                lineWidth: 0
-                                fillColor: Colors.surfaceBorderStrong
-                                Layout.alignment: Qt.AlignVCenter
-                            }
+                            spacing: Theme.spacingLg
+
                             Text {
-                                text: qsTr("OR CONTINUE WITH")
+                                Layout.fillWidth: true
+                                text: qsTr("Use your existing account. LiveMorph never sees your provider password.")
+                                color: Colors.textSecondary
+                                font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                                wrapMode: Text.WordWrap
+                                lineHeight: 1.4
+                            }
+
+                            Controls.Button {
+                                id: googleButton
+                                text: qsTr("Continue with Google")
+                                Layout.fillWidth: true
+                                implicitHeight: 48
+                                enabled: !Auth.isLoading && Auth.googleAuthAvailable
+                                hoverEnabled: true
+                                onClicked: Auth.signInWithGoogle()
+                                background: Rectangle {
+                                    color: !googleButton.enabled ? Colors.surfaceElevated
+                                         : googleButton.hovered ? Colors.surfaceHover : Colors.surfaceElevated
+                                    border.color: googleButton.hovered || googleButton.activeFocus ? Colors.accent : Colors.surfaceBorder
+                                    border.width: 1
+                                    radius: Theme.radiusMd
+                                    FocusRing { shown: googleButton.activeFocus; ringRadius: Theme.radiusMd }
+                                }
+                                contentItem: RowLayout {
+                                    spacing: Theme.spacingMd
+                                    Rectangle {
+                                        width: 30
+                                        height: 30
+                                        color: Colors.white
+                                        radius: Theme.radiusSm
+                                        Layout.alignment: Qt.AlignVCenter
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "G"
+                                            color: Colors.brandGoogle
+                                            font: Theme.fontTitle
+                                        }
+                                    }
+                                    Text {
+                                        text: googleButton.text
+                                        color: Colors.textPrimary
+                                        font.family: Theme.fontUi.family; font.pixelSize: Theme.fontUi.pixelSize
+                                        font.weight: Font.Bold
+                                        horizontalAlignment: Text.AlignHCenter
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: qsTr("More providers are being added. Email sign-in is always available.")
                                 color: Colors.textMuted
-                                font.pixelSize: Theme.fontMonoTiny.pixelSize
-                                font.family: Theme.fontMono.family
-                                font.letterSpacing: 1.35
+                                font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                                wrapMode: Text.WordWrap
                             }
-                            Hexagon {
-                                size: 7
-                                lineWidth: 0
-                                fillColor: Colors.surfaceBorderStrong
-                                Layout.alignment: Qt.AlignVCenter
+                        }
+
+                        ColumnLayout {
+                            visible: root.phase === "email" && root.authTab === "email"
+                            Layout.fillWidth: true
+                            spacing: Theme.spacingMd
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: Theme.spacingSm
+                                Text {
+                                    text: qsTr("EMAIL ADDRESS")
+                                    color: Colors.textMuted
+                                    font.family: Theme.fontLabel.family; font.pixelSize: Theme.fontLabel.pixelSize; font.weight: Theme.fontLabel.weight
+                                    font.letterSpacing: 1
+                                }
+                                TextField {
+                                    id: emailField
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 48
+                                    placeholderText: qsTr("you@example.com")
+                                    inputMethodHints: Qt.ImhEmailCharactersOnly | Qt.ImhNoPredictiveText
+                                    Accessible.name: qsTr("Email address")
+                                    Keys.onReturnPressed: root.submitEmail()
+                                    onTextChanged: {
+                                        root.fieldError = ""
+                                        root.resetFeedback = ""
+                                    }
+                                }
                             }
-                            Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBorderSubtle }
+
+                            ColumnLayout {
+                                visible: root.usePassword
+                                Layout.fillWidth: true
+                                spacing: Theme.spacingSm
+                                Text {
+                                    text: qsTr("PASSWORD")
+                                    color: Colors.textMuted
+                                    font.family: Theme.fontLabel.family; font.pixelSize: Theme.fontLabel.pixelSize; font.weight: Theme.fontLabel.weight
+                                    font.letterSpacing: 1
+                                }
+                                TextField {
+                                    id: passwordField
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 48
+                                    echoMode: root.passwordVisible ? TextInput.Normal : TextInput.Password
+                                    placeholderText: qsTr("At least 8 characters")
+                                    rightPadding: 48
+                                    Accessible.name: qsTr("Password")
+                                    Keys.onReturnPressed: root.submitEmail()
+                                    onTextChanged: root.fieldError = ""
+                                    IconButton {
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 6
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        name: root.passwordVisible ? "eye-off" : "eye"
+                                        accessibleName: root.passwordVisible ? qsTr("Hide password") : qsTr("Show password")
+                                        iconSize: Theme.iconSm
+                                        onClicked: root.passwordVisible = !root.passwordVisible
+                                    }
+                                }
+                            }
+
+                            Text {
+                                visible: !root.usePassword
+                                Layout.fillWidth: true
+                                text: qsTr("New and existing accounts use the same secure email code. No password required.")
+                                color: Colors.textMuted
+                                font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                                wrapMode: Text.WordWrap
+                                lineHeight: 1.35
+                            }
+
+                            PrimaryButton {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 48
+                                iconName: "arrow-right"
+                                text: Auth.isLoading && !root.resetInFlight
+                                      ? qsTr("Please wait") : root.usePassword
+                                      ? qsTr("Sign in to LiveMorph") : qsTr("Send secure sign-in code")
+                                busy: Auth.isLoading && !root.resetInFlight
+                                enabled: !Auth.isLoading && !root.rateLimited
+                                         && emailField.text.trim().length > 0
+                                         && (!root.usePassword || passwordField.text.length >= 8)
+                                onClicked: root.submitEmail()
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Theme.spacingSm
+                                GhostButton {
+                                    Layout.fillWidth: true
+                                    text: root.usePassword ? qsTr("Use email code instead") : qsTr("Use password instead")
+                                    onClicked: {
+                                        root.usePassword = !root.usePassword
+                                        root.fieldError = ""
+                                        root.resetFeedback = ""
+                                        Auth.clearError()
+                                    }
+                                }
+                                GhostButton {
+                                    visible: root.usePassword
+                                    Layout.fillWidth: true
+                                    text: root.resetInFlight ? qsTr("Sending reset") : qsTr("Forgot password?")
+                                    enabled: !root.resetInFlight && !root.rateLimited
+                                    onClicked: root.forgotPassword()
+                                }
+                            }
+
+                            Text {
+                                visible: root.resetFeedback.length > 0
+                                Layout.fillWidth: true
+                                text: root.resetFeedback
+                                color: Colors.statusSuccess
+                                font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                                wrapMode: Text.WordWrap
+                            }
                         }
 
-                        Text {
-                            visible: Auth.googleAuthAvailable
+                        ColumnLayout {
+                            visible: root.phase === "code"
                             Layout.fillWidth: true
-                            Layout.topMargin: 6
-                            horizontalAlignment: Text.AlignHCenter
-                            text: qsTr("More sign-in providers (Twitch, TikTok, Kick) coming soon.")
-                            color: Colors.textMuted
-                            font.pixelSize: Theme.fontLabel.pixelSize
+                            spacing: Theme.spacingLg
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: qsTr("Enter the %1-digit code from your email. The sign-in link also works.").arg(root.otpLength)
+                                color: Colors.textSecondary
+                                font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                                wrapMode: Text.WordWrap
+                                lineHeight: 1.4
+                            }
+
+                            Item {
+                                id: otpRow
+                                Layout.fillWidth: true
+                                implicitHeight: otpCells.height
+                                readonly property real cellWidth: Math.min(44, (width - (root.otpLength - 1) * 6) / root.otpLength)
+
+                                Row {
+                                    id: otpCells
+                                    width: parent.width
+                                    spacing: 6
+                                    Repeater {
+                                        model: root.otpLength
+                                        delegate: Item {
+                                            required property int index
+                                            width: otpRow.cellWidth
+                                            height: width * 0.9 + 12
+                                            Hexagon {
+                                                anchors.centerIn: parent
+                                                size: Math.floor(width)
+                                                lineWidth: otpInput.activeFocus && root.otpCode.length === index ? 2 : 1
+                                                lineColor: Auth.errorMessage.length > 0 ? Colors.statusError
+                                                         : root.otpCode.length > index ? Colors.accent
+                                                         : otpInput.activeFocus && root.otpCode.length === index ? Colors.accent
+                                                         : Colors.surfaceBorderStrong
+                                                fillColor: root.otpCode.length > index ? Colors.accent10 : Colors.surfaceBase
+                                            }
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: root.otpCode.charAt(index)
+                                                color: Colors.textPrimary
+                                                font.family: Theme.fontMono.family
+                                                font.pixelSize: Math.min(22, Math.max(14, parent.width * 0.46))
+                                                font.weight: Font.Bold
+                                            }
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.IBeamCursor
+                                    onClicked: {
+                                        otpInput.forceActiveFocus()
+                                        otpInput.cursorPosition = otpInput.text.length
+                                    }
+                                }
+
+                                TextInput {
+                                    id: otpInput
+                                    width: 1
+                                    height: 1
+                                    opacity: 0
+                                    activeFocusOnTab: true
+                                    maximumLength: root.otpLength
+                                    inputMethodHints: Qt.ImhDigitsOnly | Qt.ImhNoPredictiveText
+                                    validator: RegularExpressionValidator { regularExpression: /[0-9]*/ }
+                                    Accessible.role: Accessible.EditableText
+                                    Accessible.name: qsTr("%1-digit email verification code").arg(root.otpLength)
+                                    onTextChanged: {
+                                        Auth.clearError()
+                                        if (text.length === root.otpLength && !Auth.isLoading)
+                                            Qt.callLater(root.verifyCode)
+                                    }
+                                    Keys.onReturnPressed: root.verifyCode()
+                                }
+                            }
+
+                            PrimaryButton {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 48
+                                text: Auth.isLoading ? qsTr("Verifying") : qsTr("Verify and enter the studio")
+                                busy: Auth.isLoading
+                                enabled: !Auth.isLoading && root.otpCode.length === root.minCodeLength && !root.rateLimited
+                                onClicked: root.verifyCode()
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Theme.spacingSm
+                                GhostButton {
+                                    Layout.fillWidth: true
+                                    text: {
+                                        var seconds = Math.max(root.resendCooldown, Auth.otpCooldownSecs || 0)
+                                        return seconds > 0 ? qsTr("New code in %1s").arg(seconds) : qsTr("Send a new code")
+                                    }
+                                    enabled: Math.max(root.resendCooldown, Auth.otpCooldownSecs || 0) === 0
+                                             && !Auth.isLoading && !root.rateLimited
+                                    onClicked: Auth.requestOtp(root.pendingEmail || Auth.pendingEmail)
+                                }
+                                GhostButton {
+                                    Layout.fillWidth: true
+                                    text: qsTr("Different email")
+                                    onClicked: root.returnToEmail()
+                                }
+                            }
                         }
-                    }
 
-                    // ── Email phase ─────────────────────────────────────
-                    ColumnLayout {
-                        visible: root.authTab === "email" && root.phase === "email"
-                        Layout.fillWidth: true
-                        spacing: Theme.spacingMd
-
-                        Text {
-                            text: qsTr("EMAIL ADDRESS")
-                            color: Colors.textMuted
-                            font.pixelSize: Theme.fontMonoTiny.pixelSize
-                            font.family: Theme.fontMono.family
-                            font.letterSpacing: 1.5
-                        }
-
-                        Text {
-                            visible: !root.usePassword
-                            text: qsTr("Works for both new and existing accounts. We'll email you a magic link.")
-                            color: Colors.textMuted
-                            font.pixelSize: Theme.fontMonoTiny.pixelSize
-                            wrapMode: Text.WordWrap
+                        Rectangle {
+                            visible: root.rateLimited
                             Layout.fillWidth: true
+                            implicitHeight: rateText.implicitHeight + 20
+                            color: Colors.errorFaintBg
+                            border.color: Colors.errorFaintBorder
+                            border.width: 1
+                            radius: Theme.radiusMd
+                            Text {
+                                id: rateText
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                text: root.rateLimitSeconds > 0
+                                      ? qsTr("Too many attempts. Try again in %n second.", "Too many attempts. Try again in %n seconds.", root.rateLimitSeconds)
+                                      : qsTr("Too many attempts. Wait a few minutes and try again.")
+                                color: Colors.statusError
+                                font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                                wrapMode: Text.WordWrap
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
 
-                        TextField {
-                            id: emailField
+                        Rectangle {
+                            visible: Auth.errorMessage.length > 0 && !root.rateLimited
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 44
-                            placeholderText: qsTr("you@example.com")
-                            font.family: Theme.fontMono.family
-                            font.pixelSize: Theme.fontSmall.pixelSize
-                            Keys.onReturnPressed: root.sendMagicLink()
+                            implicitHeight: serverError.implicitHeight + 20
+                            color: Colors.errorFaintBg
+                            border.color: Colors.errorFaintBorder
+                            border.width: 1
+                            radius: Theme.radiusMd
+                            Text {
+                                id: serverError
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                text: Auth.errorMessage
+                                textFormat: Text.PlainText
+                                color: Colors.statusError
+                                font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                                wrapMode: Text.WordWrap
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        Rectangle {
+                            visible: root.fieldError.length > 0
+                            Layout.fillWidth: true
+                            implicitHeight: fieldErrorText.implicitHeight + 16
+                            color: Colors.statusError10
+                            border.color: Colors.statusError30
+                            border.width: 1
+                            radius: Theme.radiusMd
+                            Text {
+                                id: fieldErrorText
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                text: root.fieldError
+                                color: Colors.statusError
+                                font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                                wrapMode: Text.WordWrap
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
 
                         Text {
                             visible: Backend.reachableKnown && !Backend.reachable
                             Layout.fillWidth: true
-                            Layout.topMargin: Theme.spacingXs
-                            text: qsTr("Backend offline — set the API URL in Settings to receive codes.")
+                            text: qsTr("The LiveMorph service is offline. Check your connection or API address in Settings.")
                             color: Colors.statusWarning
-                            font.pixelSize: Theme.fontLabel.pixelSize
+                            font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
                             wrapMode: Text.WordWrap
-                        }
-
-                        PrimaryButton {
-                            visible: !root.usePassword
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 44
-                            text: Auth.isLoading ? qsTr("Sending…") : qsTr("Send Magic Link")
-                            busy: Auth.isLoading
-                            enabled: !Auth.isLoading && emailField.text.trim().length > 0 && !root.rateLimited
-                            onClicked: root.sendMagicLink()
-                        }
-
-                        // Password sign-in — the backend /auth/login flow was
-                        // previously unreachable from the UI (OTP-only screen).
-                        TextField {
-                            id: passwordField
-                            visible: root.usePassword
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 44
-                            echoMode: TextInput.Password
-                            placeholderText: qsTr("Password")
-                            font.family: Theme.fontMono.family
-                            font.pixelSize: Theme.fontSmall.pixelSize
-                            Keys.onReturnPressed: root.signInWithPassword()
-                        }
-
-                        PrimaryButton {
-                            visible: root.usePassword
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 44
-                            text: Auth.isLoading ? qsTr("Signing in…") : qsTr("Sign In")
-                            busy: Auth.isLoading
-                            enabled: !Auth.isLoading && emailField.text.trim().length > 0
-                                     && passwordField.text.length >= 8 && !root.rateLimited
-                            onClicked: root.signInWithPassword()
-                        }
-
-                        Row {
-                            visible: root.usePassword
-                            Layout.alignment: Qt.AlignHCenter
-                            Layout.topMargin: Theme.spacingXs
-                            spacing: Theme.spacingLg
-                            Text {
-                                text: qsTr("Forgot password?")
-                                color: forgotMa.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                                font.pixelSize: Theme.fontMonoTiny.pixelSize
-                                font.underline: true
-                                MouseArea {
-                                    id: forgotMa
-                                    anchors.fill: parent
-                                    anchors.margins: -4
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.forgotPassword()
-                                }
-                            }
-                            Text {
-                                text: qsTr("Use magic link instead")
-                                color: pwToggleMa.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                                font.pixelSize: Theme.fontMonoTiny.pixelSize
-                                font.underline: true
-                                MouseArea {
-                                    id: pwToggleMa
-                                    anchors.fill: parent
-                                    anchors.margins: -4
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: { root.usePassword = false; Auth.clearError() }
-                                }
-                            }
-                        }
-
-                        Text {
-                            visible: !root.usePassword
-                            Layout.fillWidth: true
-                            Layout.topMargin: Theme.spacingXs
-                            horizontalAlignment: Text.AlignHCenter
-                            text: qsTr("Sign in with password instead")
-                            color: pwToggle2Ma.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                            font.pixelSize: Theme.fontMonoTiny.pixelSize
-                            font.underline: true
-                            MouseArea {
-                                id: pwToggle2Ma
-                                anchors.fill: parent
-                                anchors.margins: -4
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: { root.usePassword = true; Auth.clearError() }
-                            }
-                        }
-                    }
-
-                    // ── OTP phase: the code as a row of hex cells ───────
-                    ColumnLayout {
-                        visible: root.phase === "code"
-                        Layout.fillWidth: true
-                        spacing: Theme.spacingLg
-
-                        Column {
-                            Layout.fillWidth: true
-                            spacing: Theme.spacingMd
-
-                            HexBadge {
-                                size: 48
-                                iconName: "send"
-                                iconSize: 18
-                                lineWidth: 1.5
-                                lineColor: Colors.statusSuccess30
-                                fillColor: Colors.statusSuccessMuted
-                                iconColor: Colors.statusSuccess
-                                anchors.horizontalCenter: parent.horizontalCenter
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: qsTr("Check your email")
-                                color: Colors.textPrimary
-                                font.pixelSize: Theme.fontUi.pixelSize
-                            }
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: parent.width
-                                horizontalAlignment: Text.AlignHCenter
-                                text: qsTr("Enter the %1-digit code we sent to %2").arg(root.otpLength).arg(root.pendingEmail)
-                                color: Colors.textSecondary
-                                font.pixelSize: Theme.fontMono.pixelSize
-                                wrapMode: Text.WordWrap
-                            }
-                        }
-
-                        Row {
-                            id: otpRow
-                            Layout.alignment: Qt.AlignHCenter
-                            Layout.fillWidth: true
-                            Layout.maximumWidth: 448
-                            spacing: 6
-                            Repeater {
-                                id: digitRepeater
-                                model: root.otpLength
-                                Item {
-                                    id: digitCell
-                                    required property int index
-                                    property alias digitField: digitInput
-                                    readonly property real cell: Math.max(30, (otpRow.width - (root.otpLength - 1) * otpRow.spacing) / root.otpLength)
-                                    width: cell
-                                    height: cell * Math.sqrt(3) / 2 + 2
-
-                                    Hexagon {
-                                        anchors.centerIn: parent
-                                        size: cell
-                                        lineWidth: digitInput.activeFocus ? 2 : 1
-                                        lineColor: digitInput.activeFocus ? Colors.accent
-                                            : (Auth.errorMessage.length > 0 && root.phase === "code" ? Colors.statusError : Colors.surfaceBorder)
-                                        fillColor: digitInput.text.length > 0 ? Colors.accent10
-                                            : digitInput.activeFocus ? Colors.surfaceFocus
-                                            : Colors.surfaceRaised
-                                    }
-
-                                    TextInput {
-                                        id: digitInput
-                                        anchors.fill: parent
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                        color: text.length > 0 ? Colors.accentHover : Colors.textPrimary
-                                        font.pixelSize: Theme.fontXl.pixelSize
-                                        font.bold: true
-                                        font.family: Theme.fontMono.family
-                                        maximumLength: 1
-                                        inputMethodHints: Qt.ImhDigitsOnly
-                                        validator: RegularExpressionValidator { regularExpression: /[0-9]/ }
-                                        text: root.digits[index] || ""
-                                        onTextChanged: {
-                                            if (text.length > 1) {
-                                                // pasted multi-digit code — distribute across cells
-                                                var cleaned = text.replace(/\D/g, "").slice(0, root.otpLength)
-                                                var arr = []
-                                                for (var j = 0; j < root.otpLength; j++) arr.push("")
-                                                for (var k = 0; k < cleaned.length; k++) arr[k] = cleaned[k]
-                                                root.digits = arr
-                                                root.otpCode = cleaned
-                                                if (cleaned.length === root.otpLength && !Auth.isLoading)
-                                                    Qt.callLater(root.verifyCode)
-                                                return
-                                            }
-                                            if (text === (root.digits[index] || "")) return
-                                            var arr = root.digits.slice()
-                                            arr[index] = text
-                                            root.digits = arr
-                                            root.otpCode = arr.join("")
-                                            if (text.length === 1 && index < root.otpLength - 1) {
-                                                const next = digitRepeater.itemAt(index + 1)
-                                                if (next && next.digitField)
-                                                    next.digitField.forceActiveFocus()
-                                            }
-                                            if (root.otpCode.length === root.otpLength && !Auth.isLoading)
-                                                Qt.callLater(root.verifyCode)
-                                        }
-                                        Keys.onPressed: (e) => {
-                                            if (e.key === Qt.Key_Backspace && text.length === 0 && index > 0) {
-                                                const prev = digitRepeater.itemAt(index - 1)
-                                                if (prev && prev.digitField)
-                                                    prev.digitField.forceActiveFocus()
-                                            }
-                                            if (e.matches(StandardKey.Paste)) {
-                                                e.accepted = true
-                                                pasteField.text = ""
-                                                pasteField.forceActiveFocus()
-                                                pasteField.paste()
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Hidden paste field
-                        TextInput {
-                            id: pasteField
-                            visible: false
-                            onTextChanged: {
-                                var cleaned = text.replace(/\D/g, "").slice(0, root.otpLength)
-                                if (cleaned.length === 0) return
-                                var arr = []
-                                for (var j = 0; j < root.otpLength; j++) arr.push("")
-                                for (var i = 0; i < cleaned.length; i++) arr[i] = cleaned[i]
-                                root.digits = arr
-                                root.otpCode = cleaned
-                                text = ""
-                                if (cleaned.length === root.otpLength && !Auth.isLoading) root.verifyCode()
-                            }
-                        }
-
-                        PrimaryButton {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 48
-                            text: Auth.isLoading ? qsTr("Signing in") : qsTr("Sign in")
-                            busy: Auth.isLoading
-                            enabled: !Auth.isLoading && root.otpCode.length >= root.minCodeLength
-                            onClicked: root.verifyCode()
-                        }
-
-                        Row {
-                            Layout.alignment: Qt.AlignHCenter
-                            spacing: Theme.spacingSm
-                            // Resend chip
-                            Rectangle {
-                                property bool cooling: Math.max(root.resendCooldown, Auth.otpCooldownSecs || 0) > 0
-                                height: 28
-                                width: resendLbl.implicitWidth + 14
-                                radius: Theme.radiusFull
-                                color: cooling ? Colors.surfaceElevated : (resendMa.containsMouse ? Colors.accent12 : Colors.accent10)
-                                border.width: 1
-                                border.color: cooling ? Colors.surfaceBorderSubtle : Colors.accent30
-                                Text {
-                                    id: resendLbl
-                                    anchors.centerIn: parent
-                                    text: {
-                                        var sec = Math.max(root.resendCooldown, Auth.otpCooldownSecs || 0)
-                                        return sec > 0 ? qsTr("RESEND IN %1S").arg(sec) : qsTr("SEND NEW CODE")
-                                    }
-                                    color: parent.cooling ? Colors.textMuted : Colors.accentHover
-                                    font.pixelSize: Theme.fontMicro.pixelSize
-                                    font.family: Theme.fontMono.family
-                                    font.weight: Font.Bold
-                                    font.letterSpacing: 1.0
-                                }
-                                MouseArea {
-                                    id: resendMa
-                                    anchors.fill: parent
-                                    enabled: !parent.cooling && !Auth.isLoading
-                                    hoverEnabled: true
-                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                    onClicked: {
-                                        Auth.requestOtp(root.pendingEmail)
-                                        root.resendCooldown = Constants.resendCooldownSecs
-                                        resendTimer.start()
-                                    }
-                                }
-                            }
-                            // Different-email chip
-                            Rectangle {
-                                height: 28
-                                width: diffLbl.implicitWidth + 14
-                                radius: Theme.radiusFull
-                                color: diffMa.containsMouse ? Colors.overlay50 : Colors.surfaceElevated
-                                border.width: 1
-                                border.color: diffMa.containsMouse ? Colors.surfaceBorderStrong : Colors.surfaceBorderSubtle
-                                Text {
-                                    id: diffLbl
-                                    anchors.centerIn: parent
-                                    text: qsTr("DIFFERENT EMAIL")
-                                    color: diffMa.containsMouse ? Colors.textPrimary : Colors.textMuted
-                                    font.pixelSize: Theme.fontMicro.pixelSize
-                                    font.family: Theme.fontMono.family
-                                    font.weight: Font.Bold
-                                    font.letterSpacing: 1.0
-                                }
-                                MouseArea {
-                                    id: diffMa
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.phase = "email"
-                                        root.otpCode = ""
-                                        root.digits = (function () {
-                                            var a = []
-                                            for (var j = 0; j < root.otpLength; j++) a.push("")
-                                            return a
-                                        })()
-                                        Auth.clearError()
-                                        Auth.resetOtpFlow()
-                                    }
-                                }
-                            }
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            Layout.topMargin: Theme.spacingXs
-                            text: qsTr("The link in that email still works too.")
-                            color: Colors.textMuted
-                            font.pixelSize: Theme.fontMonoTiny.pixelSize
-                            wrapMode: Text.WordWrap
-                            horizontalAlignment: Text.AlignHCenter
-                            Layout.alignment: Qt.AlignHCenter
-                        }
-                    }
-
-                    // Rate limit (live countdown) / error banner
-                    Rectangle {
-                        visible: root.rateLimited
-                        Layout.fillWidth: true
-                        Layout.topMargin: Theme.spacingMd
-                        height: rlRow.implicitHeight + 16
-                        radius: Theme.radiusMd
-                        color: Colors.errorSoftBg
-                        border.color: Colors.statusError30
-                        border.width: 1
-                        RowLayout {
-                            id: rlRow
-                            anchors.fill: parent
-                            anchors.leftMargin: Theme.gapCard
-                            anchors.rightMargin: Theme.gapCard
-                            spacing: Theme.spacingSm
-                            Icon {
-                                name: "alert-circle"
-                                size: 14
-                                color: Colors.statusError
-                                Layout.alignment: Qt.AlignTop
-                                Layout.topMargin: 2
-                            }
-                            Text {
-                                Layout.fillWidth: true
-                                wrapMode: Text.WordWrap
-                                text: root.rateLimitSeconds > 0
-                                      ? qsTr("Too many login attempts. Try again in %n second.", "Too many login attempts. Try again in %n seconds.", root.rateLimitSeconds)
-                                      : qsTr("Too many login attempts. Please wait a few minutes.")
-                                color: Colors.statusError
-                                font.pixelSize: Theme.fontLabel.pixelSize
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        visible: Auth.errorMessage.length > 0 && !root.rateLimited
-                        Layout.fillWidth: true
-                        Layout.topMargin: Theme.spacingMd
-                        height: errRow.implicitHeight + 16
-                        radius: Theme.radiusMd
-                        color: Colors.errorSoftBg
-                        border.color: Colors.statusError30
-                        border.width: 1
-                        RowLayout {
-                            id: errRow
-                            anchors.fill: parent
-                            anchors.leftMargin: Theme.gapCard
-                            anchors.rightMargin: Theme.gapCard
-                            spacing: Theme.spacingSm
-                            Icon {
-                                name: "alert-circle"
-                                size: 14
-                                color: Colors.statusError
-                                Layout.alignment: Qt.AlignTop
-                                Layout.topMargin: 2
-                            }
-                            Text {
-                                Layout.fillWidth: true
-                                wrapMode: Text.WordWrap
-                                text: Auth.errorMessage
-                                textFormat: Text.PlainText // server-derived — never rich text
-                                color: Colors.statusError
-                                font.pixelSize: Theme.fontLabel.pixelSize
-                            }
                         }
                     }
                 }
-            }
 
-            Item { width: 1; height: 20 }
-
-            // ── Footer: terms + builder ──────────────────────────────
-            // Plain Text items + MouseArea, NOT rich text: QQuickText rich
-            // anchors always render in the style's OS link color (blue/purple),
-            // which breaks the monochrome Obsidian Hex directive.
-            Column {
-                width: parent.width
-                spacing: 2
-                Text {
+                Column {
                     width: parent.width
-                    color: Colors.textMuted
-                    font.pixelSize: Theme.fontMonoTiny.pixelSize
-                    wrapMode: Text.WordWrap
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("By continuing, you agree to our Terms of Service, Privacy Policy, and Acceptable Use Policy.")
-                }
-                Row {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: Theme.gapCard
-                    Repeater {
-                        model: [
-                            { label: qsTr("Terms of Service"), url: Constants.urlTerms },
-                            { label: qsTr("Privacy Policy"), url: Constants.urlPrivacy },
-                            { label: qsTr("Acceptable Use Policy"), url: Constants.urlAup },
-                        ]
-                        Text {
-                            text: modelData.label
-                            color: Colors.accent
-                            font.pixelSize: Theme.fontMonoTiny.pixelSize
-                            font.underline: true
-                            MouseArea {
-                                anchors.fill: parent
-                                anchors.margins: -4
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    // Only open https links (never file:// or registered-handler schemes).
-                                    const u = String(modelData.url)
-                                    if (u.startsWith("https://"))
-                                        Qt.openUrlExternally(u)
+                    spacing: Theme.spacingSm
+                    Text {
+                        width: parent.width
+                        text: qsTr("By continuing, you agree to the LiveMorph policies.")
+                        color: Colors.textMuted
+                        font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                        wrapMode: Text.WordWrap
+                    }
+                    Flow {
+                        width: parent.width
+                        spacing: 4
+                        Repeater {
+                            model: [
+                                { label: qsTr("Terms"), url: Constants.urlTerms },
+                                { label: qsTr("Privacy"), url: Constants.urlPrivacy },
+                                { label: qsTr("Acceptable use"), url: Constants.urlAup }
+                            ]
+                            delegate: Text {
+                                required property var modelData
+                                text: modelData.label
+                                color: policyMa.containsMouse || activeFocus ? Colors.textPrimary : Colors.textSecondary
+                                font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                                font.underline: true
+                                activeFocusOnTab: true
+                                Accessible.role: Accessible.Link
+                                Accessible.name: modelData.label
+                                Keys.onReturnPressed: policyMa.openLink()
+                                Keys.onSpacePressed: policyMa.openLink()
+                                MouseArea {
+                                    id: policyMa
+                                    anchors.fill: parent
+                                    anchors.margins: -6
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    function openLink() {
+                                        if (String(modelData.url).startsWith("https://"))
+                                            Qt.openUrlExternally(modelData.url)
+                                    }
+                                    onClicked: openLink()
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            RowLayout {
-                width: parent.width
-                Layout.topMargin: Theme.spacingMd
-                BrandingFooter { Layout.fillWidth: true }
-                Text {
-                    text: "v" + App.appVersion
-                    color: Colors.textMuted
-                    font.pixelSize: Theme.fontMonoTiny.pixelSize
-                    font.family: Theme.fontMono.family
+                RowLayout {
+                    width: parent.width
+                    BrandingFooter { Layout.fillWidth: true }
+                    Text {
+                        text: "v" + App.appVersion
+                        color: Colors.textMuted
+                        font: Theme.fontMonoTiny
+                    }
                 }
             }
         }
@@ -833,9 +865,11 @@ Item {
         repeat: true
         onTriggered: {
             root.resendCooldown = Math.max(0, root.resendCooldown - 1)
-            if (root.resendCooldown === 0) stop()
+            if (root.resendCooldown === 0)
+                stop()
         }
     }
+
     Timer {
         id: rateLimitTimer
         interval: 1000
@@ -849,99 +883,53 @@ Item {
         }
     }
 
-    function sendMagicLink() {
-        var email = emailField.text.trim()
-        if (!Auth.isValidEmail(email)) {
-            App.notify(qsTr("Please enter a valid email address."), "error")
-            return
-        }
-        if (Auth.rateLimited) return
-        Auth.requestOtp(email)
-    }
-    function signInWithPassword() {
-        var email = emailField.text.trim()
-        if (!Auth.isValidEmail(email)) {
-            App.notify(qsTr("Please enter a valid email address."), "error")
-            return
-        }
-        if (passwordField.text.length < 8) {
-            App.notify(qsTr("Password must be at least 8 characters."), "error")
-            return
-        }
-        if (Auth.rateLimited) return
-        Auth.signInWithEmail(email, passwordField.text)
-    }
-    function forgotPassword() {
-        var email = emailField.text.trim()
-        if (!Auth.isValidEmail(email)) {
-            App.notify(qsTr("Please enter a valid email address."), "error")
-            return
-        }
-        Auth.requestPasswordReset(email)
-    }
-    function verifyCode() {
-        if (Auth.isLoading) return
-        if (root.otpCode.length < root.minCodeLength) return
-        var email = (root.pendingEmail || Auth.pendingEmail || "").trim()
-        if (!email) {
-            App.notify(qsTr("Missing email — go back and try again"), "error")
-            root.phase = "email"
-            return
-        }
-        Auth.verifyOtp(email, root.otpCode)
-    }
-
-    Keys.forwardTo: [pasteField]
-    focus: true
-
     Component.onCompleted: {
-        // The lockout flag lives on Auth and can already be set when this
-        // screen mounts — Connections only fires on CHANGE, so sync once here.
         root.rateLimited = Auth.rateLimited
         root.rateLimitSeconds = Auth.rateLimitSecs
-        if (Auth.rateLimited) rateLimitTimer.start()
-        // Same one-shot sync for the OAuth availability fallback.
-        if (!Auth.googleAuthAvailable && root.authTab === "social")
+        if (Auth.rateLimited)
+            rateLimitTimer.start()
+        if (!Auth.googleAuthAvailable)
             root.authTab = "email"
     }
 
     Connections {
         target: Auth
+        function onGoogleAvailableChanged() {
+            if (!Auth.googleAuthAvailable)
+                root.authTab = "email"
+        }
         function onGoogleOAuthStarted(url) {
             App.notify(qsTr("Complete Google sign-in in your browser"), "info")
         }
         function onOtpRequested(email) {
             root.pendingEmail = email
             root.phase = "code"
-            root.resendCooldown = Constants.resendCooldownSecs
-            resendTimer.start()
-            var n = root.otpLength
-            var arr = []
-            for (var i = 0; i < n; i++) arr.push("")
-            root.digits = arr
+            root.authTab = "email"
             root.otpCode = ""
-            Qt.callLater(function() {
-                var first = digitRepeater.count > 0 ? digitRepeater.itemAt(0) : null
-                if (first && first.digitField)
-                    first.digitField.forceActiveFocus()
-            })
+            root.resendCooldown = Constants.resendCooldownSecs
+            resendTimer.restart()
+            Qt.callLater(otpInput.forceActiveFocus)
+        }
+        function onPasswordResetRequested() {
+            root.resetInFlight = false
+            root.resetFeedback = qsTr("Reset instructions were sent to %1. Check your inbox.").arg(emailField.text.trim())
         }
         function onSignedIn() {
             root.phase = "email"
+            root.otpCode = ""
         }
         function onRateLimitedChanged() {
             root.rateLimited = Auth.rateLimited
             root.rateLimitSeconds = Auth.rateLimitSecs
-            if (Auth.rateLimited) rateLimitTimer.start()
+            if (Auth.rateLimited)
+                rateLimitTimer.restart()
         }
         function onErrorMessageChanged() {
-            // Don't wipe the entered digits on every error — let the user
-            // correct a typo. (The backend rejects wrong codes with an error.)
+            root.resetInFlight = false
         }
     }
 
     NotificationToastHost {
-        id: toastHost
         z: Theme.zToast
         pageChrome: false
     }

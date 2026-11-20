@@ -13,6 +13,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 #[get("/catalog")]
 async fn get_catalog(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpResponse> {
+    // Anonymous endpoint: throttle per IP so it cannot be used as a free
+    // Mongo-read amplifier.
+    let ip = crate::auth::client_ip(&req);
+    if !crate::auth::check_rate_limit(&ip, "catalog", 60, 60) {
+        return Err(crate::error::AppError::RateLimited(
+            "too many catalog requests".into(),
+            None,
+        ));
+    }
     // Per-product isolation: the secondary slot serves its own catalog.
     let coll = match ProductId::from_request(&req) {
         ProductId::Secondary => db.characters_secondary(),
@@ -27,5 +36,14 @@ async fn get_catalog(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpRespo
     while let Some(c) = cursor.try_next().await? {
         items.push(CharacterPublic::from(&c));
     }
-    Ok(HttpResponse::Ok().json(items))
+    // Public, slowly-changing data: allow short shared caching (the global
+    // no-store default is for sensitive responses). Vary on every header that
+    // can change the product being served.
+    Ok(HttpResponse::Ok()
+        .insert_header(("Cache-Control", "public, max-age=60"))
+        .insert_header((
+            "Vary",
+            "X-Frontend-Id, X-Client-Product, Accept-Encoding",
+        ))
+        .json(items))
 }

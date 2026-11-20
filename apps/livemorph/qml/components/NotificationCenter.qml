@@ -150,7 +150,7 @@ Rectangle {
         anchors.fill: parent
         cellSize: Theme.honeycombCell
         lineColor: Colors.honeycombLineFaint
-        opacity: 0.4
+        opacity: 0.14
         z: Theme.zLocal0
     }
 
@@ -281,6 +281,7 @@ Rectangle {
                     { "label": qsTr("Unread"), "value": "unread" }
                 ]
                 currentValue: root.filter
+                equalWidths: true
                 onActivated: (v) => {
                     root.filter = v
                     root.rebuild()

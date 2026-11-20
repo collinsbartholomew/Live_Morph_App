@@ -132,7 +132,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: 40
+            height: 48
             color: Colors.black70
             opacity: 0.55
         }
@@ -140,7 +140,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: 24
+            height: 34
             color: Colors.black70
             // (ring moved to card level — Electron wraps the WHOLE card)
             RowLayout {
@@ -156,7 +156,7 @@ Item {
                     id: nameLbl
                     text: renameField.visible ? "" : (root.name || "")
                     color: cardMa.containsMouse ? Colors.white : Colors.white90
-                    font.pixelSize: Theme.fontMonoTiny.pixelSize
+                    font.pixelSize: Theme.fontSmall.pixelSize
                     font.weight: Font.Bold
                     font.letterSpacing: -0.25
                     elide: Text.ElideRight

@@ -21,16 +21,25 @@ bootstrap payload and plan catalogue:
   `MONGODB_DB_SECONDARY` (its isolated database) in `backend/.env`; no Rust
   changes are required.
 
-## Backend
+## Deployment
+
+See [the deployment guide](docs/DEPLOYMENT.md) for production containers, named env files, Kaggle, desktop packaging, health checks, and rollback behavior.
+
+Local backend:
+
 ```bash
-cp backend/.env.example backend/.env   # set JWT_SECRET, Mongo, Decart, etc.
-docker compose up -d
-# or: cd backend && cargo run --release
+cp backend/.env.example backend/.env
+# Fill JWT_SECRET and DECART_API_KEY; keep RUST_ENV=development.
+docker compose up -d --build
 ```
 
-## Frontend (needs Qt 6.5+ and the GStreamer WebRTC plugins)
+Frontend (Qt 6.5+ and GStreamer WebRTC plugins):
+
 ```bash
-cd apps/livemorph && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+cd apps/livemorph
+cp .env.example .env
+# Set LIVEMORPH_API_URL to the public HTTPS backend origin, then compile.
+./build.sh
 ```
 
-Point the app at the API base URL (Settings or default `http://127.0.0.1:3874`).
+The frontend build requires `.env` and runs CTest plus QML checks. The env origin replaces local defaults; explicit Settings choices and the `LIVEMORPH_API_URL` process variable remain available as overrides.

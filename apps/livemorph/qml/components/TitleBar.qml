@@ -12,7 +12,7 @@ import LiveMorph
  */
 Rectangle {
     id: root
-    color: Colors.surfaceRaised
+    color: Colors.surfaceBase
     implicitHeight: Theme.titleBarHeight
 
     Rectangle {
@@ -102,13 +102,31 @@ Rectangle {
     }
 
     Row {
+        anchors.centerIn: parent
+        spacing: Theme.spacingSm
+        Hexagon {
+            size: 7
+            lineWidth: 0
+            fillColor: Backend.reachable ? Colors.statusSuccess : Colors.textMuted
+            anchors.verticalCenter: parent.verticalCenter
+        }
+        Text {
+            text: Backend.reachable ? qsTr("ENGINE CONNECTED") : qsTr("LOCAL STUDIO")
+            color: Colors.textMuted
+            font.family: Theme.fontMicro.family; font.pixelSize: Theme.fontMicro.pixelSize
+            font.letterSpacing: 1
+            anchors.verticalCenter: parent.verticalCenter
+        }
+    }
+
+    Row {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         spacing: 0
 
         IconButton {
-            name: "minimize"
+            name: "window-minimize"
             accessibleName: qsTr("Minimize")
             iconSize: 14
             width: 48
@@ -118,7 +136,7 @@ Rectangle {
             onClicked: root.minimizeRequested()
         }
         IconButton {
-            name: "maximize"
+            name: "window-maximize"
             accessibleName: qsTr("Maximize")
             iconSize: 14
             width: 48

@@ -6,55 +6,78 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN="${1:-${SCRIPT_DIR}/../build/bin/LiveMorph}"
 # CMAKE_PREFIX_PATH is a CMake ';' list — take the FIRST entry, not the whole list.
-QT_PREFIX="${CMAKE_PREFIX_PATH%%;*}"
+QT_PREFIX="${CMAKE_PREFIX_PATH:-}"
+QT_PREFIX="${QT_PREFIX%%;*}"
 [[ -z "$QT_PREFIX" ]] && QT_PREFIX="${QTDIR:-}"
+QMAKE_BIN="${QMAKE:-}"
+if [[ -z "$QMAKE_BIN" && -n "$QT_PREFIX" && -x "$QT_PREFIX/bin/qmake" ]]; then
+  QMAKE_BIN="$QT_PREFIX/bin/qmake"
+fi
+if [[ -z "$QMAKE_BIN" ]]; then
+  QMAKE_BIN="$(command -v qmake6 || command -v qmake || true)"
+fi
+if [[ -z "$QT_PREFIX" && -n "$QMAKE_BIN" ]]; then
+  QT_PREFIX="$("$QMAKE_BIN" -query QT_INSTALL_PREFIX)"
+fi
 [[ -x "$BIN" ]] || { echo "Missing binary $BIN (build first: ./build.sh)"; exit 1; }
 [[ -n "$QT_PREFIX" ]] || { echo "Set CMAKE_PREFIX_PATH or QTDIR to your Qt6 prefix"; exit 1; }
+QT_LIBDIR="${QT_LIBDIR:-}"
+QT_PLUGIN_DIR="${QT_PLUGIN_DIR:-}"
+QT_QML_DIR="${QT_QML_DIR:-}"
+if [[ -n "$QMAKE_BIN" ]]; then
+  [[ -n "$QT_LIBDIR" ]] || QT_LIBDIR="$("$QMAKE_BIN" -query QT_INSTALL_LIBS)"
+  [[ -n "$QT_PLUGIN_DIR" ]] || QT_PLUGIN_DIR="$("$QMAKE_BIN" -query QT_INSTALL_PLUGINS)"
+  [[ -n "$QT_QML_DIR" ]] || QT_QML_DIR="$("$QMAKE_BIN" -query QT_INSTALL_QML)"
+fi
+QT_LIBDIR="${QT_LIBDIR:-$QT_PREFIX/lib}"
+QT_PLUGIN_DIR="${QT_PLUGIN_DIR:-$QT_PREFIX/plugins}"
+QT_QML_DIR="${QT_QML_DIR:-$QT_PREFIX/qml}"
+[[ -d "$QT_LIBDIR" && -d "$QT_PLUGIN_DIR" && -d "$QT_QML_DIR" ]] || {
+  echo "Qt runtime directories not found for prefix $QT_PREFIX"; exit 1;
+}
 
 BIN_DIR="$(cd "$(dirname "$BIN")" && pwd)"
 # Never derive a delete target from a system path (e.g. /usr/bin/LiveMorph).
 case "$BIN_DIR" in /usr|/bin|/sbin|/etc|/usr/*|/bin/*|/sbin/*|/etc/*)
   echo "Refusing to stage from a system binary path: $BIN"; exit 1;; esac
 OUT="$BIN_DIR/dist"
+"$BIN" --verify-qml
 rm -rf "$OUT"
 mkdir -p "$OUT/lib" "$OUT/plugins" "$OUT/qml" "$OUT/gst-plugins"
 
 cp -a "$BIN" "$OUT/"
-# Core Qt libs the app links (no WebEngine — media is GStreamer webrtcbin).
-# QuickDialogs2 and OpenGL are direct DT_NEEDED of the binary; QuickTemplates2
-# and DBus are required transitively by QuickControls2/Multimedia.
-MISSING=0
-for lib in Core Gui Widgets Qml Quick QuickControls2 QuickDialogs2 QuickTemplates2 QuickLayouts QuickShapes OpenGL Network WebSockets Multimedia Svg Concurrent DBus; do
-  if ! cp -a "$QT_PREFIX"/lib/libQt6${lib}.so* "$OUT/lib/" 2>/dev/null; then
-    echo "warn: Qt lib not found: libQt6${lib}.so*"; MISSING=1
-  fi
-done
-# GStreamer runtime libs (webrtcbin lives in gst-plugins-bad)
-# gstbase is a direct DT_NEEDED of the binary; gstaudio/gsttag/orc/libnice are
-# required by the bundled gst-plugins-bad webrtcbin plugin chain.
 TRIPLET="$(gcc -dumpmachine 2>/dev/null || echo x86_64-linux-gnu)"
-for lib in libgstreamer-1.0.so* libgstwebrtc-1.0.so* libgstsdp-1.0.so* libgstapp-1.0.so* libgstbase-1.0.so* libgstvideo-1.0.so* libgstaudio-1.0.so* libgsttag-1.0.so* libgstcodecparsers-1.0.so* libgstpbutils-1.0.so* libgstrtp-1.0.so* libgstrtpmanager-1.0.so* libgstnet-1.0.so* libgstgl-1.0.so* libglib-2.0.so* libgobject-2.0.so* liborc-0.4.so* libnice.so* libsrtp2.so*; do
-  found=0
-  for f in "/usr/lib/$TRIPLET/$lib" /usr/lib/"$lib" /usr/lib64/"$lib"; do
-    if [[ -e "$f" ]]; then cp -a "$f" "$OUT/lib/" 2>/dev/null && found=1; fi
-  done
-  [[ $found -eq 0 ]] && { echo "warn: gst lib not found: $lib"; MISSING=1; }
-done
+GST_LIBDIR="${GST_LIBDIR:-$(pkg-config --variable=libdir gstreamer-1.0 2>/dev/null || true)}"
+GST_PLUGIN_DIR="${GST_PLUGIN_DIR:-$(pkg-config --variable=pluginsdir gstreamer-1.0 2>/dev/null || true)}"
 
 # Qt plugins the app needs at runtime — tls is required for HTTPS to the
 # backend; xcbglintegrations/egldeviceintegrations for GL rendering;
 # platforminputcontexts/networkinformation/wayland-* for IME/net/Wayland.
 for plug in platforms platforminputcontexts imageformats qmltooling multimedia iconengines tls xcbglintegrations egldeviceintegrations networkinformation scenegraph wayland-decoration-client wayland-graphics-integration-client wayland-shell-integration; do
-  if [[ -d "$QT_PREFIX/plugins/$plug" ]]; then
-    cp -a "$QT_PREFIX/plugins/$plug" "$OUT/plugins/"
+  if [[ -d "$QT_PLUGIN_DIR/$plug" ]]; then
+    cp -a "$QT_PLUGIN_DIR/$plug" "$OUT/plugins/"
   fi
 done
-# QML modules imported by the compiled module (QtQuick.*, QtMultimedia, ...)
-if [[ -d "$QT_PREFIX/qml" ]]; then
-  cp -a "$QT_PREFIX/qml/." "$OUT/qml/"
-fi
+for module in QtMultimedia QtCore QML; do
+  [[ -d "$QT_QML_DIR/$module" ]] || { echo "ERROR: required QML module missing: $module" >&2; exit 1; }
+  cp -a "$QT_QML_DIR/$module" "$OUT/qml/"
+done
+for parent in QtQuick QtQml; do
+  mkdir -p "$OUT/qml/$parent"
+  for item in "$QT_QML_DIR/$parent"/*; do
+    [[ -f "$item" ]] && cp -a "$item" "$OUT/qml/$parent/"
+  done
+done
+for module in Controls Templates Layouts Window Dialogs Shapes; do
+  [[ -d "$QT_QML_DIR/QtQuick/$module" ]] || { echo "ERROR: required QtQuick module missing: $module" >&2; exit 1; }
+  cp -a "$QT_QML_DIR/QtQuick/$module" "$OUT/qml/QtQuick/"
+done
+for module in Models WorkerScript; do
+  [[ -d "$QT_QML_DIR/QtQml/$module" ]] || { echo "ERROR: required QtQml module missing: $module" >&2; exit 1; }
+  cp -a "$QT_QML_DIR/QtQml/$module" "$OUT/qml/QtQml/"
+done
 # GStreamer plugin .so files (webrtcbin, codecs, appsrc/appsink, videoconvert...)
-for d in "/usr/lib/$TRIPLET/gstreamer-1.0" /usr/lib/gstreamer-1.0 /usr/lib64/gstreamer-1.0; do
+for d in "$GST_PLUGIN_DIR" "/usr/lib/$TRIPLET/gstreamer-1.0" /usr/lib/gstreamer-1.0 /usr/lib64/gstreamer-1.0; do
   [[ -d "$d" ]] && cp -a "$d/." "$OUT/gst-plugins/" 2>/dev/null
 done
 
@@ -65,11 +88,7 @@ export LD_LIBRARY_PATH="$DIR/lib:${LD_LIBRARY_PATH:-}"
 export QT_PLUGIN_PATH="$DIR/plugins"
 export QML_IMPORT_PATH="$DIR/qml"
 export GST_PLUGIN_PATH="$DIR/gst-plugins"
-# Append (not replace) so a partial bundled plugin dir still falls back to
-# the system GStreamer plugins. Resolve the system dir at RUNTIME (the build
-# host's multiarch triplet may differ from the target's).
-SYSGST="$(dirname "$(ldconfig -p 2>/dev/null | awk '/libgstreamer-1.0\.so/{print $NF; exit}')")/gstreamer-1.0"
-export GST_PLUGIN_SYSTEM_PATH="$DIR/gst-plugins:${GST_PLUGIN_SYSTEM_PATH:-${SYSGST:-/usr/lib/gstreamer-1.0}}"
+export GST_PLUGIN_SYSTEM_PATH="$DIR/gst-plugins:${GST_PLUGIN_SYSTEM_PATH:-}"
 exec "$DIR/LiveMorph" "$@"
 RUN
 chmod +x "$OUT/LiveMorph.sh" "$OUT/LiveMorph"
@@ -84,13 +103,50 @@ Exec="$OUT/LiveMorph.sh" %u
 Icon=$OUT/livemorph-icon.png
 Terminal=false
 Categories=AudioVideo;Graphics;
-MimeType=x-scheme-handler/livemorph;
+MimeType=x-scheme-handler/omegarevelation;x-scheme-handler/livemorph;
 EOF
 
 # Verify the staged binary actually resolves every shared lib — a wrong Qt
 # prefix or missing lib must fail HERE, not with a loader error on the target.
 # Resolve against the STAGED lib dir, not the build host's system libs.
 export LD_LIBRARY_PATH="$OUT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+stage_runtime_dependencies() {
+  local pass input deps dep name real real_name added
+  for pass in 1 2 3 4 5 6; do
+    added=0
+    while IFS= read -r input; do
+      deps="$(ldd "$input" 2>/dev/null || true)"
+      if grep -q "not found" <<< "$deps"; then
+        echo "ERROR: unresolved libraries for $input:" >&2
+        grep "not found" <<< "$deps" >&2
+        return 1
+      fi
+      while IFS= read -r dep; do
+        [[ "$dep" == /* && -e "$dep" && "$dep" != "$OUT/"* ]] || continue
+        name="${dep##*/}"
+        case "$name" in
+          libQt6*.so*|libgst*.so*|libgstreamer*.so*|libglib*.so*|libgobject*.so*|libgmodule*.so*|libgio*.so*|libnice*.so*|libsrtp*.so*|liborc*.so*) ;;
+          *) continue ;;
+        esac
+        if [[ ! -e "$OUT/lib/$name" && ! -L "$OUT/lib/$name" ]]; then
+          cp -a "$dep" "$OUT/lib/"
+          added=1
+        fi
+        real="$(readlink -f "$dep")"
+        real_name="${real##*/}"
+        if [[ "$real" != "$OUT/"* && ! -e "$OUT/lib/$real_name" && ! -L "$OUT/lib/$real_name" ]]; then
+          cp -a "$real" "$OUT/lib/"
+          added=1
+        fi
+      done < <(awk '{if ($2 == "=>" && $3 ~ /^\//) print $3; else if ($1 ~ /^\//) print $1}' <<< "$deps")
+    done < <(find "$OUT" -type f \( -name LiveMorph -o -name '*.so' -o -name '*.so.*' \) -print)
+    [[ "$added" -eq 0 ]] && break
+  done
+}
+stage_runtime_dependencies
+for lib in libQt6Core.so.6 libQt6Qml.so.6 libQt6Quick.so.6 libgstreamer-1.0.so.0 libgstwebrtc-1.0.so.0; do
+  [[ -e "$OUT/lib/$lib" ]] || { echo "ERROR: required runtime library missing: $lib" >&2; exit 1; }
+done
 if ldd "$OUT/LiveMorph" 2>/dev/null | grep -q "not found"; then
   echo "ERROR: staged binary has unresolved libraries:" >&2
   ldd "$OUT/LiveMorph" 2>/dev/null | grep "not found" >&2
@@ -104,10 +160,23 @@ for so in "$OUT"/gst-plugins/*.so; do
     exit 1
   fi
 done
-[[ $MISSING -eq 0 ]] || echo "warning: some optional libs were missing (see above)" >&2
+for plug in platforms imageformats multimedia tls; do
+  [[ -d "$OUT/plugins/$plug" ]] || { echo "ERROR: required Qt plugin group missing: $plug" >&2; exit 1; }
+done
+for module in QtQuick/Controls QtQuick/Templates QtQuick/Layouts QtQuick/Window QtQuick/Dialogs QtQuick/Shapes QtQml/Models QtQml/WorkerScript QtMultimedia; do
+  [[ -d "$OUT/qml/$module" ]] || { echo "ERROR: required QML module missing: $module" >&2; exit 1; }
+done
+shopt -s nullglob
+webrtc_plugins=("$OUT"/gst-plugins/libgstwebrtc.so "$OUT"/gst-plugins/*webrtcbin*.so)
+webengine_libs=("$OUT"/lib/libQt6WebEngine*.so*)
+shopt -u nullglob
+[[ ${#webrtc_plugins[@]} -gt 0 ]] || { echo "ERROR: GStreamer webrtcbin plugin missing" >&2; exit 1; }
+[[ ${#webengine_libs[@]} -eq 0 && ! -d "$OUT/qml/QtWebEngine" ]] || { echo "ERROR: QtWebEngine must not be packaged" >&2; exit 1; }
+QT_QPA_PLATFORM=offscreen "$OUT/LiveMorph.sh" --verify-qml
 
 echo "Staged: $OUT"
 echo "Run: $OUT/LiveMorph.sh"
 echo "Tip: use linuxdeploy-plugin-qt for a single AppImage."
 echo "Optional: xdg-desktop-menu install $OUT/livemorph.desktop"
+echo "Optional: xdg-mime default livemorph.desktop x-scheme-handler/omegarevelation"
 echo "Optional: xdg-mime default livemorph.desktop x-scheme-handler/livemorph"

@@ -202,12 +202,15 @@ void I18nManager::parseCatalog()
 
 QString I18nManager::cachePath(const QString &lang) const
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
-           + QStringLiteral("/translations/") + lang + QStringLiteral(".json");
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    return base.isEmpty() ? QString()
+                          : base + QStringLiteral("/translations/") + lang + QStringLiteral(".json");
 }
 
 bool I18nManager::loadFromCache(const QString &lang)
 {
+    if (cachePath(lang).isEmpty())
+        return false;
     QFile file(cachePath(lang));
     if (!file.exists() || !file.open(QIODevice::ReadOnly))
         return false;
@@ -469,6 +472,8 @@ void I18nManager::installFromJson(const QJsonObject &json)
 
 void I18nManager::writeCache()
 {
+    if (cachePath(m_pendingLang).isEmpty())
+        return;
     QJsonObject contexts;
     for (const auto &entry : m_catalog) {
         const auto it = m_translationResults.constFind(entry.source);

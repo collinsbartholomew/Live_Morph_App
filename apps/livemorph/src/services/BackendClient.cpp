@@ -15,6 +15,8 @@
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QSysInfo>
+#include <QUuid>
 #include <QTimer>
 #include <QPointer>
 #include <QFile>
@@ -25,6 +27,31 @@ namespace {
 // Cap for JSON API responses — anything bigger is a hostile/garbage body, not
 // a legitimate payload (bootstrap/catalog are a few hundred KiB at most).
 constexpr qint64 kMaxJsonBytes = 10LL * 1024 * 1024;
+
+QJsonObject updateRequestBody()
+{
+	return {
+		{QStringLiteral("version"), DeviceIdentity::appVersion()},
+		{QStringLiteral("platform"), QSysInfo::productType()},
+	};
+}
+
+QString availableArtifactPath(const QString &path)
+{
+	if (!QFileInfo::exists(path))
+		return path;
+	const QFileInfo info(path);
+	const QString base = info.completeBaseName();
+	const QString suffix = info.suffix();
+	for (int index = 1; index < 10000; ++index) {
+		const QString candidate = info.absolutePath() + QLatin1Char('/') + base + QLatin1Char('-')
+		                          + QString::number(index)
+		                          + (suffix.isEmpty() ? QString() : QLatin1Char('.') + suffix);
+		if (!QFileInfo::exists(candidate))
+			return candidate;
+	}
+	return {};
+}
 
 // Abort the transfer as soon as the streamed body crosses the cap, so a huge
 // response is dropped before it is fully buffered into memory.
@@ -66,20 +93,9 @@ BackendClient::BackendClient(QObject* parent) : QObject(parent) {
 }
 
 void BackendClient::setBaseUrl(const QString& url) {
-	QString u = url.trimmed();
-	while (u.endsWith(QLatin1Char('/')))
-		u.chop(1);
+	QString u = ConfigManager::normalizeApiBaseUrl(url);
 	if (u.isEmpty())
-		u = QStringLiteral("http://127.0.0.1:3874");
-	if (!u.startsWith(QLatin1String("http://")) && !u.startsWith(QLatin1String("https://")))
-		u = QStringLiteral("http://") + u;
-	// Production hosts must not use plaintext HTTP (loopback only exception)
-	const QUrl parsed(u);
-	const QString host = parsed.host();
-	const bool loopback = host == QLatin1String("127.0.0.1") ||
-	                      host == QLatin1String("localhost") || host == QLatin1String("::1");
-	if (!loopback && parsed.scheme() == QLatin1String("http"))
-		u.replace(QLatin1String("http://"), QLatin1String("https://"));
+		u = QStringLiteral(LIVEMORPH_API_BASE_URL);
 	if (m_baseUrl == u)
 		return;
 	m_baseUrl = u;
@@ -217,9 +233,7 @@ void BackendClient::getAuth(const QString& path, const std::function<void(const 
 		// Treat pure transport failures as offline; HTTP 3xx/4xx/5xx still mean host is reachable
 		const bool transportFail = (status == 0 && reply->error() != QNetworkReply::NoError);
 		if (transportFail) {
-			if (m_reachable) {
-				setReachable(false);
-			}
+			setReachable(false);
 			emit requestFailed(path, friendlyTransportError(reply->errorString()));
 			return;
 		}
@@ -282,9 +296,7 @@ void BackendClient::postAuth(const QString& path, const QJsonObject& body,
 		}
 		const bool transportFail = (status == 0 && reply->error() != QNetworkReply::NoError);
 		if (transportFail) {
-			if (m_reachable) {
-				setReachable(false);
-			}
+			setReachable(false);
 			emit requestFailed(path, friendlyTransportError(reply->errorString()));
 			return;
 		}
@@ -335,9 +347,7 @@ void BackendClient::fetchPaymentPackages() {
 		if (transportFail) {
 			// Same reachability semantics as get()/post(): transport failure ⇒
 			// offline (these previously left m_reachable stale-true).
-			if (m_reachable) {
-				setReachable(false);
-			}
+			setReachable(false);
 			emit requestFailed(QStringLiteral("/api/v1/payments/packages"), reply->errorString());
 			return;
 		}
@@ -394,7 +404,13 @@ void BackendClient::verifyPaymentOrder(const QString& orderId, const QString& re
 	if (!reference.isEmpty())
 		body.insert(QStringLiteral("reference"), reference);
 	post(QStringLiteral("/api/v1/payments/orders/verify"), body,
-	     [this](const QJsonObject& o) { emit paymentOrderVerified(o.toVariantMap()); });
+	     [this](const QJsonObject& o) {
+		const QVariantMap result = o.toVariantMap();
+		emit paymentOrderStatusReceived(result);
+		if (o.value(QStringLiteral("status")).toString() == QLatin1String("provisioned")
+		    || o.value(QStringLiteral("provisioned")).toBool())
+			emit paymentOrderVerified(result);
+	     });
 }
 
 void BackendClient::fetchOrderStatus(const QString& orderId) {
@@ -421,6 +437,38 @@ void BackendClient::cancelPaymentOrder(const QString& orderId) {
 void BackendClient::fetchCreditsBalance() {
 	get(QStringLiteral("/api/v1/credits/balance"),
 	    [this](const QJsonObject& o) { emit creditsBalanceReceived(o.toVariantMap()); });
+}
+
+quint64 BackendClient::startStreamingSession(const QString &model, const QString &characterId,
+                                             const QString &tier) {
+	const quint64 requestId = ++m_streamingSessionReqGen;
+	QJsonObject body{
+		{QStringLiteral("model"), model},
+		{QStringLiteral("character_id"), characterId},
+		{QStringLiteral("tier"), tier},
+	};
+	if (m_streamingFailureConnection)
+		disconnect(m_streamingFailureConnection);
+	m_streamingFailureConnection = connect(this, &BackendClient::requestFailed, this,
+	                                      [this, requestId](const QString &endpoint, const QString &error) {
+		if (endpoint == QLatin1String("/api/v1/streaming/session-start"))
+			emit streamingSessionStartFailed(requestId, error);
+	});
+	QTimer::singleShot(0, this, [this, requestId, body]() {
+		post(QStringLiteral("/api/v1/streaming/session-start"), body,
+		     [this, requestId](const QJsonObject &object) {
+			emit streamingSessionStarted(requestId, object.toVariantMap());
+		});
+	});
+	return requestId;
+}
+
+void BackendClient::endStreamingSession(const QString &sessionId, const QString &reason) {
+	QJsonObject body{{QStringLiteral("reason"), reason}};
+	if (!sessionId.isEmpty())
+		body.insert(QStringLiteral("session_id"), sessionId);
+	post(QStringLiteral("/api/v1/streaming/end"), body,
+	     [this](const QJsonObject &object) { emit streamingSessionEnded(object.toVariantMap()); });
 }
 
 void BackendClient::fetchUserCharacters() {
@@ -482,9 +530,7 @@ void BackendClient::putAuth(const QString& path, const QJsonObject& body,
 		}
 		const bool transportFail = (status == 0 && reply->error() != QNetworkReply::NoError);
 		if (transportFail) {
-			if (m_reachable) {
-				setReachable(false);
-			}
+			setReachable(false);
 			emit requestFailed(path, friendlyTransportError(reply->errorString()));
 			return;
 		}
@@ -538,9 +584,7 @@ void BackendClient::delAuth(const QString& path, const std::function<void(const 
 		}
 		const bool transportFail = (status == 0 && reply->error() != QNetworkReply::NoError);
 		if (transportFail) {
-			if (m_reachable) {
-				setReachable(false);
-			}
+			setReachable(false);
 			emit requestFailed(path, friendlyTransportError(reply->errorString()));
 			return;
 		}
@@ -662,11 +706,11 @@ void BackendClient::ping() {
 }
 
 void BackendClient::setReachable(bool v) {
-	if (m_reachable == v)
-		return;
+	const bool changed = m_reachable != v;
 	m_reachable = v;
 	m_reachableKnown = true;
-	emit reachableChanged();
+	if (changed)
+		emit reachableChanged();
 }
 
 void BackendClient::fetchAppVersion() {
@@ -804,14 +848,17 @@ void BackendClient::clearAuthSession() {
 }
 
 void BackendClient::checkUpdates() {
-	post(QStringLiteral("/api/v1/update/check"), {},
+	post(QStringLiteral("/api/v1/update/check"), updateRequestBody(),
 	     [this](const QJsonObject& o) { emit updateCheckResult(o.toVariantMap()); });
 }
 
 void BackendClient::installUpdate() {
-	// Frontend never installs binaries itself. Prefer last check payload download_url,
-	// otherwise ask backend for the public download link and open in the browser/OS.
-	post(QStringLiteral("/api/v1/update/check"), {}, [this](const QJsonObject& o) {
+	if (!m_updateDownloadedPath.isEmpty() && QFileInfo::exists(m_updateDownloadedPath)) {
+		if (!QDesktopServices::openUrl(QUrl::fromLocalFile(m_updateDownloadedPath)))
+			emit updateDownloadFailed(tr("Could not open the downloaded update"));
+		return;
+	}
+	post(QStringLiteral("/api/v1/update/check"), updateRequestBody(), [this](const QJsonObject& o) {
 		const QString url = o.value(QStringLiteral("download_url"))
 		                        .toString(o.value(QStringLiteral("url")).toString());
 		// The URL comes from the server — only ever hand the OS an https URL,
@@ -841,9 +888,7 @@ void BackendClient::fetchCatalog() {
 		}
 		const bool transportFail = (status == 0 && reply->error() != QNetworkReply::NoError);
 		if (transportFail) {
-			if (m_reachable) {
-				setReachable(false);
-			}
+			setReachable(false);
 			emit requestFailed(QStringLiteral("/api/v1/catalog"), reply->errorString());
 			return;
 		}
@@ -875,7 +920,7 @@ void BackendClient::fetchCatalog() {
 void BackendClient::openExternal(const QString& url) {
 	const QUrl u(url.trimmed());
 	const QString scheme = u.scheme().toLower();
-	// Allow web + mailto only. The livemorph:// scheme is deliberately NOT
+	// Allow web + mailto only. The omegarevelation:// scheme is deliberately NOT
 	// openable here — opening it via the OS handler spawns a second instance;
 	// deep links arrive via argv / the single-instance socket instead.
 	if (scheme != QLatin1String("http") && scheme != QLatin1String("https") &&
@@ -948,7 +993,9 @@ void BackendClient::fetchDownloads() {
 		emit downloadsLoadingChanged();
 	}
 	const quint64 gen = ++m_downloadsReqGen;
-	get(QStringLiteral("/api/v1/downloads/list"), [this](const QJsonObject& o) {
+	get(QStringLiteral("/api/v1/downloads/list"), [this, gen](const QJsonObject& o) {
+		if (gen != m_downloadsReqGen)
+			return;
 		const QVariantList items = o.value(QStringLiteral("downloads")).toArray().toVariantList();
 		m_downloadsLoading = false;
 		emit downloadsLoadingChanged();
@@ -957,9 +1004,15 @@ void BackendClient::fetchDownloads() {
 		m_downloadsModel = items;
 		emit downloadsChanged();
 	});
-	// get() has no error callback — clear the flag on failure/timeout via the
-	// shared failure signal and a hard 30s cap (matches the transfer timeout).
-	// Generation-guarded so a stale timer can't clear a newer request's flag.
+	if (m_downloadsFailureConnection)
+		disconnect(m_downloadsFailureConnection);
+	m_downloadsFailureConnection = connect(this, &BackendClient::requestFailed, this,
+	                                      [this, gen](const QString &endpoint, const QString &) {
+		if (gen == m_downloadsReqGen && endpoint == QLatin1String("/api/v1/downloads/list")) {
+			m_downloadsLoading = false;
+			emit downloadsLoadingChanged();
+		}
+	});
 	QTimer::singleShot(30000, this, [this, gen]() {
 		if (gen == m_downloadsReqGen && m_downloadsLoading) {
 			m_downloadsLoading = false;
@@ -991,11 +1044,13 @@ void BackendClient::cancelUpdateDownload() {
 void BackendClient::downloadUpdate() {
 	if (m_updateDownloading || m_updateCheckInFlight)
 		return;
+	m_updateDownloadedPath.clear();
+	emit updateProgressChanged();
 	// Set synchronously: a double-click before the manifest reply arrives must
 	// not start two concurrent downloads to the same destination file.
 	m_updateCheckInFlight = true;
 	// First query the update manifest so we know the URL
-	post(QStringLiteral("/api/v1/update/check"), {}, [this](const QJsonObject& o) {
+	post(QStringLiteral("/api/v1/update/check"), updateRequestBody(), [this](const QJsonObject& o) {
 		m_updateCheckInFlight = false;
 		const QString url = o.value(QStringLiteral("download_url"))
 		                        .toString(o.value(QStringLiteral("url")).toString());
@@ -1014,6 +1069,11 @@ void BackendClient::downloadUpdate() {
 		// Manifest sha256 — the client refuses to install an update whose digest
 		// doesn't match. Absent = warn loudly (operator hasn't set APP_UPDATE_SHA256).
 		const QString expectedSha = o.value(QStringLiteral("sha256")).toString().trimmed().toLower();
+		static const QRegularExpression shaRe(QStringLiteral("^[0-9a-f]{64}$"));
+		if (!shaRe.match(expectedSha).hasMatch()) {
+			emit updateDownloadFailed(tr("Update manifest has no valid SHA-256 digest"));
+			return;
+		}
 		// DownloadLocation can be empty on minimal systems (no XDG dirs) —
 		// fall back to Documents, then Home, instead of writing to "/" (as
 		// root) or a relative path in the process working directory.
@@ -1033,13 +1093,14 @@ void BackendClient::downloadUpdate() {
 		static const QRegularExpression fnameRe(QStringLiteral("^[A-Za-z0-9._-]+$"));
 		if (fname.isEmpty() || !fnameRe.match(fname).hasMatch())
 			fname = QStringLiteral("livemorph-update.bin");
-		const QString finalPath = dir + QStringLiteral("/") + fname;
-		// Stage into a .part file; rename over the final name ONLY after the
-		// digest verifies — a kill mid-download never leaves a truncated file
-		// at the final name, and a hostile manifest can't clobber an existing one.
-		const QString partPath = finalPath + QStringLiteral(".part");
-		QFile::remove(partPath);
-		m_updateDownloadedPath = finalPath;
+		const QString finalPath = availableArtifactPath(
+		    dir + QStringLiteral("/") + expectedSha.left(12) + QStringLiteral("-") + fname);
+		if (finalPath.isEmpty()) {
+			emit updateDownloadFailed(tr("Could not allocate an update destination"));
+			return;
+		}
+		const QString partPath = finalPath + QStringLiteral("-") + QUuid::createUuid().toString(QUuid::WithoutBraces)
+		                         + QStringLiteral(".part");
 		const QString outPath = partPath;
 
 		m_updateDownloading = true;
@@ -1125,16 +1186,11 @@ void BackendClient::downloadUpdate() {
 			// file executable, so an unverified binary can't be run by accident.
 			const QString got = QString::fromLatin1(hasher->result().toHex());
 			delete hasher;
-			bool digestOk = false;
-			if (expectedSha.isEmpty()) {
-				qWarning() << "BackendClient: update manifest has no sha256 — downloaded but NOT marked executable (set APP_UPDATE_SHA256 on the backend)";
-			} else if (got != expectedSha) {
+			if (got != expectedSha) {
 				emit updateDownloadFailed(tr("Update checksum mismatch — download rejected"));
 				cancelUpdateDownload();
 				QFile::remove(outPath);
 				return;
-			} else {
-				digestOk = true;
 			}
 			if (!f->commit()) {
 				emit updateDownloadFailed(tr("Could not finalize update file"));
@@ -1142,21 +1198,15 @@ void BackendClient::downloadUpdate() {
 				QFile::remove(outPath);
 				return;
 			}
-			// Digest verified (or manifest had none) — promote .part to the final
-			// name and only now mark it executable.
-			if (QFile::exists(finalPath))
-				QFile::remove(finalPath);
 			if (!QFile::rename(outPath, finalPath)) {
 				emit updateDownloadFailed(tr("Could not move update into place"));
 				cancelUpdateDownload();
 				return;
 			}
-			// Only mark the update executable when its sha256 verified — an
-			// unverified download stays a plain data file.
 			QFile finalF(finalPath);
-			finalF.setPermissions(digestOk
-				? QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
-				: QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+			finalF.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+			m_updateDownloadedPath = finalPath;
+			emit updateProgressChanged();
 			emit updateDownloaded(finalPath);
 			cancelUpdateDownload();
 		});

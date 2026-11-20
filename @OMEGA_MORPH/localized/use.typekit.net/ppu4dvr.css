@@ -1,0 +1,113 @@
+/*
+ * The Typekit service used to deliver this font or fonts for use on websites
+ * is provided by Adobe and is subject to these Terms of Use
+ * http://www.adobe.com/products/eulas/tou_typekit. For font license
+ * information, see the list below.
+ *
+ * tt-commons-pro:
+ *   - http://typekit.com/eulas/00000000000000007756f62f
+ *   - http://typekit.com/eulas/00000000000000007756f626
+ *   - http://typekit.com/eulas/00000000000000007756f61b
+ *   - http://typekit.com/eulas/00000000000000007756f625
+ *   - http://typekit.com/eulas/00000000000000007756f631
+ * tt-commons-pro-thin:
+ *   - http://typekit.com/eulas/00000000000000007756f621
+ *   - http://typekit.com/eulas/00000000000000007756f61c
+ *
+ * © 2009-2026 Adobe Systems Incorporated. All Rights Reserved.
+ */
+/*{"last_published":"2025-11-02 10:02:57 UTC"}*/
+
+@import url("../p.typekit.net/p_s_1_k_ppu4dvr_ht_tk_f_53554.53556.53557.53558.53560.53567.53568_a_351371089_app_typekit_e_css_ee02099a.css");
+
+@font-face {
+	font-family: "tt-commons-pro";
+	src:
+		url("af/f5c953/00000000000000007756f62f/31/l/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_i7_v_3_37293447.woff2") format("woff2"),
+		url("af/f5c953/00000000000000007756f62f/31/d/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_i7_v_3_37293447.woff") format("woff"),
+		url("af/f5c953/00000000000000007756f62f/31/a/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_i7_v_3_37293447.otf") format("opentype");
+	font-display: auto;
+	font-style: italic;
+	font-weight: 700;
+	font-stretch: normal;
+}
+
+@font-face {
+	font-family: "tt-commons-pro";
+	src:
+		url("af/4cddf5/00000000000000007756f626/31/l/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_n7_v_3_61899e4b.woff2") format("woff2"),
+		url("af/4cddf5/00000000000000007756f626/31/d/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_n7_v_3_61899e4b.woff") format("woff"),
+		url("af/4cddf5/00000000000000007756f626/31/a/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_n7_v_3_61899e4b.otf") format("opentype");
+	font-display: auto;
+	font-style: normal;
+	font-weight: 700;
+	font-stretch: normal;
+}
+
+@font-face {
+	font-family: "tt-commons-pro";
+	src:
+		url("af/3e8806/00000000000000007756f61b/31/l/index_subset_id_2_fvd_n3_v_3_c8a1a3d4.woff2") format("woff2"),
+		url("af/3e8806/00000000000000007756f61b/31/d/index_subset_id_2_fvd_n3_v_3_c8a1a3d4.woff") format("woff"),
+		url("af/3e8806/00000000000000007756f61b/31/a/index_subset_id_2_fvd_n3_v_3_c8a1a3d4.otf") format("opentype");
+	font-display: auto;
+	font-style: normal;
+	font-weight: 300;
+	font-stretch: normal;
+}
+
+@font-face {
+	font-family: "tt-commons-pro";
+	src:
+		url("af/f25102/00000000000000007756f625/31/l/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_i4_v_3_0f253ba2.woff2") format("woff2"),
+		url("af/f25102/00000000000000007756f625/31/d/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_i4_v_3_0f253ba2.woff") format("woff"),
+		url("af/f25102/00000000000000007756f625/31/a/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_i4_v_3_0f253ba2.otf") format("opentype");
+	font-display: auto;
+	font-style: italic;
+	font-weight: 400;
+	font-stretch: normal;
+}
+
+@font-face {
+	font-family: "tt-commons-pro";
+	src:
+		url("af/9b2db7/00000000000000007756f631/31/l/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_n4_v_3_ea2d5cd2.woff2") format("woff2"),
+		url("af/9b2db7/00000000000000007756f631/31/d/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_n4_v_3_ea2d5cd2.woff") format("woff"),
+		url("af/9b2db7/00000000000000007756f631/31/a/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_n4_v_3_ea2d5cd2.otf") format("opentype");
+	font-display: auto;
+	font-style: normal;
+	font-weight: 400;
+	font-stretch: normal;
+}
+
+@font-face {
+	font-family: "tt-commons-pro-thin";
+	src:
+		url("af/55171c/00000000000000007756f621/31/l/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_i1_v_3_55d0e9ed.woff2") format("woff2"),
+		url("af/55171c/00000000000000007756f621/31/d/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_i1_v_3_55d0e9ed.woff") format("woff"),
+		url("af/55171c/00000000000000007756f621/31/a/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_i1_v_3_55d0e9ed.otf") format("opentype");
+	font-display: auto;
+	font-style: italic;
+	font-weight: 100;
+	font-stretch: normal;
+}
+
+@font-face {
+	font-family: "tt-commons-pro-thin";
+	src:
+		url("af/777703/00000000000000007756f61c/31/l/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_n1_v_3_59a24d66.woff2") format("woff2"),
+		url("af/777703/00000000000000007756f61c/31/d/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_n1_v_3_59a24d66.woff") format("woff"),
+		url("af/777703/00000000000000007756f61c/31/a/index_primer_7cdcb44be4a7db8877ffa5c0007b8dd865b3bbc383831fe2ea177f62257a9191_fvd_n1_v_3_59a24d66.otf") format("opentype");
+	font-display: auto;
+	font-style: normal;
+	font-weight: 100;
+	font-stretch: normal;
+}
+
+.tk-tt-commons-pro {
+	font-family: "tt-commons-pro", sans-serif;
+}
+
+.tk-tt-commons-pro-thin {
+	font-family: "tt-commons-pro-thin", sans-serif;
+}

@@ -116,7 +116,7 @@ void writeInstanceSecret()
 	if (secret.size() < 32) {
 		QByteArray rnd(32, 0);
 		for (int i = 0; i < rnd.size(); ++i)
-			rnd[i] = char(QRandomGenerator::global()->bounded(256));
+			rnd[i] = char(QRandomGenerator::system()->bounded(256));
 		secret = QString::fromLatin1(rnd.toHex());
 	}
 	QSaveFile f(instanceSecretPath());
@@ -131,7 +131,8 @@ void writeInstanceSecret()
 // are forwardable — never an arbitrary https host.
 bool isForwardableLink(const QString &arg, const QString &apiHost)
 {
-	if (arg.startsWith(QLatin1String("livemorph://")))
+	if (arg.startsWith(QLatin1String("omegarevelation://"))
+	    || arg.startsWith(QLatin1String("livemorph://")))
 		return true;
 	const QUrl u(arg);
 	if (u.scheme() != QLatin1String("https") || apiHost.isEmpty())
@@ -190,11 +191,15 @@ int main(int argc, char* argv[]) {
 	}
 
 	QApplication app(argc, argv);
-	app.setOrganizationName(QStringLiteral("LiveMorph"));
-	app.setOrganizationDomain(QStringLiteral("livemorph.com"));
+	app.setOrganizationName(QStringLiteral("Omega Revelation PLC"));
+	app.setOrganizationDomain(QStringLiteral("omegarevelation.com"));
 	app.setApplicationName(QStringLiteral("LiveMorph"));
 	app.setApplicationVersion(DeviceIdentity::APP_VERSION);
 	app.setWindowIcon(QIcon(QStringLiteral(":/assets/livemorph-icon.png")));
+	if (QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation).isEmpty()) {
+		qCritical() << "LiveMorph requires a writable application data directory";
+		return 2;
+	}
 
 	// Bundle the app font so it renders identically on every machine —
 	// fontconfig-driven fallback was resolving "Inter" to Noto Sans.
@@ -335,6 +340,20 @@ int main(int argc, char* argv[]) {
 
 	QObject::connect(backend, &BackendClient::catalogReceived, catalog,
 	                 [catalog](const QVariantList& entries) { catalog->loadFromBackend(entries); });
+	QObject::connect(backend, &BackendClient::userCharactersReceived, catalog,
+	                 &CharacterCatalogModel::mergeUserCharacters);
+	QObject::connect(backend, &BackendClient::userCharacterCreated, catalog,
+	                 &CharacterCatalogModel::upsertUserCharacter);
+	QObject::connect(backend, &BackendClient::userCharacterUpdated, catalog,
+	                 &CharacterCatalogModel::upsertUserCharacter);
+	QObject::connect(catalog, &CharacterCatalogModel::characterCreateRequested, backend,
+	                 [backend](const QString& name, const QString& prompt, const QString& imageUrl) {
+		backend->createUserCharacter(name, prompt, imageUrl);
+	});
+	QObject::connect(catalog, &CharacterCatalogModel::characterUpdateRequested, backend,
+	                 [backend](const QString& id, const QString& name, const QString& prompt, bool favorite) {
+		backend->updateUserCharacter(id, name, prompt, favorite);
+	});
 
 	// HD availability is owned by AppController::updateHdAvailability (paid
 	// tier AND server hd_multiplier > 1) — no separate bootstrap override here.
@@ -439,9 +458,15 @@ int main(int argc, char* argv[]) {
 	QObject::connect(auth, &AuthManager::signedIn, backend, [backend]() {
 		backend->fetchCreditsBalance();
 		backend->fetchCatalog();
+		backend->fetchUserCharacters();
 		backend->fetchPaymentPackages();
 	});
 
+	if (auth->isAuthenticated()) {
+		backend->fetchCreditsBalance();
+		backend->fetchUserCharacters();
+		backend->fetchPaymentPackages();
+	}
 	QObject::connect(backend, &BackendClient::reachableChanged, backend, [backend]() {
 		if (backend->reachable())
 			backend->fetchCatalog();
@@ -712,6 +737,10 @@ int main(int argc, char* argv[]) {
 		});
 	}
 	if (!shotDir.isEmpty()) {
+		const bool previousOnboardingDone = config->onboardingDone();
+		const QString previousWhatsNewVersion = config->whatsNewSeenVersion();
+		config->setOnboardingDone(true);
+		config->setWhatsNewSeenVersion(DeviceIdentity::appVersion());
 		QDir().mkpath(shotDir);
 		auto grab = [&engine, shotDir](const QString &name) {
 			if (engine.rootObjects().isEmpty())
@@ -749,32 +778,41 @@ int main(int argc, char* argv[]) {
 			}
 		});
 		QTimer::singleShot(7900, qApp, [grab]() { grab(QStringLiteral("08-narrow-1024x640")); });
-		QTimer::singleShot(8400, qApp, []() { QCoreApplication::exit(0); });
+		QTimer::singleShot(8400, qApp, [config, previousOnboardingDone, previousWhatsNewVersion]() {
+			config->setOnboardingDone(previousOnboardingDone);
+			config->setWhatsNewSeenVersion(previousWhatsNewVersion);
+			QCoreApplication::exit(0);
+		});
 	}
 	QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
 	                 [streamServer, vcam, session, recording, &engine]() {
-		                 // Flush pending QSettings writes — setters never sync(),
-		                 // so a crash right after a change would lose it.
-		                 QSettings().sync();
-		                 if (session && session->isActive())
-			                 session->stopSession();
-		                 					if (recording && recording->isRecording()) {
-						// QMediaRecorder::stop() is async — arm the bound-wait loop BEFORE
-						// stopping so the isRecordingChanged signal can't be missed.
-						QEventLoop finalizeLoop;
-						QTimer::singleShot(5000, &finalizeLoop, &QEventLoop::quit);
-						bool finalized = false;
-						QObject::connect(recording, &RecordingManager::isRecordingChanged,
-									  &finalizeLoop, [&finalizeLoop, recording, &finalized]() {
-								      if (!recording->isRecording()) {
-									          finalized = true;
-									          finalizeLoop.quit();
-								      }
-								  });
-						recording->stopRecording(QStringLiteral("quit"));
-						if (!finalized)
-							finalizeLoop.exec(); // bounded by the 5s timer
-					}
+		// Flush pending QSettings writes — setters never sync(),
+		// so a crash right after a change would lose it. All stores
+		// (ConfigManager, auth, camera, recording) use the explicit
+		// LiveMorph/LiveMorph key, NOT the default-constructed
+		// settings (which follows applicationOrganizationName).
+		QSettings(QStringLiteral("LiveMorph"), QStringLiteral("LiveMorph")).sync();
+		QEventLoop finalizeLoop;
+		bool finalized = !recording || !recording->isRecording();
+		if (!finalized) {
+			QTimer::singleShot(5000, &finalizeLoop, &QEventLoop::quit);
+			QObject::connect(recording, &RecordingManager::recordingSaved, &finalizeLoop,
+			                 [&finalized, &finalizeLoop](const QString &) {
+				finalized = true;
+				finalizeLoop.quit();
+			});
+			QObject::connect(recording, &RecordingManager::recordingFailed, &finalizeLoop,
+			                 [&finalized, &finalizeLoop](const QString &) {
+				finalized = true;
+				finalizeLoop.quit();
+			});
+		}
+		if (session && session->isActive())
+			session->stopSession();
+		if (recording && recording->isRecording())
+			recording->stopRecording(QStringLiteral("quit"));
+		if (!finalized)
+			finalizeLoop.exec();
 		                 if (vcam && vcam->active())
 			                 vcam->stop();
 		                 if (streamServer && streamServer->running())

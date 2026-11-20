@@ -45,13 +45,13 @@ QtObject {
 
     // Layout chrome heights (Electron: status footer h-8 = 32px FIXED)
     readonly property int titleBarHeight: 40
-    readonly property int topBarHeight: 48
-    readonly property int statusBarHeight: 36
-    readonly property int actionBarHeight: 72
-    readonly property int actionBarHeightCompact: 56
-    readonly property int promptBarHeight: 48
-    readonly property int stageControlsHeight: 48
-    readonly property int drawerHeaderHeight: 56
+    readonly property int topBarHeight: 64
+    readonly property int statusBarHeight: 32
+    readonly property int actionBarHeight: 80
+    readonly property int actionBarHeightCompact: 64
+    readonly property int promptBarHeight: 52
+    readonly property int stageControlsHeight: 52
+    readonly property int drawerHeaderHeight: 64
     readonly property int compactChromeBelow: 780
     readonly property int narrowBreakpoint: 1100
     // Stage-controls strip hides the working-with chip below this width
@@ -110,16 +110,16 @@ QtObject {
     // dropdown catcher and popups — it must never sit on top of an error card.
     readonly property int zPip: 13
 
-    readonly property int workshopWidth: 360
+    readonly property int workshopWidth: 320
     readonly property int workshopCollapsedWidth: 48
     readonly property int workshopMinWidth: 280
-    readonly property int workshopMaxWidth: 380
-    readonly property int actionLeftWidth: 360
-    readonly property int settingsDrawerWidth: 560
-    readonly property int buyCreditsDrawerWidth: 500
-    readonly property int helpDrawerWidth: 480
-    readonly property int notificationsWidth: 340
-    readonly property int toastWidth: 320
+    readonly property int workshopMaxWidth: 360
+    readonly property int actionLeftWidth: 320
+    readonly property int settingsDrawerWidth: 640
+    readonly property int buyCreditsDrawerWidth: 600
+    readonly property int helpDrawerWidth: 520
+    readonly property int notificationsWidth: 380
+    readonly property int toastWidth: 360
 
     readonly property real trackingLabel: 0.15
     readonly property real trackingDisplay: -0.5
@@ -127,11 +127,11 @@ QtObject {
     // wide tracking that made bold caps look stroked at small sizes.
     readonly property real trackingEyebrow: 1.0
     readonly property real trackingChip: 1.2 // mono micro-chips (STAGE, REC, pills)
-    readonly property real trackingCta: 2.0 // big CTA labels (BEGIN SWAP)
+    readonly property real trackingCta: 1.2 // big CTA labels (BEGIN SWAP)
 
     // Honeycomb geometry (hex grid pitch = flat-top hex width; see Honeycomb.qml)
-    readonly property int honeycombCell: 28
-    readonly property int honeycombCellLg: 44
+    readonly property int honeycombCell: 32
+    readonly property int honeycombCellLg: 52
     readonly property real honeycombLineWidth: 1.0
 
     readonly property int motionFast: 150
@@ -165,17 +165,17 @@ QtObject {
     readonly property font fontSmall: Qt.font({ family: "Maple Mono", pixelSize: 13 })
     readonly property font fontTiny: Qt.font({ family: "Maple Mono", pixelSize: 12 })
     readonly property font fontLabel: Qt.font({ family: "Maple Mono", pixelSize: 11, weight: Font.Bold, letterSpacing: 1.0 })
-    readonly property font fontCaption: Qt.font({ family: "Maple Mono", pixelSize: 10, weight: Font.Bold, letterSpacing: 0.8 })
-    readonly property font fontTitle: Qt.font({ family: "Maple Mono", pixelSize: 16, weight: Font.Bold })
+    readonly property font fontCaption: Qt.font({ family: "Maple Mono", pixelSize: 11, weight: Font.Bold, letterSpacing: 0.6 })
+    readonly property font fontTitle: Qt.font({ family: "Maple Mono", pixelSize: 17, weight: Font.Bold })
     readonly property font fontXl: Qt.font({ family: "Maple Mono", pixelSize: 18, weight: Font.Bold })
     readonly property font fontHeading: Qt.font({ family: "Maple Mono", pixelSize: 20, weight: Font.Bold })
     readonly property font fontBanner: Qt.font({ family: "Maple Mono", pixelSize: 24, weight: Font.Bold })
-    readonly property font fontHeadline: Qt.font({ family: "Maple Mono", pixelSize: 28, weight: Font.Bold })
-    readonly property font fontDisplay: Qt.font({ family: "Maple Mono", pixelSize: 40, weight: Font.Bold })
-    readonly property font fontAuthHeadline: Qt.font({ family: "Maple Mono", pixelSize: 34, weight: Font.Bold })
+    readonly property font fontHeadline: Qt.font({ family: "Maple Mono", pixelSize: 32, weight: Font.Bold })
+    readonly property font fontDisplay: Qt.font({ family: "Maple Mono", pixelSize: 56, weight: Font.Bold })
+    readonly property font fontAuthHeadline: Qt.font({ family: "Maple Mono", pixelSize: 42, weight: Font.Bold })
     readonly property font fontMono: Qt.font({ family: "Maple Mono", pixelSize: 12 })
-    readonly property font fontMonoTiny: Qt.font({ family: "Maple Mono", pixelSize: 10 })
+    readonly property font fontMonoTiny: Qt.font({ family: "Maple Mono", pixelSize: 11 })
     // 9px mono micro-labels (HUD pills, eyebrows on chips) — smallest size in
     // the system; anything smaller was off-ladder.
-    readonly property font fontMicro: Qt.font({ family: "Maple Mono", pixelSize: 9 })
+    readonly property font fontMicro: Qt.font({ family: "Maple Mono", pixelSize: 10 })
 }

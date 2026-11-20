@@ -1,43 +1,78 @@
 # Package LiveMorph for desktop
 
-LiveMorph is a Qt Quick (QML) desktop client. It does **not** use QtWebEngine or Chromium — media is peer-to-peer between the client and Decart via GStreamer `webrtcbin` (see `tools/spike-m0/M0_REPORT.md`). Bundle the Qt Quick stack, not WebEngine binaries.
+LiveMorph is a Qt Quick desktop client. It does not use QtWebEngine or Chromium. Media is peer-to-peer between the client and Decart through GStreamer `webrtcbin`.
 
 ## Prerequisites
 
-- Qt 6.5+ with: Qt Quick, Multimedia, WebSockets, Svg, Test, LinguistTools
-- GStreamer 1.x dev packages with `gstreamer-webrtc-1.0` (for the `gstpeer` shared lib)
-- C++20 toolchain
+- Qt 6.5+ with Quick, Multimedia, WebSockets, Svg, Test, and LinguistTools
+- GStreamer 1.x with WebRTC, nice, srtp, base, good, bad, and libav plugins
+- A C++20 toolchain and the platform deployment tools (`windeployqt` or `macdeployqt`)
+
+Build and verify from `apps/livemorph`:
 
 ```bash
-cmake -B build -S apps/livemorph -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
+cp .env.example .env
+# Set LIVEMORPH_API_URL to the public HTTPS backend origin, then compile.
+./build.sh
 ```
-The binary lands at `build/bin/LiveMorph` (Release preset).
 
-## Platform deploy scripts
+The binary and app bundle are written under `build/bin/`. The frontend env file is required before compilation and supplies the API origin.
 
-- Linux: `apps/livemorph/packaging/deploy-linux.sh build/bin/LiveMorph` (TGZ/DEB via CPack; bundles QuickLayouts, QuickShapes, scenegraph plugins + resolves multiarch GStreamer triplet)
-- macOS: `apps/livemorph/packaging/deploy-macos.sh build/LiveMorph.app` (DragNDrop via CPack; `MACOSX_BUNDLE` set)
-- Windows: `apps/livemorph\packaging\deploy-windows.ps1 -BuildDir build\Release -QtDir C:\Qt\6.x\msvc2019_64` (ZIP/NSIS via CPack; `WIN32` set)
+## Linux
 
-## What gets included
+```bash
+./packaging/deploy-linux.sh build/bin/LiveMorph
+./build/bin/dist/LiveMorph.sh --verify-qml
+```
 
-- Embedded QML (`qml/`, compiled into the app via `resources.qrc`)
-- `theme/` singletons (`Colors`, `Theme`, `Constants`, `PlatformSettings`)
-- Qt Quick plugins: QuickLayouts, QuickShapes, scenegraph
-- Fonts (`:/fonts/`, Maple Mono) and assets (`:/assets/`)
-- i18n catalog `i18n/livemorph_en.ts` (runtime online translation, no `.qm` at runtime)
+Ship `build/bin/dist/` and start with `LiveMorph.sh`. The script uses `qmake6`/`qmake` for Qt paths and `pkg-config` for GStreamer paths. `QMAKE`, `QT_LIBDIR`, `QT_PLUGIN_DIR`, `QT_QML_DIR`, `GST_LIBDIR`, and `GST_PLUGIN_DIR` can override discovery.
 
-**Not included:** `QtWebEngineProcess`, `libQt6WebEngineCore`, Chromium `.pak`/locale packs — the app is Qt Quick only.
+Missing required libraries, QML modules, WebRTC plugins, or unresolved shared-library dependencies are fatal. The staged application must pass QML verification before the script reports success.
 
-## Deep links (Google OAuth return)
+## macOS
 
-Register the custom URL scheme so the browser can return tokens to the app:
+```bash
+QTDIR=/path/to/Qt/6.x ./packaging/deploy-macos.sh build/bin/LiveMorph.app
+```
 
-- **Windows (Inno/NSIS):** `Registry` HKCU `Software\Classes\livemorph\shell\open\command` = `"path\to\LiveMorph.exe" "%1"`
-- **macOS:** `CFBundleURLTypes` with scheme `livemorph` in Info.plist
-- **Linux:** `MimeType=x-scheme-handler/livemorph;` in the `.desktop` file and `xdg-mime default livemorph.desktop x-scheme-handler/livemorph`
+The DMG is created beside the app bundle. `MACDEPLOYQT` and `QMAKE` can override tool discovery. Target Macs must install the full GStreamer runtime with WebRTC plugins; the script does not claim to bundle it.
 
-Callback URL configured in Google Cloud Console must be the **backend** redirect:
-`https://your-api.example/api/v1/auth/oauth/google/callback`
-which then 302-redirects to `livemorph://oauth/callback?ticket=...` (desktop redeems the ticket for a JWT pair).
+## Windows
+
+Run from `apps/livemorph` in a Qt/GStreamer developer shell:
+
+```powershell
+.\packaging\deploy-windows.ps1 -BuildDir build\bin -QtDir C:\Qt\6.x\msvc2022_64 -GstDir C:\gstreamer\1.0\msvc_x86_64
+```
+
+Ship the entire directory containing `LiveMorph.exe` and use `LiveMorph.bat` so versioned GStreamer plugin paths are set. Missing GStreamer files are fatal unless `-AllowSystemGStreamer` is explicitly supplied; that option requires the full MSVC runtime on every target machine.
+
+## Included runtime resources
+
+- Embedded QML and the LiveMorph QML module
+- `Colors`, `Theme`, `Constants`, and `PlatformSettings` singletons
+- Qt Quick plugins and platform integration
+- Maple Mono fonts and image assets
+- Embedded English i18n source catalog and online translation cache support
+- GStreamer shared libraries and plugins on Linux and Windows
+
+## OAuth and payment deep links
+
+The backend callback is:
+
+```text
+https://your-api.example/api/v1/auth/oauth/google/callback
+```
+
+It redirects to `omegarevelation://oauth/callback?ticket=...`. Installers also register legacy `livemorph://` callbacks:
+
+- Windows: NSIS writes both HKCU protocol registrations at install time.
+- macOS: `Info.plist` declares both URL schemes.
+- Linux: the desktop entry declares both `x-scheme-handler` MIME types.
+
+For a manual Linux desktop-entry installation:
+
+```bash
+xdg-mime default livemorph.desktop x-scheme-handler/omegarevelation
+xdg-mime default livemorph.desktop x-scheme-handler/livemorph
+```

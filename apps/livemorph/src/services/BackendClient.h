@@ -16,7 +16,7 @@
 
 /**
  * HTTP client for the LiveMorph Rust backend.
- * Base URL is set at startup from LIVEMORPH_API_URL env var or Settings.
+ * Base URL is set at startup from the frontend env file or an explicit user override.
  * Mirrors every /api/v1 route used by the original Electron preload.
  */
 class BackendClient : public QObject
@@ -129,6 +129,8 @@ public slots:
     void fetchCreditsBalance();
 
     // Streaming / session
+    quint64 startStreamingSession(const QString &model, const QString &characterId, const QString &tier);
+    void endStreamingSession(const QString &sessionId, const QString &reason = QStringLiteral("client"));
     void selectBackground(const QString &presetId, const QString &prompt = {});
     void fetchBackgroundPresets();
     void fetchStreamingAvailability();
@@ -177,6 +179,9 @@ signals:
     void paymentOrderStatusReceived(const QVariantMap &status);
     void paymentOrderCancelled(const QVariantMap &result);
     void creditsBalanceReceived(const QVariantMap &balance);
+    void streamingSessionStarted(quint64 requestId, const QVariantMap &result);
+    void streamingSessionStartFailed(quint64 requestId, const QString &error);
+    void streamingSessionEnded(const QVariantMap &result);
     void streamingAvailabilityChanged();
     void maintenanceChanged();
     void userCharactersReceived(const QVariantList &characters);
@@ -249,7 +254,7 @@ private:
     QString m_realtimeWsUrl;
     QString m_configRevision;
     QVariantMap m_lastBootstrap;
-    QString m_baseUrl = QStringLiteral("http://127.0.0.1:3874");
+    QString m_baseUrl = QStringLiteral(LIVEMORPH_API_BASE_URL);
     bool m_reachable = false;
     bool m_reachableKnown = false;
     QString m_appVersion = DeviceIdentity::appVersion();
@@ -265,7 +270,10 @@ private:
     QVariantList m_backgroundPresets;
     QVariantList m_downloadsModel;
     bool m_downloadsLoading = false;
-    quint64 m_downloadsReqGen = 0; // generation counter so a stale 30s fallback can't clear a newer request
+    quint64 m_downloadsReqGen = 0;
+    QMetaObject::Connection m_downloadsFailureConnection;
+    quint64 m_streamingSessionReqGen = 0;
+    QMetaObject::Connection m_streamingFailureConnection;
     bool m_freeCreditsEnabled = false;
     double m_freeCreditsAmount = 0.0;
     double m_creditsPerSecond = 0.0;

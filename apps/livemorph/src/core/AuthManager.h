@@ -126,6 +126,7 @@ signals:
     void otpCodeLengthChanged();
     void rateLimitedChanged();
     void signedIn();
+    void signingOut();
     void signedOut();
     void forceDisconnected(const QString &reason);
     void otpRequested(const QString &email);
@@ -155,6 +156,7 @@ private:
     QNetworkAccessManager m_nam;
     QTimer m_refreshTimer;
     QWebSocket *m_balanceSocket = nullptr;
+    QTimer m_balancePingTimer;
     int m_balanceWsAttempts = 0;
     QTimer m_otpCooldownTimer;
     QTimer m_rateLimitTimer;

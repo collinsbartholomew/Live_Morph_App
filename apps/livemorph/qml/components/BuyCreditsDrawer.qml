@@ -12,6 +12,7 @@ Item {
     id: root
 
     property bool open: false
+    property bool showRedemption: false
     property bool paymentFailed: false
     // Guards against double-click creating multiple paid orders.
     property bool creatingOrder: false
@@ -64,10 +65,10 @@ Item {
     // durations are computed live from the backend package catalog (the "per"
     // field), so they can never drift from what the server actually grants.
     readonly property var tierConfig: ({
-        "basic":   { "priceSize": 22, "subtitle": "" },
-        "starter": { "priceSize": 26, "subtitle": "" },
-        "mid":     { "priceSize": 36, "subtitle": qsTr("Most creators land here.") },
-        "pro":     { "priceSize": 40, "subtitle": qsTr("For studios and full session days.") }
+        "basic":   { "priceSize": 24, "subtitle": "" },
+        "starter": { "priceSize": 25, "subtitle": "" },
+        "mid":     { "priceSize": 27, "subtitle": qsTr("Most creators land here.") },
+        "pro":     { "priceSize": 29, "subtitle": qsTr("For studios and full session days.") }
     })
     // Electron HD_PACKAGE_KEYS: starter, mid, pro
     readonly property var hdTiers: ["starter", "mid", "pro"]
@@ -178,11 +179,11 @@ Item {
     Timer {
         id: cryptoPoll
 
-        interval: 5000
+        interval: 10000
         repeat: true
         onTriggered: {
             if (root.pendingOrderId.length > 0 && root.cryptoAddress.length > 0) {
-                if (++root.pollCount >= 720) { // ~60 min cap, same as the banner
+                if (++root.pollCount >= 360) { // ~60 min cap, same as the banner
                     cryptoPoll.stop();
                     root.inlineWarning = qsTr("Still confirming on the network — you can close this panel; credits land automatically.");
                     return;
@@ -232,7 +233,7 @@ Item {
             anchors.fill: parent
             cellSize: Theme.honeycombCell
             lineColor: Colors.honeycombLineFaint
-            opacity: 0.4
+            opacity: 0.18
         }
 
         // Panel hairline — solid white rule with hex ticks at the ends
@@ -470,7 +471,7 @@ Item {
                              tickSize: 10
                              thickness: 2
                              color: Colors.accent
-                             z: Theme.zUnder
+                             z: Theme.zLocal2
                          }
 
                          RowLayout {
@@ -575,6 +576,7 @@ Item {
                                         Layout.alignment: Qt.AlignRight
 
                                         Text {
+                                            visible: false
                                             text: "$"
                                             color: isSelected ? Colors.accentMuted : Colors.textMuted
                                             font.pixelSize: Theme.fontUi.pixelSize
@@ -903,6 +905,7 @@ Item {
                                 spacing: 2
                                 anchors.verticalCenter: parent.verticalCenter
                                 Text {
+                                    visible: false
                                     text: "$"
                                     color: Colors.base50
                                     font.pixelSize: Theme.fontLabel.pixelSize
@@ -981,6 +984,11 @@ Item {
                             wrapMode: Text.WordWrap
                         }
 
+                        GhostButton {
+                            text: root.showRedemption ? qsTr("Hide key") : qsTr("Use key")
+                            onClicked: root.showRedemption = !root.showRedemption
+                        }
+
                         SecondaryButton {
                             text: qsTr("Recheck")
                             enabled: root.pendingOrderId.length > 0
@@ -998,6 +1006,7 @@ Item {
 
             // Credit key redemption
             Rectangle {
+                visible: root.showRedemption
                 Layout.fillWidth: true
                 Layout.leftMargin: Theme.padSection
                 Layout.rightMargin: Theme.padSection

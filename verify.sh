@@ -20,14 +20,14 @@ bad()  { echo -e "  ${RED}✗${NC} $1"; FAILED=1; }
 
 APP_DIR="$ROOT/apps/livemorph"
 
-step "1/5 Backend build (cargo check)"
+step "1/7 Backend build (cargo check)"
 if ( cd "$BACKEND" && cargo check ) >/tmp/verify_cargo.log 2>&1; then
   ok "cargo check"
 else
   bad "cargo check"; tail -20 /tmp/verify_cargo.log
 fi
 
-step "2/5 Backend unit + hardening tests (cargo test)"
+step "2/7 Backend unit + hardening tests (cargo test)"
 if ( cd "$BACKEND" && cargo test ) >/tmp/verify_cargo_test.log 2>&1; then
   ok "cargo test"
   grep -E "test result: ok" /tmp/verify_cargo_test.log | sed 's/^/    /'
@@ -35,7 +35,7 @@ else
   bad "cargo test"; tail -20 /tmp/verify_cargo_test.log
 fi
 
-step "3/5 Ensure backend is running at $BASE"
+step "3/7 Ensure backend is running at $BASE"
 # The integration suite makes many same-IP auth calls, so run the gate backend
 # with test-scaled rate limits and a fresh in-memory limiter (restart if up).
 if ( cd "$BACKEND" && cargo build ) >/tmp/verify_build.log 2>&1; then
@@ -51,7 +51,7 @@ if ( cd "$BACKEND" && cargo build ) >/tmp/verify_build.log 2>&1; then
   # The suites send the test admin secret; .env ships ADMIN_SECRET empty by
   # design, so take it from backend/.test.env (single source of truth) AFTER
   # the .env export loop above.
-  if [ -f "$BACKEND/.test.env" ]; then
+  if [ -z "${ADMIN_SECRET:-}" ] && [ -f "$BACKEND/.test.env" ]; then
     _ts=$(grep -E '^ADMIN_SECRET=' "$BACKEND/.test.env" | head -1 | cut -d= -f2-)
     [ -n "$_ts" ] && export ADMIN_SECRET="$_ts"
   fi
@@ -68,43 +68,75 @@ if ( cd "$BACKEND" && cargo build ) >/tmp/verify_build.log 2>&1; then
       kill "$(cat /tmp/verify_backend.pid)" 2>/dev/null
       sleep 1
     fi
+    if curl -sf --max-time 2 "$BASE/api/v1/health" >/dev/null 2>&1; then
+      FOREIGN_LISTENER=1
+    else
+      FOREIGN_LISTENER=0
+    fi
     # The gate backend is a local development instance: force development mode
     # so a fresh shell (no RUST_ENV in env, .env without RUST_ENV) does not
     # default to production and fail closed on dev-only flags.
     export RUST_ENV=development
-    GATE_STARTED_BACKEND=1
-    ( cd "$BACKEND" && setsid ./target/debug/livemorph-backend > /tmp/backend.log 2>&1 < /dev/null & echo $! > /tmp/verify_backend.pid; disown )
+    if [ "$FOREIGN_LISTENER" = 0 ]; then
+      GATE_STARTED_BACKEND=1
+      ( cd "$BACKEND" && setsid ./target/debug/livemorph-backend > /tmp/backend.log 2>&1 < /dev/null & echo $! > /tmp/verify_backend.pid; disown )
+    else
+      GATE_STARTED_BACKEND=0
+    fi
   else
     GATE_STARTED_BACKEND=0
+    FOREIGN_LISTENER=0
   fi
+  GATE_DEAD=0
   for i in $(seq 1 20); do
+    if [ "$GATE_STARTED_BACKEND" = 1 ] && ! kill -0 "$(cat /tmp/verify_backend.pid 2>/dev/null)" 2>/dev/null; then
+      GATE_DEAD=1
+      break
+    fi
     curl -sf --max-time 2 "$BASE/api/v1/health" >/dev/null 2>&1 && break
     sleep 1
   done
 else
   bad "cargo build"; tail -20 /tmp/verify_build.log
+  GATE_STARTED_BACKEND=0
+  FOREIGN_LISTENER=0
+  GATE_DEAD=0
 fi
-if curl -sf --max-time 3 "$BASE/api/v1/health" >/dev/null 2>&1; then
+SKIP_LIVE=0
+if [ "${FOREIGN_LISTENER:-0}" = 1 ]; then
+  bad "another backend already listens on $BASE — stop it (or run: BASE=http://127.0.0.1:3875 bash verify.sh) so the gate tests its own instance"
+  SKIP_LIVE=1
+elif [ "${GATE_DEAD:-0}" = 1 ]; then
+  bad "gate backend died at startup (see /tmp/backend.log)"
+  tail -5 /tmp/backend.log
+  SKIP_LIVE=1
+elif curl -sf --max-time 3 "$BASE/api/v1/health" >/dev/null 2>&1; then
   ok "backend reachable"
 else
   bad "backend not reachable (see /tmp/backend.log)"
+  SKIP_LIVE=1
 fi
 
-step "4/5 Integration suite + endpoint smoke"
-if ( cd "$BACKEND" && bash tests/integration_tests.sh ) >/tmp/verify_integration.log 2>&1; then
-  ok "integration_tests.sh"
-  grep -E "Passed:|Failed:" /tmp/verify_integration.log | sed 's/^/    /'
+step "4/7 Integration suite + endpoint smoke"
+if [ "$SKIP_LIVE" = 1 ]; then
+  bad "integration_tests.sh (skipped: no trusted gate backend)"
+  bad "endpoint_smoke.sh (skipped: no trusted gate backend)"
 else
-  bad "integration_tests.sh"; grep -E "✗|FAIL" /tmp/verify_integration.log | head -20
-fi
-if ( cd "$BACKEND" && bash scripts/endpoint_smoke.sh ) >/tmp/verify_smoke.log 2>&1; then
-  ok "endpoint_smoke.sh"
-  grep -E "Results:" /tmp/verify_smoke.log | sed 's/^/    /'
-else
-  bad "endpoint_smoke.sh"; grep -E "FAIL" /tmp/verify_smoke.log | head -20
+  if ( cd "$BACKEND" && bash tests/integration_tests.sh ) >/tmp/verify_integration.log 2>&1; then
+    ok "integration_tests.sh"
+    grep -E "Passed:|Failed:" /tmp/verify_integration.log | sed 's/^/    /'
+  else
+    bad "integration_tests.sh"; grep -E "✗|FAIL" /tmp/verify_integration.log | head -20
+  fi
+  if ( cd "$BACKEND" && bash scripts/endpoint_smoke.sh ) >/tmp/verify_smoke.log 2>&1; then
+    ok "endpoint_smoke.sh"
+    grep -E "Results:" /tmp/verify_smoke.log | sed 's/^/    /'
+  else
+    bad "endpoint_smoke.sh"; grep -E "FAIL" /tmp/verify_smoke.log | head -20
+  fi
 fi
 
-step "5/5 Frontend QML load verification (--verify-qml)"
+step "5/7 Frontend CTest + QML load verification"
 if [[ "$QUICK" != 1 ]]; then
   if [[ ! -f "$APP_DIR/build/Makefile" ]]; then
     cmake_args=(-S . -B build)
@@ -128,8 +160,18 @@ if [[ -x "$APP_DIR/build/bin/LiveMorph" ]]; then
 else
   bad "LiveMorph binary not found — skip QML verify"
 fi
+if [[ -f "$APP_DIR/build/CTestTestfile.cmake" ]]; then
+  if ( cd "$APP_DIR" && ctest --test-dir build --output-on-failure ) >/tmp/verify_frontend_smoke.log 2>&1; then
+    ok "frontend CTest suite: PASS"
+  else
+    bad "frontend CTest suite: FAIL"
+    tail -20 /tmp/verify_frontend_smoke.log
+  fi
+else
+  bad "CTest metadata not found"
+fi
 
-step "6/6 Frontend hygiene (no-motion directive + i18n catalog sync)"
+step "6/7 Frontend hygiene (no-motion directive + i18n catalog sync)"
 # No time-based animation elements are allowed anywhere in QML/C++ (project directive).
 # Comment lines are excluded (Theme.qml's header comment names the banned types);
 # boundsBehavior (a Flickable enum, not an animation) is excluded explicitly.
@@ -187,6 +229,45 @@ PYEOF
   else
     rm -f "$TMP"
     bad "lupdate produced no output — cannot verify i18n catalog sync"
+  fi
+fi
+
+step "7/7 Deployment assets"
+DEPLOY_SYNTAX_OK=1
+for script in "$BACKEND/run.sh" "$BACKEND/scripts/check-config.sh" "$APP_DIR/build.sh" "$APP_DIR/packaging/deploy-linux.sh" "$APP_DIR/packaging/deploy-macos.sh"; do
+  if ! bash -n "$script"; then
+    bad "shell syntax: $script"
+    DEPLOY_SYNTAX_OK=0
+  fi
+done
+if [ "$DEPLOY_SYNTAX_OK" = 1 ]; then
+  ok "backend and desktop launch script syntax"
+fi
+if [[ -f "$ROOT/deploy_kaggle.py" ]]; then
+  if GITHUB_TOKEN=verify-token NGROK_AUTH_TOKEN=verify-token REQUIRE_PUBLIC_TUNNEL=1 python3 "$ROOT/deploy_kaggle.py" --check >/tmp/verify_kaggle.log 2>&1; then
+    ok "Kaggle deployment config"
+  else
+    bad "Kaggle deployment config (see /tmp/verify_kaggle.log)"
+    tail -20 /tmp/verify_kaggle.log
+  fi
+else
+  echo "  - deploy_kaggle.py not present; local Kaggle check skipped"
+fi
+if command -v docker >/dev/null 2>&1; then
+  if ( cd "$ROOT" && docker compose config --quiet ) >/tmp/verify_compose.log 2>&1; then
+    ok "Compose config"
+  else
+    bad "Compose config"
+    tail -20 /tmp/verify_compose.log
+  fi
+else
+  echo "  - docker unavailable; Compose runtime config check skipped"
+fi
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  if desktop-file-validate "$APP_DIR/packaging/livemorph.desktop"; then
+    ok "Linux desktop entry"
+  else
+    bad "Linux desktop entry"
   fi
 fi
 

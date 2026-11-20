@@ -22,6 +22,10 @@ pub struct AccessKey {
     pub plan: String,
     #[serde(default)]
     pub credits_granted: f64,
+    /// Original grant amount, preserved when credits_granted is zeroed at
+    /// claim time so an interrupted redemption can be resumed exactly once.
+    #[serde(default)]
+    pub credits_consumed: f64,
     pub active: bool,
     pub created_at: bson::DateTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -43,6 +47,7 @@ impl AccessKey {
             device_id: None,
             plan: plan.into(),
             credits_granted: credits,
+            credits_consumed: 0.0,
             active: true,
             created_at: bson::DateTime::from_chrono(now),
             activated_at: None,

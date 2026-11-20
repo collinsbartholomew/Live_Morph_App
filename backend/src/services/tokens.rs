@@ -14,3 +14,14 @@ use crate::services::billing;
 pub async fn provision_order(db: &Db, cfg: &Config, order: &mut PaymentOrder) -> AppResult<User> {
     billing::settle_and_provision(db, cfg, order).await
 }
+
+/// Entry with the authoritative storage product (the collection the order was
+/// actually loaded from). Preferred whenever find_order_any_db resolved it.
+pub async fn provision_order_in(
+    db: &Db,
+    cfg: &Config,
+    order: &mut PaymentOrder,
+    storage: crate::product::ProductId,
+) -> AppResult<User> {
+    billing::settle_and_provision_in(db, cfg, order, storage).await
+}

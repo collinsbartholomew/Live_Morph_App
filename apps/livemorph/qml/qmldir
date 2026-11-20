@@ -35,6 +35,7 @@ WhatsNewModal 1.0 components/WhatsNewModal.qml
 Honeycomb 1.0 components/Honeycomb.qml
 Hexagon 1.0 components/Hexagon.qml
 HexBadge 1.0 components/HexBadge.qml
+HexSculpture 1.0 components/HexSculpture.qml
 BrandMark 1.0 components/BrandMark.qml
 EmptyState 1.0 components/EmptyState.qml
 SectionHeader 1.0 components/SectionHeader.qml

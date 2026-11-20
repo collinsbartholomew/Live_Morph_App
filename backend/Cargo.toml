@@ -11,7 +11,6 @@ urlencoding = "2"
 actix-web = "4"
 actix-cors = "0.7"
 actix-ws = "0.4"
-actix = "0.13"
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
 bytes = "1"

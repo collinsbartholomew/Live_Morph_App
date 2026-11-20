@@ -81,7 +81,32 @@ async fn pay_kind(
         }
     }
 
-    let _ = product(&req);
+    // Entitlement kinds (license keys, starter tagging, plan upgrades,
+    // renewals) are only provisioned for the Secondary slot — accepting money
+    // for them on LiveMorph would grant credits without the purchased
+    // entitlement. Refuse before any order is created.
+    if matches!(kind, "activation" | "starter_pack" | "upgrade" | "renew")
+        && product(&req) != ProductId::Secondary
+    {
+        return Err(AppError::Forbidden(
+            "this purchase kind is only available on the secondary product".into(),
+        ));
+    }
+    if !matches!(provider, "paystack" | "nowpayments" | "flutterwave") {
+        return Err(AppError::BadRequest("unsupported payment provider".into()));
+    }
+    if plan.is_empty()
+        || plan.len() > 32
+        || !plan
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(AppError::BadRequest("invalid plan id".into()));
+    }
+    // The starter pack has exactly one server-side plan/price; never let the
+    // request body pick a different plan for it.
+    let plan = if kind == "starter_pack" { "starter" } else { plan };
+
     let auth = require_user(&req)?;
     // Starter pack is single-claim: a user who already has it must not be able
     // to buy the cheapest pack repeatedly.
@@ -125,6 +150,11 @@ async fn starter_pack_pay_crypto(db: web::Data<Db>, cfg: web::Data<Arc<Config>>,
 async fn starter_pack_status(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpResponse> {
     let auth = require_user(&req)?;
     let product = product(&req);
+    if product != ProductId::Secondary {
+        return Err(AppError::Forbidden(
+            "starter pack is only available on the secondary product".into(),
+        ));
+    }
     let coll = match product {
         ProductId::Secondary => db.payment_orders_secondary(),
         ProductId::LiveMorph => db.db.collection::<mongodb::bson::Document>("payment_orders"),
@@ -134,6 +164,11 @@ async fn starter_pack_status(db: web::Data<Db>, req: HttpRequest) -> AppResult<H
             "user_id": &auth.user_id,
             "kind": "starter_pack",
         })
+        .with_options(
+            mongodb::options::FindOneOptions::builder()
+                .sort(doc! { "created_at": -1 })
+                .build(),
+        )
         .await?;
     let (status, credits, plan, order_id) = match order {
         Some(o) => {
@@ -219,6 +254,11 @@ async fn confirm_crypto_impl(
 ) -> AppResult<HttpResponse> {
     let auth = require_user(&req)?;
     let product = product(&req);
+    if product != ProductId::Secondary {
+        return Err(AppError::Forbidden(
+            "this purchase kind is only available on the secondary product".into(),
+        ));
+    }
     // Poll fallback for the IPN webhook — rate-limit per IP like the other
     // provider-status endpoints so it can't be used to flood NOWPayments.
     let ip = crate::auth::client_ip(&req);
@@ -311,11 +351,18 @@ async fn confirm_crypto_impl(
             .await?;
     }
 
+    // Report the POST-transition order state, not the stale pre-update read.
+    let order_status = coll
+        .find_one(doc! { "_id": order.get_str("_id").unwrap_or("") })
+        .await?
+        .and_then(|o| o.get_str("status").ok().map(str::to_string))
+        .unwrap_or_else(|| "pending".to_string());
+
     Ok(HttpResponse::Ok().json(json!({
         "ok": true,
         "payment_id": provider_ref,
         "status": status,
-        "order_status": order.get_str("status").unwrap_or("pending"),
+        "order_status": order_status,
         "product": product.as_str(),
     })))
 }

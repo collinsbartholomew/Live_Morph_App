@@ -69,7 +69,7 @@ async fn feature_flags(req: HttpRequest, cfg: web::Data<Arc<Config>>) -> AppResu
 /// unauthenticated caller (which could then consume the directive).
 #[get("/public/storage-reset-token")]
 async fn storage_reset_token(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpResponse> {
-    let _auth = require_user(&req)?;
+    let auth = require_user(&req)?;
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "directive-poll", 10, 60) {
         return Err(AppError::RateLimited("too many polls".into(), None));
@@ -81,8 +81,16 @@ async fn storage_reset_token(db: web::Data<Db>, req: HttpRequest) -> AppResult<H
             "kind": "storage_reset",
             "product": product.as_str(),
             "consumed": false,
+            // Per-user acknowledgement: one client consuming the directive
+            // must never hide it from every other client.
+            "acked_by": { "$ne": &auth.user_id },
             "expires_at": { "$gt": Utc::now() },
         })
+        .with_options(
+            mongodb::options::FindOneOptions::builder()
+                .sort(doc! { "created_at": -1 })
+                .build(),
+        )
         .await?;
     match doc {
         Some(d) => Ok(HttpResponse::Ok().json(json!({
@@ -137,7 +145,7 @@ async fn storage_reset_token_issue(
 
 #[get("/public/logout-token")]
 async fn logout_token(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpResponse> {
-    let _auth = require_user(&req)?;
+    let auth = require_user(&req)?;
     let ip = crate::auth::client_ip(&req);
     if !crate::auth::check_rate_limit(&ip, "directive-poll", 10, 60) {
         return Err(AppError::RateLimited("too many polls".into(), None));
@@ -149,8 +157,14 @@ async fn logout_token(db: web::Data<Db>, req: HttpRequest) -> AppResult<HttpResp
             "kind": "force_logout",
             "product": product.as_str(),
             "consumed": false,
+            "acked_by": { "$ne": &auth.user_id },
             "expires_at": { "$gt": Utc::now() },
         })
+        .with_options(
+            mongodb::options::FindOneOptions::builder()
+                .sort(doc! { "created_at": -1 })
+                .build(),
+        )
         .await?;
     match doc {
         Some(d) => Ok(HttpResponse::Ok().json(json!({
@@ -171,7 +185,7 @@ async fn consume_directive(
     body: web::Json<ConsumeTokenBody>,
     kind: &str,
 ) -> AppResult<HttpResponse> {
-    let _auth = require_user(&req)?;
+    let auth = require_user(&req)?;
     let product = ProductId::from_request(&req);
     // Throttle consumption attempts (the token is the credential, but don't
     // let this be an unthrottled oracle).
@@ -186,9 +200,14 @@ async fn consume_directive(
         .filter(|s| !s.is_empty());
     let coll = directives_coll(&db, product);
     if let Some(t) = token {
+        // Per-user acknowledgement only — a global `consumed=true` here let
+        // any single user suppress the directive for the whole product.
         coll.update_one(
-            doc! { "token": t, "kind": kind, "product": product.as_str(), "consumed": false },
-            doc! { "$set": { "consumed": true, "consumed_at": Utc::now() } },
+            doc! { "token": t, "kind": kind, "product": product.as_str() },
+            doc! {
+                "$addToSet": { "acked_by": &auth.user_id },
+                "$set": { "last_ack_at": Utc::now() },
+            },
         )
         .await?;
     }

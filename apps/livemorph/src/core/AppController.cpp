@@ -60,6 +60,12 @@ AppController::AppController(AuthManager *auth,
             m_camera->start();
     });
     connect(m_auth, &AuthManager::profileChanged, this, &AppController::updateHdAvailability);
+    connect(m_auth, &AuthManager::signingOut, this, [this]() {
+        if (m_session && m_session->isActive())
+            m_session->stopSession();
+        if (m_recording && m_recording->isRecording())
+            m_recording->stopRecording(QStringLiteral("sign-out"));
+    });
     // Bootstrap carries the server-side hd_multiplier — re-evaluate the HD gate
     // when it (re)loads instead of having a second, conflicting setter.
     if (m_auth && m_auth->backend())
@@ -160,7 +166,10 @@ void AppController::setCurrentPageForced(const QString &page)
 
 void AppController::setSwapMode(const QString &mode)
 {
-    if (m_swapMode == mode)
+    static const QStringList allowed = {
+        QStringLiteral("character"), QStringLiteral("prompt"), QStringLiteral("scene"),
+    };
+    if (m_swapMode == mode || !allowed.contains(mode))
         return;
     m_swapMode = mode;
     // Wire scene mode to SessionManager
@@ -172,7 +181,7 @@ void AppController::setSwapMode(const QString &mode)
 
 void AppController::setRealtimeProvider(const QString &provider)
 {
-    if (m_realtimeProvider == provider)
+    if (m_realtimeProvider == provider || provider != QLatin1String("decart"))
         return;
     m_realtimeProvider = provider;
     emit realtimeProviderChanged();
@@ -180,7 +189,9 @@ void AppController::setRealtimeProvider(const QString &provider)
 
 void AppController::setSwapTier(const QString &tier)
 {
-    if (m_swapTier == tier)
+    if (m_swapTier == tier || (tier != QLatin1String("standard") && tier != QLatin1String("hd")))
+        return;
+    if (m_session && m_session->isActive())
         return;
     // HD is gated to paid tiers (Electron parity: unlocks with a Starter+ pack).
     if (tier == QLatin1String("hd") && !m_hdAvailable)
@@ -377,10 +388,6 @@ void AppController::requestOpenNotifications()
 
 void AppController::quitApp()
 {
-    if (m_session && m_session->isActive())
-        m_session->stopSession();
-    if (m_recording && m_recording->isRecording())
-        m_recording->stopRecording(QStringLiteral("quit"));
     QCoreApplication::quit();
 }
 
@@ -491,7 +498,10 @@ void AppController::handleDeepLink(const QString &url)
     const QUrlQuery q(u);
     // Origin allowlist: only our custom scheme or the configured API host may be
     // routed — this slot is QML-invokable, so it must not act on arbitrary URLs.
-    if (u.scheme() != QLatin1String("livemorph")) {
+    // The legacy livemorph:// scheme stays accepted: OS protocol registrations
+    // from older installs can still launch this binary with a livemorph:// URL.
+    if (u.scheme() != QLatin1String("omegarevelation")
+        && u.scheme() != QLatin1String("livemorph")) {
         // Trusted host comes from the EFFECTIVE backend base URL (which bootstrap
         // may have adopted from api_base), not the ConfigManager loopback default,
         // so a payment-return link on the real API host is accepted after a
@@ -507,7 +517,7 @@ void AppController::handleDeepLink(const QString &url)
     // For custom schemes the first segment lands in the HOST, not the path.
     const QString host = u.host();
     const QString path = u.path();
-    // livemorph://payments/callback?… or https://<api-host>/payments/callback?reference=
+    // omegarevelation://payments/callback?… or https://<api-host>/payments/callback?reference=
     if (host == QLatin1String("payments") || path.contains(QLatin1String("/payments"))
         || q.hasQueryItem(QStringLiteral("reference"))) {
         const QString ref = q.queryItemValue(QStringLiteral("reference"));

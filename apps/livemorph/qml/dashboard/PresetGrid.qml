@@ -21,7 +21,8 @@ Item {
     property string pendingSlotUpload: ""
     readonly property int gridPad: Theme.padSection // aligns with WorkshopPanel header
     readonly property int gap: Theme.gapCard       // gap-2.5
-    readonly property real cardW: Math.floor((width - gridPad * 2 - gap * 2) / 3)
+    readonly property int gridColumns: width < 340 ? 2 : 3
+    readonly property real cardW: Math.floor((width - gridPad * 2 - gap * (gridColumns - 1)) / gridColumns)
     readonly property real cardH: Math.floor(cardW * 5 / 4)
 
     // Live counts/lists — computed in C++ (CharacterCatalogModel) and re-notified
@@ -209,7 +210,7 @@ Item {
                 visible: root.starterCount > 0
                 x: root.gridPad
                 y: 2
-                columns: 3
+                columns: root.gridColumns
                 columnSpacing: root.gap
                 rowSpacing: root.gap
 
@@ -341,7 +342,7 @@ Item {
         Grid {
             id: myGrid
             x: root.gridPad
-            columns: 3
+            columns: root.gridColumns
             columnSpacing: root.gap
             rowSpacing: root.gap
 
@@ -381,7 +382,7 @@ Item {
             Repeater {
                 // visible cells = min(28, ceil((saved+2)/3)*3) — slots fill
                 // the row out to at least 2 empties until the library is full.
-                model: Math.max(0, Math.min(Constants.maxLibrarySize, Math.ceil((root.saved + 2) / 3) * 3) - root.saved)
+                model: Math.max(0, Math.min(Constants.maxLibrarySize, Math.ceil((root.saved + 2) / root.gridColumns) * root.gridColumns) - root.saved)
                 delegate: Item {
                     width: root.cardW
                     height: root.cardH

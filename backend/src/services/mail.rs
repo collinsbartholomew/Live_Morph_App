@@ -24,10 +24,24 @@ const MAILER_ID: &str = "LiveMorph/1.8 (transactional)";
 /// configured SUPPORT_EMAIL, then a brand address. Never a hardcoded personal
 /// mailbox in tracked source.
 fn unsubscribe_email(_cfg: &Config) -> String {
-    std::env::var("SMTP_UNSUBSCRIBE_EMAIL")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "support@livemorph.com".to_string())
+    // Cached (env is read once per process, not per email) and sanitized: the
+    // value is interpolated into a raw List-Unsubscribe header and HTML, so
+    // CR/LF and non-address content must never pass through.
+    use std::sync::LazyLock;
+    static UNSUB: LazyLock<String> = LazyLock::new(|| {
+        let raw = std::env::var("SMTP_UNSUBSCRIBE_EMAIL").unwrap_or_default();
+        let candidate = raw.trim();
+        let valid = crate::auth::otp::validate_email(candidate).is_ok();
+        if valid {
+            candidate.to_string()
+        } else {
+            if !candidate.is_empty() {
+                tracing::warn!("SMTP_UNSUBSCRIBE_EMAIL is not a valid address — using fallback");
+            }
+            "support@livemorph.com".to_string()
+        }
+    });
+    UNSUB.clone()
 }
 
 // ---------------------------------------------------------------------------

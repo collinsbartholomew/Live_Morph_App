@@ -10,9 +10,9 @@ set -uo pipefail
 
 BASE="${BASE:-http://127.0.0.1:3874}"
 P2_ID="${P2_ID:-secondary}"
-# 30s: register/login pay a bcrypt cost-12 hash; on a loaded dev box the debug
-# backend build can take several seconds per hash, so 10s flakes under load.
-TIMEOUT="--max-time 30"
+# 60s: register/login pay a bcrypt cost-12 hash; loaded release builds can
+# otherwise turn a healthy but slow response into a false deployment failure.
+TIMEOUT="--max-time 60"
 PASS=0
 FAIL=0
 WARN=0
@@ -62,7 +62,17 @@ LM_EMAIL="lm_${TEST_ID}@test.local"
 LM_PASS="TestPass123!"
 P2_EMAIL="p2_${TEST_ID}@test.local"
 P2_PASS="P2TestPass123!"
-ADMIN_SECRET="DzdIHOMlGgcnTUGaUbsR+Ln0dO54fnOnhnStGdl6fyE="
+# Admin secret: explicit env override wins, then the running backend's own
+# .env, then the historical dev default. A hardcoded assumption here makes the
+# admin-gated checks fail with empty curl -sf output whenever the backend runs
+# with a different secret.
+if [ -z "${ADMIN_SECRET:-}" ]; then
+    BACKEND_ENV="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env"
+    if [ -f "$BACKEND_ENV" ]; then
+        ADMIN_SECRET=$(sed -n 's/^ADMIN_SECRET=//p' "$BACKEND_ENV" | head -1 | tr -d '\r' | sed 's/^"//; s/"$//')
+    fi
+fi
+ADMIN_SECRET="${ADMIN_SECRET:-DzdIHOMlGgcnTUGaUbsR+Ln0dO54fnOnhnStGdl6fyE=}"
 P2_HDR=(-H "X-Frontend-Id: $P2_ID")
 LM_HDR=(-H "X-Frontend-Id: LiveMorph")
 
@@ -149,7 +159,7 @@ R=$(curl -sf $TIMEOUT -X POST "$BASE/api/v1/auth/password-reset-request" \
     -H "Content-Type: application/json" -d "{\"email\":\"$P2_EMAIL\"}" 2>&1)
 check "POST /api/v1/auth/password-reset-request" 'ok\|message' "$R"
 
-P2_OTP=$(grep -oP 'reset_token=\K[a-f0-9]+' /tmp/backend.log | tail -1 2>/dev/null || echo "")
+P2_OTP=$(grep -oP 'reset_token=\K[a-f0-9]+' "${BACKEND_LOG:-/tmp/backend.log}" | tail -1 2>/dev/null || echo "")
 if [ -n "$P2_OTP" ]; then
     echo -e "  ${GREEN}✓${NC} Reset token available"
     PASS=$((PASS + 1)); TESTS+=("PASS: reset token generated")

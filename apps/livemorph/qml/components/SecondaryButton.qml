@@ -1,52 +1,69 @@
 import QtQuick
 import QtQuick.Controls as Controls
+import QtQuick.Layouts
 import LiveMorph
 
-/**
- * Obsidian Hex secondary button: outline style. Hover = soft wash + primary text,
- * pressed = deeper wash. Destructive variant uses the error ramp.
- */
 Controls.Button {
     id: control
 
     property bool compact: false
-    property bool destructive: false // error-tinted variant (Cancel/Remove)
+    property bool destructive: false
+    property string iconName: ""
 
-    implicitHeight: compact ? 28 : 36
-    padding: compact ? 12 : 16
+    implicitHeight: compact ? 32 : 40
+    implicitWidth: Math.max(compact ? 84 : 96, contentRow.implicitWidth + leftPadding + rightPadding)
+    leftPadding: compact ? 12 : 16
+    rightPadding: compact ? 12 : 16
+    topPadding: 0
+    bottomPadding: 0
     font: Theme.fontUi
+    hoverEnabled: true
 
     background: Rectangle {
         radius: Theme.radiusMd
-        color: !control.enabled ? Colors.transparent
-             : control.pressed ? (control.destructive ? Colors.statusError20 : Colors.surfaceOverlay)
-             : control.hovered ? (control.destructive ? Colors.statusError10 : Colors.overlay50)
-             : Colors.transparent
+        color: !control.enabled ? Colors.surfaceRaised
+             : control.pressed ? (control.destructive ? Colors.statusError20 : Colors.surfaceHover)
+             : control.hovered ? (control.destructive ? Colors.statusError10 : Colors.surfaceElevated)
+             : Colors.surfaceRaised
         border.width: 1
         border.color: !control.enabled ? Colors.surfaceBorderSubtle
                     : control.destructive ? Colors.statusError40
-                    : control.hovered ? Colors.surfaceBorderStrong
+                    : control.hovered || control.activeFocus ? Colors.surfaceBorderStrong
                     : Colors.surfaceBorder
         FocusRing { shown: control.activeFocus; ringRadius: Theme.radiusMd }
     }
 
-    contentItem: Text {
-        text: control.text
-        color: !control.enabled ? Colors.textMuted
-             : control.destructive ? Colors.statusError85
-             : control.hovered || control.pressed ? Colors.textPrimary
-             : Colors.textSecondary
-        font.family: control.font.family
-        font.pixelSize: control.compact ? 10 : 12
-        font.weight: control.compact ? Font.Bold : Font.Normal
-        font.capitalization: control.compact ? Font.AllUppercase : Font.MixedCase
-        font.letterSpacing: control.compact ? 1.0 : 0
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        width: Math.min(implicitWidth, Math.max(0, control.width - control.leftPadding - control.rightPadding))
-        elide: Text.ElideRight
+    contentItem: RowLayout {
+        id: contentRow
+        spacing: Theme.spacingSm
+
+        Icon {
+            visible: control.iconName.length > 0
+            name: control.iconName
+            size: compact ? Theme.iconXs : Theme.iconSm
+            color: !control.enabled ? Colors.textMuted
+                 : control.destructive ? Colors.statusError85 : Colors.textSecondary
+            Layout.alignment: Qt.AlignVCenter
+        }
+
+        Text {
+            text: control.text
+            color: !control.enabled ? Colors.textMuted
+                 : control.destructive ? Colors.statusError85
+                 : control.hovered || control.pressed ? Colors.textPrimary
+                 : Colors.textSecondary
+            font.family: control.font.family
+            font.pixelSize: compact ? Theme.fontLabel.pixelSize : Theme.fontSmall.pixelSize
+            font.weight: control.compact ? Font.Bold : Font.Medium
+            font.capitalization: control.compact ? Font.AllUppercase : Font.MixedCase
+            font.letterSpacing: control.compact ? 0.8 : 0
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+            maximumLineCount: 1
+            Layout.fillWidth: true
+        }
     }
 
-    opacity: control.enabled ? 1.0 : 0.5
-    scale: control.pressed ? 0.98 : 1.0
+    opacity: control.enabled ? 1.0 : 0.55
 }

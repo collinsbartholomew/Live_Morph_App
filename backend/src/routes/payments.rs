@@ -12,7 +12,7 @@ use crate::models::{PaymentOrder, TokenPackage};
 use crate::product::ProductId;
 use crate::services::nowpayments;
 use crate::services::paystack::{initialize_transaction, verify_transaction};
-use crate::services::tokens::provision_order;
+use crate::services::tokens::provision_order_in;
 use actix_web::{get, post, web, HttpRequest, HttpResponse};
 use chrono::Utc;
 use mongodb::bson::doc;
@@ -182,6 +182,15 @@ async fn create_order(
         ));
     }
 
+    // Reject unknown providers BEFORE any order row is inserted: an arbitrary
+    // provider string would otherwise create an unverifiable pending order.
+    if !matches!(
+        provider.as_str(),
+        "paystack" | "nowpayments" | "flutterwave" | "manual"
+    ) {
+        return Err(AppError::BadRequest("unsupported payment provider".into()));
+    }
+
     let currency = body.currency.clone().unwrap_or_else(|| {
         if provider == "nowpayments" {
             "USD".into()
@@ -235,6 +244,7 @@ async fn create_order(
         crypto_status: None,
         kind: None,
         plan: None,
+        source_plan: None,
         access_key_hash: None,
         access_key_plain: None,
         device_id: body.device_id.clone(),
@@ -545,28 +555,36 @@ pub async fn verify_order_impl(
             }
             order.crypto_status = Some(inv.payment_status.clone());
             if nowpayments::is_terminal_failure(&inv.payment_status) {
-                order.status = "failed".into();
-                if is_secondary {
+                // Only un-settled orders may fail: a concurrent settlement
+                // (provisioning/provisioned) must never be clobbered to failed.
+                let failed_filter = doc! {
+                    "_id": &order.id,
+                    "status": { "$in": ["pending", "creating"] },
+                };
+                let failed = if is_secondary {
                     db.payment_orders_secondary()
                         .update_one(
-                            doc! { "_id": &order.id },
+                            failed_filter,
                             doc! { "$set": {
                                 "status": "failed",
                                 "crypto_status": &inv.payment_status,
                             }},
                         )
-                        .await?;
+                        .await?
                 } else {
                     db.db
                         .collection::<PaymentOrder>("payment_orders")
                         .update_one(
-                            doc! { "_id": &order.id },
+                            failed_filter,
                             doc! { "$set": {
                                 "status": "failed",
                                 "crypto_status": &inv.payment_status,
                             }},
                         )
-                        .await?;
+                        .await?
+                };
+                if failed.matched_count > 0 {
+                    order.status = "failed".into();
                 }
                 return Err(AppError::BadRequest(format!(
                     "crypto payment {}",
@@ -721,7 +739,8 @@ pub async fn verify_order_impl(
         }
     }
 
-    let user = provision_order(&db, &cfg, &mut order).await?;
+    let storage = if is_secondary { ProductId::Secondary } else { ProductId::LiveMorph };
+    let user = provision_order_in(&db, &cfg, &mut order, storage).await?;
 
     Ok(HttpResponse::Ok().json(json!({
         "order_id": order.id,
@@ -838,7 +857,8 @@ async fn order_status(
                             .await;
                     }
                     // Auto-provision when poll sees finished
-                    if let Ok(user) = provision_order(&db, &cfg, &mut order).await {
+                    let storage = if is_secondary { ProductId::Secondary } else { ProductId::LiveMorph };
+                    if let Ok(user) = provision_order_in(&db, &cfg, &mut order, storage).await {
                         return Ok(HttpResponse::Ok().json(json!({
                             "order_id": order.id,
                             "status": order.status,
@@ -1119,6 +1139,18 @@ async fn webhook_paystack_impl(
             .await?
     };
     if claimed.matched_count == 0 {
+        // Recover stuck paid/provisioning rows on retries instead of acking
+        // blindly — the settle claim is stale-reclaimable and exactly-once.
+        if let Some((mut latest, sec)) = find_order_any_db(&db, doc! { "_id": &order.id }).await? {
+            if latest.status == "provisioned" {
+                return Ok(HttpResponse::Ok().json(json!({ "ok": true, "already": true })));
+            }
+            if latest.status == "paid" || latest.status == "provisioning" {
+                let storage = if sec { ProductId::Secondary } else { ProductId::LiveMorph };
+                provision_order_in(&db, &cfg, &mut latest, storage).await?;
+                return Ok(HttpResponse::Ok().json(json!({ "ok": true, "recovered": true })));
+            }
+        }
         return Ok(HttpResponse::Ok().json(json!({ "ok": true, "already": true })));
     }
 
@@ -1127,7 +1159,8 @@ async fn webhook_paystack_impl(
     order.status = "paid".into();
     order.paid_at = Some(bson::DateTime::from_chrono(Utc::now()));
 
-    let _user = provision_order(&db, &cfg, &mut order).await?;
+    let storage = if is_secondary { ProductId::Secondary } else { ProductId::LiveMorph };
+    let _user = provision_order_in(&db, &cfg, &mut order, storage).await?;
     Ok(HttpResponse::Ok().json(json!({ "ok": true, "provisioned": true })))
 }
 
@@ -1347,8 +1380,14 @@ async fn refund_order(
             return Err(AppError::NotFound("user".into()));
         }
         Err(e) => {
-            // Debit succeeded but the re-fetch failed — do NOT leave the order in
-            // "refunding"; roll back so the operation is retryable.
+            // Debit succeeded but the re-fetch failed — restore the debit
+            // BEFORE rolling the order back, otherwise a retry debits twice.
+            let _ = users_coll
+                .update_one(
+                    doc! { "_id": &user.id },
+                    doc! { "$inc": { "credit_balance": take }, "$set": { "updated_at": Utc::now() } },
+                )
+                .await;
             let _ = orders_coll
                 .update_one(
                     doc! { "_id": &order.id, "status": "refunding" },
@@ -1370,9 +1409,15 @@ async fn refund_order(
         created_at: bson::DateTime::from_chrono(Utc::now()),
     };
     if let Err(e) = ledger_coll.insert_one(&entry).await {
-        // Ledger insert failed AFTER the debit — roll back the order so the
-        // refund can be retried, and log loudly (audit gap otherwise).
+        // Ledger insert failed AFTER the debit — restore the debit before
+        // rolling the order back, or a retry would debit the user twice.
         tracing::error!(error = %e, order = %order.id, "refund ledger insert failed after debit");
+        let _ = users_coll
+            .update_one(
+                doc! { "_id": &user.id },
+                doc! { "$inc": { "credit_balance": take }, "$set": { "updated_at": Utc::now() } },
+            )
+            .await;
         let _ = orders_coll
             .update_one(
                 doc! { "_id": &order.id, "status": "refunding" },
@@ -1391,6 +1436,12 @@ async fn refund_order(
         .await?;
     if fin.matched_count == 0 {
         return Err(AppError::Conflict("order already refunded".into()));
+    }
+    // Reverse the platform economics too (exactly once, via the
+    // refunded_orders marker on the wallet): a refund that only debits the
+    // user leaves phantom Decart budget and phantom revenue on the books.
+    if let Err(e) = crate::services::billing::reverse_wallet_for_refund(&db, &cfg, &order).await {
+        tracing::error!(error = %e, order = %order.id, "wallet economics reversal failed after refund");
     }
     Ok(HttpResponse::Ok().json(json!({
         "order_id": order.id,
@@ -1479,10 +1530,32 @@ async fn webhook_nowpayments_impl(
         return Err(AppError::NotFound("order".into()));
     };
 
+    // The signed IPN must be bound to THIS order's stored payment: provider,
+    // payment id, and an upstream re-fetch must all agree. A validly signed
+    // but inconsistent IPN is rejected instead of provisioning from body data.
+    if order.provider != "nowpayments" {
+        return Err(AppError::BadRequest("order is not a nowpayments order".into()));
+    }
+    let provider_ref = order
+        .provider_ref
+        .clone()
+        .ok_or_else(|| AppError::BadRequest("order has no stored payment id".into()))?;
+    if !payment_id.is_empty() && payment_id != provider_ref {
+        return Err(AppError::BadRequest(
+            "IPN payment_id does not match the order's stored payment".into(),
+        ));
+    }
     if order.status == "provisioned" {
         return Ok(HttpResponse::Ok().json(json!({ "ok": true, "already": true })));
     }
 
+    // Upstream re-verification: never provision from the signed body alone.
+    let inv = nowpayments::get_payment_status(&cfg, &provider_ref).await?;
+    if !nowpayments::is_paid(&inv.payment_status) {
+        return Err(AppError::BadRequest(
+            "payment is not settled upstream".into(),
+        ));
+    }
     // Amount check: the actually-paid amount must cover the quoted pay_amount,
     // both in the SAME pay_currency. outcome_amount is in outcome_currency
     // (e.g. BTC) and must NOT be compared to the USD price (amount_subunit/100)
@@ -1492,9 +1565,9 @@ async fn webhook_nowpayments_impl(
     let covers = nowpayments::amount_covers(
         order.pay_amount,
         order.pay_currency.as_deref(),
-        body.get("actually_paid").and_then(|v| v.as_f64()),
-        body.get("outcome_amount").and_then(|v| v.as_f64()),
-        body.get("outcome_currency").and_then(|v| v.as_str()),
+        inv.actually_paid,
+        inv.outcome_amount,
+        inv.outcome_currency.as_deref(),
     );
     if !covers {
         tracing::error!(
@@ -1529,13 +1602,26 @@ async fn webhook_nowpayments_impl(
             .await?
     };
     if claimed.matched_count == 0 {
+        // A retry that finds a stuck paid/provisioning row must DRIVE recovery
+        // (the settle claim is stale-reclaimable), not blindly ack success.
+        if let Some((mut latest, sec)) = find_order_any_db(&db, doc! { "_id": &order.id }).await? {
+            if latest.status == "provisioned" {
+                return Ok(HttpResponse::Ok().json(json!({ "ok": true, "already": true })));
+            }
+            if latest.status == "paid" || latest.status == "provisioning" {
+                let storage = if sec { ProductId::Secondary } else { ProductId::LiveMorph };
+                provision_order_in(&db, &cfg, &mut latest, storage).await?;
+                return Ok(HttpResponse::Ok().json(json!({ "ok": true, "recovered": true })));
+            }
+        }
         return Ok(HttpResponse::Ok().json(json!({ "ok": true, "already": true })));
     }
 
     order.status = "paid".into();
     order.paid_at = Some(bson::DateTime::from_chrono(Utc::now()));
 
-    let user = provision_order(&db, &cfg, &mut order).await?;
+    let storage = if is_secondary { ProductId::Secondary } else { ProductId::LiveMorph };
+    let user = provision_order_in(&db, &cfg, &mut order, storage).await?;
     Ok(HttpResponse::Ok().json(json!({
         "ok": true,
         "order_id": order.id,
@@ -1634,9 +1720,60 @@ pub async fn sweep_pending_orders(db: &Db, cfg: &Arc<Config>) -> AppResult<usize
             }
             order.status = "paid".into();
             order.paid_at = Some(bson::DateTime::from_chrono(Utc::now()));
-            if provision_order(db, cfg, &mut order).await.is_ok() {
+            let storage = if secondary { ProductId::Secondary } else { ProductId::LiveMorph };
+            if provision_order_in(db, cfg, &mut order, storage).await.is_ok() {
                 swept += 1;
             }
+        }
+
+        // Recovery phase: orders already marked paid (or stuck in a stale
+        // provisioning claim) need no upstream call — settle them directly so a
+        // crash between the paid CAS and provisioning always self-heals.
+        let stale_claim = Utc::now() - chrono::Duration::minutes(3);
+        let mut recover_cur = orders_coll
+            .find(doc! {
+                "$or": [
+                    { "status": "paid" },
+                    { "status": "provisioning", "claimed_at": { "$lt": bson::DateTime::from_chrono(stale_claim) } },
+                    { "status": "provisioning", "claimed_at": { "$exists": false }, "created_at": { "$lt": bson::DateTime::from_chrono(cutoff) } },
+                ],
+            })
+            .with_options(mongodb::options::FindOptions::builder().limit(200).build())
+            .await?;
+        while let Some(mut order) = recover_cur.try_next().await? {
+            let storage = if secondary { ProductId::Secondary } else { ProductId::LiveMorph };
+            if provision_order_in(db, cfg, &mut order, storage).await.is_ok() {
+                swept += 1;
+            }
+        }
+
+        // Refund recovery: a DB failure after the final refunded transition
+        // must not leave the original wallet funding/revenue on the books.
+        let wallet = db.db.collection::<mongodb::bson::Document>("platform_wallet");
+        let wallet_refunded: Vec<String> = wallet
+            .find_one(doc! { "_id": "platform" })
+            .await?
+            .and_then(|doc| {
+                doc.get_array("refunded_orders")
+                    .ok()
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+            })
+            .unwrap_or_default();
+        let mut refund_cur = orders_coll
+            .find(doc! {
+                "status": "refunded",
+                "_id": { "$nin": &wallet_refunded },
+            })
+            .with_options(mongodb::options::FindOptions::builder().limit(200).build())
+            .await?;
+        while let Some(order) = refund_cur.try_next().await? {
+            crate::services::billing::reverse_wallet_for_refund(db, cfg, &order).await?;
+            swept += 1;
         }
     }
     Ok(swept)

@@ -39,7 +39,7 @@ QString VirtualCameraHelper::obsBrowserSourceUrl() const
 {
     if (!m_stream)
         return QStringLiteral("http://127.0.0.1:4789/stream");
-    const QString u = m_stream->url();
+    const QString u = m_stream->urlDisplay();
     if (!u.isEmpty())
         return u;
     return QStringLiteral("http://127.0.0.1:%1/stream").arg(m_stream->port());
@@ -209,6 +209,12 @@ void VirtualCameraHelper::pushFrame(const QImage &frame)
 
 void VirtualCameraHelper::copyObsUrl()
 {
+    if (m_stream && m_stream->running()) {
+        m_stream->copyStreamUrl();
+        setStatus(tr("Copied for OBS Browser Source: %1").arg(obsBrowserSourceUrl()));
+        emit urlCopied();
+        return;
+    }
     const QString u = obsBrowserSourceUrl();
     if (auto *clip = QGuiApplication::clipboard()) {
         clip->setText(u);

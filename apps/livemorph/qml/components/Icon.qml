@@ -49,6 +49,8 @@ Item {
         "chevron-left": "M15 18l-6-6 6-6",
         "plus": "M12 5v14 M5 12h14",
         "minus": "M5 12h14",
+        "window-minimize": "M5 12h14",
+        "window-maximize": "M5 5h14v14H5z",
         "search": "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z M21 21l-4.3-4.3",
         "lock": "M7 11V7a5 5 0 0 1 10 0v4 M3 11h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
         "unlock": "M7 11V7a5 5 0 0 1 9.9-1 M3 11h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",

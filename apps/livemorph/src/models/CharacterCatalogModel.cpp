@@ -160,12 +160,14 @@ void CharacterCatalogModel::populateFiltered()
 
 QString CharacterCatalogModel::cacheFilePath() const
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
-           + QStringLiteral("/catalog/catalog.json");
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return base.isEmpty() ? QString() : base + QStringLiteral("/catalog/catalog.json");
 }
 
 void CharacterCatalogModel::persistCache(const QVector<CharacterEntry> &entries)
 {
+    if (cacheFilePath().isEmpty())
+        return;
     QJsonArray arr;
     for (const auto &c : entries) {
         QJsonObject o;
@@ -177,6 +179,8 @@ void CharacterCatalogModel::persistCache(const QVector<CharacterEntry> &entries)
         o.insert(QStringLiteral("isPremium"), c.isPremium);
         o.insert(QStringLiteral("isStarter"), c.isStarter);
         o.insert(QStringLiteral("isHidden"), c.isHidden);
+        o.insert(QStringLiteral("isUserOwned"), c.isUserOwned);
+        o.insert(QStringLiteral("isFavorite"), c.isFavorite);
         arr.append(o);
     }
     const QString path = cacheFilePath();
@@ -224,6 +228,8 @@ QVector<CharacterEntry> CharacterCatalogModel::readCache() const
         e.isPremium = o.value(QStringLiteral("isPremium")).toBool();
         e.isStarter = o.value(QStringLiteral("isStarter")).toBool();
         e.isHidden = o.value(QStringLiteral("isHidden")).toBool();
+        e.isUserOwned = o.value(QStringLiteral("isUserOwned")).toBool();
+        e.isFavorite = o.value(QStringLiteral("isFavorite")).toBool();
         if (!e.id.isEmpty())
             out.append(e);
     }
@@ -336,6 +342,8 @@ QVariantMap CharacterCatalogModel::entryMap(const CharacterEntry &c) const
         { QStringLiteral("description"), c.description },
         { QStringLiteral("isPremium"), c.isPremium },
         { QStringLiteral("isStarter"), c.isStarter },
+        { QStringLiteral("isUserOwned"), c.isUserOwned },
+        { QStringLiteral("isFavorite"), c.isFavorite },
     };
 }
 
@@ -454,7 +462,7 @@ void CharacterCatalogModel::loadFromBackend(const QVariantList &entries)
         }
         // Preserve locally-created characters (preset-* ids): not on the
         // server yet; wiping them would delete them on every online boot.
-        if (!exists && c.id.startsWith(QLatin1String("preset-")))
+        if (!exists && (c.id.startsWith(QLatin1String("preset-")) || c.isUserOwned))
             m_all.append(c);
     }
     populateFiltered();
@@ -464,6 +472,70 @@ void CharacterCatalogModel::loadFromBackend(const QVariantList &entries)
     persistCache(m_all);
     m_loading = false;
     emit loadingChanged();
+    emit categoriesChanged();
+    emit loaded();
+    emit countChanged();
+}
+
+static CharacterEntry userEntryFromMap(const QVariantMap &map)
+{
+    CharacterEntry entry;
+    entry.id = map.value(QStringLiteral("id")).toString();
+    entry.name = map.value(QStringLiteral("name")).toString();
+    entry.category = QStringLiteral("custom");
+    entry.thumbnail = map.value(QStringLiteral("image_url")).toString();
+    if (!entry.thumbnail.startsWith(QLatin1String("https://")))
+        entry.thumbnail.clear();
+    entry.description = map.value(QStringLiteral("prompt")).toString();
+    entry.isUserOwned = true;
+    entry.isFavorite = map.value(QStringLiteral("is_favorite")).toBool();
+    return entry;
+}
+
+void CharacterCatalogModel::mergeUserCharacters(const QVariantList &entries)
+{
+    beginResetModel();
+    for (int index = m_all.size() - 1; index >= 0; --index)
+        if (m_all[index].isUserOwned)
+            m_all.removeAt(index);
+    for (const QVariant &value : entries) {
+        const CharacterEntry entry = userEntryFromMap(value.toMap());
+        if (entry.id.isEmpty())
+            continue;
+        bool duplicate = false;
+        for (const auto &existing : m_all)
+            if (existing.id == entry.id)
+                duplicate = true;
+        if (!duplicate)
+            m_all.append(entry);
+    }
+    populateFiltered();
+    endResetModel();
+    persistCache(m_all);
+    emit categoriesChanged();
+    emit loaded();
+    emit countChanged();
+}
+
+void CharacterCatalogModel::upsertUserCharacter(const QVariantMap &entryMap)
+{
+    const CharacterEntry entry = userEntryFromMap(entryMap);
+    if (entry.id.isEmpty())
+        return;
+    beginResetModel();
+    for (int index = m_all.size() - 1; index >= 0; --index) {
+        const auto &existing = m_all[index];
+        const bool localPlaceholder = existing.id.startsWith(QLatin1String("preset-"))
+                                      && existing.name == entry.name
+                                      && existing.description == entry.description
+                                      && existing.thumbnail == entry.thumbnail;
+        if (existing.id == entry.id || localPlaceholder)
+            m_all.removeAt(index);
+    }
+    m_all.append(entry);
+    populateFiltered();
+    endResetModel();
+    persistCache(m_all);
     emit categoriesChanged();
     emit loaded();
     emit countChanged();
@@ -498,6 +570,8 @@ void CharacterCatalogModel::renameCharacter(const QString &id, const QString &ne
             m_all[i].name = capped;
             rebuildFiltered();
             persistCache(m_all);
+            if (m_all[i].isUserOwned)
+                emit characterUpdateRequested(id, capped, m_all[i].description, m_all[i].isFavorite);
             return;
         }
     }
@@ -507,11 +581,11 @@ void CharacterCatalogModel::deleteCharacter(const QString &id)
 {
     for (int i = 0; i < m_all.size(); ++i) {
         if (m_all[i].id == id) {
+            const bool userOwned = m_all[i].isUserOwned;
             m_all.removeAt(i);
             rebuildFiltered();
             persistCache(m_all); // deletions must survive restart
-            // Local preset-* ids exist only client-side; the server would 404.
-            if (!id.startsWith(QLatin1String("preset-")))
+            if (userOwned)
                 emit characterDeleteRequested(id);
             return;
         }
@@ -581,6 +655,10 @@ QString CharacterCatalogModel::addUserCharacter(const QString &name,
     m_all.append(e);
     rebuildFiltered();
     persistCache(m_all);
+    if (!e.description.trimmed().isEmpty()
+        && (e.thumbnail.isEmpty() || e.thumbnail.startsWith(QLatin1String("https://")))) {
+        emit characterCreateRequested(e.name, e.description, e.thumbnail);
+    }
     emit characterAdded(e.id);
     return e.id;
 }

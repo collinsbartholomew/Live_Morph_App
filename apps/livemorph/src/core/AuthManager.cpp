@@ -42,7 +42,7 @@ static QString apiRoot(BackendClient *b)
 {
     if (b && !b->baseUrl().isEmpty())
         return b->baseUrl();
-    return QStringLiteral("http://127.0.0.1:3874");
+    return QStringLiteral(LIVEMORPH_API_BASE_URL);
 }
 
 static void applyIdentityHeaders(QNetworkRequest &req, BackendClient *backend)
@@ -71,6 +71,11 @@ AuthManager::AuthManager(ConfigManager *config, BackendClient *backend, QObject 
     m_nam.setTransferTimeout(30000);
     m_refreshTimer.setSingleShot(true);
     connect(&m_refreshTimer, &QTimer::timeout, this, &AuthManager::refreshTokens);
+    m_balancePingTimer.setInterval(30000);
+    connect(&m_balancePingTimer, &QTimer::timeout, this, [this]() {
+        if (m_balanceSocket && m_balanceSocket->state() == QAbstractSocket::ConnectedState)
+            m_balanceSocket->sendTextMessage(QStringLiteral("{\"type\":\"ping\"}"));
+    });
 
     m_otpCooldownTimer.setInterval(1000);
     connect(&m_otpCooldownTimer, &QTimer::timeout, this, [this]() {
@@ -184,7 +189,7 @@ void AuthManager::signInWithGoogle()
             QDesktopServices::openUrl(parsedUrl);
         else
             setError(tr("Refusing to open non-http OAuth URL"));
-        // Poll backend for OAuth ticket (fallback for when livemorph:// deep link is not registered)
+        // Poll backend for OAuth ticket (fallback for when omegarevelation:// deep link is not registered)
         startGooglePoll();
     });
 }
@@ -390,22 +395,7 @@ void AuthManager::requestOtp(const QString &email)
         const QByteArray raw = reply->readAll();
 
         if (reply->error() != QNetworkReply::NoError && status == 0) {
-            // Dev affordance: must be opted in EXPLICITLY at runtime — a
-            // QT_DEBUG define shipped a local auth bypass in any debug build.
-#ifndef NDEBUG
-            if (qEnvironmentVariableIsSet("LIVEMORPH_DEV_AUTH")) {
-                m_otpSent = true;
-                m_otpCooldownSecs = 30;
-                m_otpCooldownTimer.start();
-                emit otpSentChanged();
-                emit otpCooldownChanged();
-                emit otpRequested(e);
-                setError(tr("Backend offline — dev mode: any 6–8 digit code works"));
-            } else
-#endif
-            {
-                setError(tr("Cannot reach authentication server. Check your connection."));
-            }
+            setError(tr("Cannot reach authentication server. Check your connection."));
             return;
         }
 
@@ -476,29 +466,6 @@ void AuthManager::verifyOtp(const QString &email, const QString &code)
         const QByteArray raw = reply->readAll();
 
         if (reply->error() != QNetworkReply::NoError && status == 0) {
-            // Dev affordance behind an explicit runtime opt-in — fabricating
-            // JWTs must never happen just because the build has debug defines.
-#ifndef NDEBUG
-            if (qEnvironmentVariableIsSet("LIVEMORPH_DEV_AUTH")
-                && c.length() == m_otpCodeLength) {
-                QJsonObject user{
-                    {QStringLiteral("id"), QStringLiteral("demo-") + e.section(QLatin1Char('@'), 0, 0)},
-                    {QStringLiteral("email"), e},
-                    {QStringLiteral("display_name"), e.section(QLatin1Char('@'), 0, 0)},
-                    {QStringLiteral("credit_balance"), 100},
-                    {QStringLiteral("bonus_balance"), 100},
-                    {QStringLiteral("tier"), QStringLiteral("free")},
-                };
-                QJsonObject fake{
-                    {QStringLiteral("access_token"), QStringLiteral("demo-access")},
-                    {QStringLiteral("refresh_token"), QStringLiteral("demo-refresh")},
-                    {QStringLiteral("expires_in"), 3600},
-                    {QStringLiteral("user"), user},
-                };
-                applyAuthResponse(fake);
-                return;
-            }
-#endif
             setError(tr("Cannot reach authentication server"));
             return;
         }
@@ -682,6 +649,7 @@ void AuthManager::completePasswordReset(const QString &token, const QString &ema
 
 void AuthManager::signOut()
 {
+    emit signingOut();
     // Fence: invalidate every in-flight auth request (refreshProfile /
     // verifyOtp / exchangeOAuthTicket completing after sign-out would
     // otherwise re-apply tokens and re-login the user).
@@ -1117,7 +1085,11 @@ void AuthManager::connectBalanceSocket()
         // Cap the socket read buffer so a hostile/compromised backend cannot
         // stream unbounded WS frames into memory (mirrors the signaling socket).
         m_balanceSocket->setReadBufferSize(8 * 1024 * 1024);
+        connect(m_balanceSocket, &QWebSocket::connected, this, [this]() {
+            m_balancePingTimer.start();
+        });
         connect(m_balanceSocket, &QWebSocket::disconnected, this, [this]() {
+            m_balancePingTimer.stop();
             // Exponential backoff + jitter — matches the signaling ladder.
             if (m_accessToken.isEmpty() || !m_backend)
                 return;
@@ -1185,6 +1157,7 @@ void AuthManager::connectBalanceSocket()
                 const QString code = o.value(QStringLiteral("reason")).toString();
                 const QString reason = code == QLatin1String("insufficient_credits")
                                            || code == QLatin1String("credits_exhausted")
+                                           || code == QLatin1String("credits_depleted")
                                        ? tr("Credits depleted")
                                        : code == QLatin1String("platform_budget_exhausted")
                                            ? tr("Service capacity exhausted — try again later")
@@ -1238,6 +1211,7 @@ void AuthManager::connectBalanceSocket()
 
 void AuthManager::disconnectBalanceSocket()
 {
+    m_balancePingTimer.stop();
     if (m_balanceSocket) {
         m_balanceSocket->close();
         m_balanceSocket->deleteLater();

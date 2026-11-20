@@ -3,18 +3,10 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import LiveMorph
 
-/**
- * WorkshopPanel — the left panel. Fixed section header (eyebrow + count) and
- * ONE scroll containing: roster pack (+ 3-col grid) → My characters (+ slots)
- * → consent → Customize card. All content is inset by Theme.padContainer so
- * nothing touches the panel borders.
- */
 Rectangle {
     id: root
-    color: Colors.surfaceBase
-    border.width: 0
+    color: Colors.surfaceRaised
 
-    // Right edge border (workshop is on the LEFT)
     Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
@@ -27,27 +19,64 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
 
-        // ── Fixed header: honeycomb band + eyebrow label + live count ──
-        // Inset = Theme.padSection (20) so the header aligns exactly with the
-        // PresetGrid/CustomizeForm content below (gridPad 20).
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: headerRow.implicitHeight + 30
+            Layout.preferredHeight: 72
             color: Colors.surfaceRaised
             clip: true
 
-            // Honeycomb band behind the eyebrow (spotlight at the left)
             Honeycomb {
                 anchors.fill: parent
                 cellSize: Theme.honeycombCell
                 lineColor: Colors.honeycombLineFaint
-                opacity: 0.5
-                focusX: 0
+                focusX: width
                 focusY: height / 2
-                fadeRadius: width * 0.75
-                sparkleEvery: 29
-                sparkleAlpha: 0.06
+                fadeRadius: width * 0.65
+                depthEvery: 5
+                circuitEvery: 9
             }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 20
+                anchors.rightMargin: 20
+                spacing: Theme.spacingMd
+
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    Text {
+                        text: qsTr("CHARACTER LIBRARY")
+                        color: Colors.textPrimary
+                        font.family: Theme.fontLabel.family; font.pixelSize: Theme.fontLabel.pixelSize; font.weight: Theme.fontLabel.weight
+                        font.letterSpacing: 1
+                    }
+                    Text {
+                        width: parent.width
+                        text: qsTr("Choose your next persona")
+                        color: Colors.textMuted
+                        font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                        elide: Text.ElideRight
+                    }
+                }
+
+                Rectangle {
+                    width: 36
+                    height: 32
+                    color: Colors.surfaceBase
+                    border.color: Colors.surfaceBorder
+                    border.width: 1
+                    radius: Theme.radiusMd
+                    Text {
+                        anchors.centerIn: parent
+                        text: String(Catalog.count).padStart(2, "0")
+                        color: Colors.textPrimary
+                        font.family: Theme.fontSmall.family; font.pixelSize: Theme.fontSmall.pixelSize
+                        font.weight: Font.Bold
+                    }
+                }
+            }
+
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
@@ -55,75 +84,27 @@ Rectangle {
                 height: 1
                 color: Colors.surfaceBorder
             }
-
-            RowLayout {
-                id: headerRow
-                anchors.fill: parent
-                anchors.leftMargin: Theme.padSection
-                anchors.rightMargin: Theme.padSection
-                spacing: Theme.spacingSm
-
-                Hexagon {
-                    size: 11
-                    lineWidth: 1.5
-                    lineColor: Colors.textPrimary
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                Text {
-                    text: qsTr("CHARACTERS")
-                    color: Colors.textPrimary
-                    font: Theme.fontLabel
-                }
-                Item { Layout.fillWidth: true }
-            // Count pill (accent-tinted when the library is non-empty)
-            Rectangle {
-                height: 20
-                width: countLbl.implicitWidth + 14
-                radius: Theme.radiusFull
-                color: Catalog.count > 0 ? Colors.accent10 : Colors.overlay30
-                border.color: Catalog.count > 0 ? Colors.accent30 : Colors.surfaceBorderSubtle
-                border.width: 1
-                Text {
-                    id: countLbl
-                    anchors.centerIn: parent
-                    text: Catalog.count
-                    color: Catalog.count > 0 ? Colors.accentHover : Colors.textMuted
-                    font.family: Theme.fontMono.family
-                    font.pixelSize: Theme.fontMonoTiny.pixelSize
-                    font.weight: Font.Bold
-                }
-            }
-        }
         }
 
-        // ── Single scroll: roster + customize disclosure ────────────────
         Flickable {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.topMargin: Theme.spacingLg
-            contentHeight: scrollCol.height
+            contentHeight: scrollColumn.height
             contentWidth: width
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
             Column {
-                id: scrollCol
+                id: scrollColumn
                 width: parent.width
-
-                PresetGrid {
-                    width: parent.width
-                }
-
-                Item { width: 1; height: 8 }
-
-                CustomizeForm {
-                    width: parent.width
-                }
-
-                Item { width: 1; height: 20 }
+                PresetGrid { width: parent.width }
+                Item { width: 1; height: 12 }
+                CustomizeForm { width: parent.width }
+                Item { width: 1; height: 24 }
             }
 
-            ScrollBar.vertical: StyledScrollBar { }
+            ScrollBar.vertical: StyledScrollBar { thin: true }
         }
     }
 }

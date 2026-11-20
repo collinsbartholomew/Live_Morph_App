@@ -23,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
     let cfg = Config::load().map_err(|e| {
         eprintln!("config error: {e}");
         eprintln!("Copy .env.example → .env and fill required values.");
-        e
+        anyhow::anyhow!(e)
     })?;
 
     // Bind the wire id of the second product slot before any request can
@@ -44,9 +44,16 @@ async fn main() -> anyhow::Result<()> {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
     fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "invalid RUST_LOG — falling back to 'info'");
+            EnvFilter::new("info")
+        }))
         .with_target(true)
         .init();
+    match livemorph_backend::config::DOTENV_LOADED_PATH.get() {
+        Some(Some(path)) => tracing::info!(path = %path.display(), "config: loaded dotenv file"),
+        _ => tracing::info!("config: no dotenv file loaded (process environment only)"),
+    }
 
     // ── Startup safety checks ──────────────────────────────────────────
     if cfg.jwt_secret.len() < 32 {
@@ -177,15 +184,100 @@ async fn main() -> anyhow::Result<()> {
             panic!("refusing to boot with the shipped .test.env ADMIN_SECRET in production — set a real ADMIN_SECRET");
         }
     }
-    // Placeholder secrets shipped in .env.example must never boot in production.
+    // Placeholder secrets shipped in .env.example/.env.production.template must
+    // never boot in production. This covers REPLACE_WITH_* template values,
+    // which otherwise pass length checks (e.g. a 30-char template OTP_PEPPER).
+    fn looks_like_placeholder(value: &str) -> bool {
+        let low = value.trim().to_ascii_lowercase();
+        low.is_empty()
+            || low.contains("change-me")
+            || low.contains("changeme")
+            || low.contains("your-")
+            || low.contains("placeholder")
+            || low.contains("replace_with")
+            || low.contains("replace-with")
+            || low.contains("replace with")
+    }
     if cfg.is_production() {
-        let low = cfg.jwt_secret.to_ascii_lowercase();
-        if low.contains("change-me") || low.contains("your-") || low.contains("placeholder") || low.contains("example") {
+        if looks_like_placeholder(&cfg.jwt_secret) {
             panic!("refusing to boot with a placeholder JWT_SECRET in production — set a real JWT_SECRET");
+        }
+        if looks_like_placeholder(&cfg.decart_api_key) {
+            panic!("refusing to boot with a placeholder DECART_API_KEY in production — set a real key");
+        }
+        for (name, value) in [
+            ("PAYSTACK_SECRET_KEY", cfg.paystack_secret_key.as_deref()),
+            ("PAYSTACK_PUBLIC_KEY", cfg.paystack_public_key.as_deref()),
+            ("PAYSTACK_WEBHOOK_SECRET", cfg.paystack_webhook_secret.as_deref()),
+            ("NOWPAYMENTS_API_KEY", cfg.nowpayments_api_key.as_deref()),
+            ("NOWPAYMENTS_IPN_SECRET", cfg.nowpayments_ipn_secret.as_deref()),
+            ("GOOGLE_CLIENT_ID", cfg.google_client_id.as_deref()),
+            ("GOOGLE_CLIENT_SECRET", cfg.google_client_secret.as_deref()),
+            ("ADMIN_SECRET", cfg.admin_secret.as_deref()),
+        ] {
+            if let Some(v) = value {
+                if !v.is_empty() && looks_like_placeholder(v) {
+                    panic!("refusing to boot with a placeholder {name} in production — set a real value");
+                }
+            }
+        }
+        if let Ok(pepper) = std::env::var("OTP_PEPPER") {
+            if looks_like_placeholder(&pepper) {
+                panic!("refusing to boot with a placeholder OTP_PEPPER in production — set a real random pepper");
+            }
+        }
+        if cfg.public_base_url.contains("yourdomain.com") {
+            panic!("refusing to boot with the template PUBLIC_BASE_URL in production — set the real public API origin");
         }
     }
 
-    let db = Db::connect(&cfg).await?;
+    if std::env::args().any(|arg| arg == "--check-config") {
+        println!(
+            "configuration valid: environment={}, secondary_product={}",
+            cfg.rust_env,
+            product::secondary_id()
+        );
+        return Ok(());
+    }
+
+    // Economics invariant: no pack may sell more Decart compute than its
+    // payment funds. Log the exact shortfall per pack so pricing can be fixed
+    // before balances become unspendable (platform budget exhausted).
+    for (name, funded, sold) in livemorph_backend::services::billing::underfunded_packs(&cfg) {
+        tracing::warn!(
+            pack = %name,
+            funded_seconds = format_args!("{funded:.1}"),
+            sold_seconds = format_args!("{sold:.1}"),
+            "pack sells more compute than it funds — adjust price/credits/margin"
+        );
+    }
+
+    let db = {
+        // Bounded startup retry: a cold Mongo (or a brief network blip during a
+        // rolling deploy) must not permanently kill the process before any
+        // orchestrator backoff kicks in. Total wait is ~30s across 5 attempts.
+        let mut attempt = 0u32;
+        loop {
+            attempt += 1;
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(60),
+                Db::connect(&cfg),
+            )
+            .await
+            {
+                Ok(Ok(db)) => break db,
+                Ok(Err(e)) if attempt < 5 => {
+                    tracing::warn!(error = %e, attempt, "mongo connect/init failed — retrying");
+                }
+                Err(_) if attempt < 5 => {
+                    tracing::warn!(attempt, "mongo connect/init timed out — retrying");
+                }
+                Ok(Err(e)) => return Err(e),
+                Err(_) => anyhow::bail!("mongo connect/init timed out after 5 attempts"),
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1 << (attempt - 1))).await;
+        }
+    };
 
     // Per-process instance id stamped on session rows so the startup orphan
     // reset only touches rows owned by THIS process — safe to run with multiple
@@ -219,20 +311,19 @@ async fn main() -> anyhow::Result<()> {
         let now = Utc::now();
         let main_coll = db.db.collection::<mongodb::bson::Document>("morph_sessions");
         let sec_coll = db.db_secondary.collection::<mongodb::bson::Document>("sessions");
-        // Only rows owned by this instance (or legacy rows with no instance_id)
-        // are stale. Under the documented single-instance assumption every
-        // still-active row predates this process's boot, so also match on
-        // started_at < boot time: the previous process's rows carry a DIFFERENT
-        // instance_id and would otherwise be missed (leaking their slots until
-        // the 10-min reaper). That clause is ONLY valid single-instance — with
-        // >1 replica it would kill the other replica's live rows, so it is
-        // gated behind MULTI_INSTANCE=1 being UNSET (default = single instance).
-        let single_instance = std::env::var("MULTI_INSTANCE")
+        // Never assume this is the only replica. By default, reset only rows
+        // owned by this process instance (a restart reuses no instance id) and
+        // legacy rows that are already beyond the reaper's 10-minute stale
+        // threshold. Aggressive cleanup of every row older than boot is only
+        // safe when the operator explicitly declares SINGLE_INSTANCE=1; the old
+        // default could end another live replica's sessions.
+        let single_instance = std::env::var("SINGLE_INSTANCE")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false) == false;
+            .unwrap_or(false);
+        let legacy_stale = now - chrono::Duration::minutes(10);
         let mut orphan_or = vec![
             doc! { "instance_id": instance_id },
-            doc! { "instance_id": { "$exists": false } },
+            doc! { "instance_id": { "$exists": false }, "started_at": { "$lt": legacy_stale } },
         ];
         if single_instance {
             orphan_or.push(doc! { "started_at": { "$lt": now } });
@@ -291,7 +382,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        tracing::info!("startup: active_sessions claims reset to 0");
+        tracing::info!("startup: replica-safe orphan session cleanup complete");
     }
 
     // Crash-recovery: credit any paid orders whose provision crashed mid-flight
@@ -334,6 +425,7 @@ async fn main() -> anyhow::Result<()> {
                     coll: &mongodb::Collection<mongodb::bson::Document>,
                     users: &mongodb::Collection<livemorph_backend::models::User>,
                     stale_filter: &mongodb::bson::Document,
+                    cutoff: chrono::DateTime<Utc>,
                 ) -> u64 {
                     use futures_util::TryStreamExt;
                     let mut reaped = 0u64;
@@ -353,7 +445,14 @@ async fn main() -> anyhow::Result<()> {
                         };
                         let transitioned = coll
                             .find_one_and_update(
-                                doc! { "_id": id, "status": status },
+                                doc! {
+                                    "_id": id,
+                                    "status": status,
+                                    "$or": [
+                                        { "last_activity_at": { "$lt": cutoff } },
+                                        { "last_activity_at": { "$exists": false }, "started_at": { "$lt": cutoff } },
+                                    ],
+                                },
                                 doc! { "$set": {
                                     "status": "ended",
                                     "end_reason": "reaper_timeout",
@@ -382,6 +481,7 @@ async fn main() -> anyhow::Result<()> {
                     &db.db.collection::<mongodb::bson::Document>("morph_sessions"),
                     &db.users(),
                     &stale_filter,
+                    cutoff,
                 ).await;
                 if n_morph > 0 {
                     tracing::warn!(count = n_morph, "reaper: marked stale morph sessions as ended");
@@ -390,6 +490,7 @@ async fn main() -> anyhow::Result<()> {
                     &db.sessions_secondary(),
                     &db.users_secondary(),
                     &stale_filter,
+                    cutoff,
                 ).await;
                 if n_sec > 0 {
                     tracing::warn!(count = n_sec, "reaper: marked stale secondary sessions as ended");
@@ -404,7 +505,13 @@ async fn main() -> anyhow::Result<()> {
                         (db.sessions_secondary(), db.users_secondary()),
                     ] {
                         let pipeline = vec![
-                            doc! { "$match": { "status": { "$in": ["connecting", "generating"] } } },
+                            // Heal only claims owned by THIS process. Counting
+                            // other replicas' rows would clobber their live
+                            // counters; their own reaper/healer owns those.
+                            doc! { "$match": {
+                                "status": { "$in": ["connecting", "generating"] },
+                                "instance_id": crate::INSTANCE_ID.as_str(),
+                            } },
                             doc! { "$group": { "_id": "$user_id", "n": { "$sum": 1 } } },
                         ];
                         let mut live_uids: Vec<String> = Vec::new();
@@ -422,18 +529,28 @@ async fn main() -> anyhow::Result<()> {
                                     .await;
                             }
                         }
-                        // Also zero users whose counter is stuck > 0 but who have
-                        // NO live rows at all — otherwise a leaked counter self-locks
-                        // them (429) forever, even across restarts.
-                        let _ = users
-                            .update_many(
-                                doc! {
-                                    "_id": { "$nin": &live_uids },
-                                    "active_sessions": { "$gt": 0 },
-                                },
-                                doc! { "$set": { "active_sessions": 0 } },
-                            )
-                            .await;
+                        // Zero stale claims only when NO OTHER instance owns a
+                        // live row. Otherwise live_uids contains only this
+                        // instance's users and zeroing would clobber another
+                        // replica's legitimate claims.
+                        let foreign_live = coll
+                            .count_documents(doc! {
+                                "status": { "$in": ["connecting", "generating"] },
+                                "instance_id": { "$ne": crate::INSTANCE_ID.as_str() },
+                            })
+                            .await
+                            .unwrap_or(0);
+                        if foreign_live == 0 {
+                            let _ = users
+                                .update_many(
+                                    doc! {
+                                        "_id": { "$nin": &live_uids },
+                                        "active_sessions": { "$gt": 0 },
+                                    },
+                                    doc! { "$set": { "active_sessions": 0 } },
+                                )
+                                .await;
+                        }
                     }
                 }
                 // Audit reconciler on the same cadence (idempotent, audit-only).

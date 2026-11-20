@@ -101,13 +101,93 @@ pub fn decart_budget_from_payment(cfg: &Config, revenue_usd: f64) -> f64 {
     (revenue_usd * (1.0 - margin)).max(0.0)
 }
 
-/// After Paystack confirms **paid**: fund Decart budget + credit user tokens.
+/// Reverse wallet economics for a refunded order exactly once. Safe to retry
+/// from both the refund handler and the periodic sweeper after a DB failure.
+pub async fn reverse_wallet_for_refund(
+    db: &Db,
+    cfg: &Config,
+    order: &PaymentOrder,
+) -> AppResult<()> {
+    let revenue = order_revenue_usd(cfg, order);
+    let budget = decart_budget_from_payment(cfg, revenue);
+    let wallet = db.db.collection::<mongodb::bson::Document>("platform_wallet");
+    wallet
+        .update_one(
+            doc! { "_id": WALLET_ID, "refunded_orders": { "$ne": &order.id } },
+            vec![doc! { "$set": {
+                "decart_budget_usd": { "$max": [{ "$subtract": [{ "$ifNull": ["$decart_budget_usd", 0.0] }, budget] }, 0.0] },
+                "revenue_usd": { "$max": [{ "$subtract": [{ "$ifNull": ["$revenue_usd", 0.0] }, revenue] }, 0.0] },
+                "refunded_orders": { "$slice": [
+                    { "$concatArrays": [{ "$ifNull": ["$refunded_orders", []] }, [order.id.clone()]] },
+                    -10_000
+                ] },
+                "updated_at": Utc::now(),
+            } }],
+        )
+        .await?;
+    Ok(())
+}
+
+/// (funded_seconds, sold_seconds) for a pack: how much Decart compute the
+/// payment funds vs how much compute the sold credits entitle. A pack with
+/// sold_seconds > funded_seconds sells compute the platform cannot pay for.
+pub fn funding_analysis(cfg: &Config, revenue_usd: f64, credits: f64) -> (f64, f64) {
+    let funded = if cfg.decart_usd_per_second > 0.0 {
+        decart_budget_from_payment(cfg, revenue_usd) / cfg.decart_usd_per_second
+    } else {
+        0.0
+    };
+    let sold = if cfg.credits_per_second > 0.0 {
+        credits / cfg.credits_per_second
+    } else {
+        0.0
+    };
+    (funded, sold)
+}
+
+/// Startup invariant report: every catalog entry whose sold compute exceeds
+/// its funded compute (a structural loss / broken-promise pack).
+pub fn underfunded_packs(cfg: &Config) -> Vec<(String, f64, f64)> {
+    let mut out = Vec::new();
+    let mut check = |name: String, usd: f64, credits: f64| {
+        let (funded, sold) = funding_analysis(cfg, usd, credits);
+        if sold > funded + 1e-9 {
+            out.push((name, funded, sold));
+        }
+    };
+    for p in crate::models::TokenPackage::catalog() {
+        check(format!("token-pack:{}", p.key), p.price_usd, p.credits);
+    }
+    for p in crate::services::plans::ACTIVATION_PLANS {
+        check(format!("activation:{}", p.id), p.dollars, p.credits);
+    }
+    for p in crate::services::plans::CREDIT_PLANS {
+        check(format!("credit-plan:{}", p.id), p.dollars, p.credits);
+    }
+    let (sp_usd, sp_credits) = crate::services::plans::STARTER_PACK;
+    check("starter-pack".into(), sp_usd, sp_credits);
+    out
+}
+
 pub async fn settle_and_provision(
     db: &Db,
     cfg: &Config,
     order: &mut PaymentOrder,
 ) -> AppResult<User> {
-    let is_secondary = ProductId::parse(&order.product) == Some(ProductId::Secondary);
+    let storage = ProductId::parse(&order.product).unwrap_or(ProductId::LiveMorph);
+    settle_and_provision_in(db, cfg, order, storage).await
+}
+
+/// `storage` is the AUTHORITATIVE product store the order was loaded from
+/// (find_order_any_db knows the collection; a legacy order's missing `product`
+/// field defaults to livemorph and must not re-route settlement).
+pub async fn settle_and_provision_in(
+    db: &Db,
+    cfg: &Config,
+    order: &mut PaymentOrder,
+    storage: ProductId,
+) -> AppResult<User> {
+    let is_secondary = storage == ProductId::Secondary;
     let orders_coll = if is_secondary {
         db.db_secondary.collection::<PaymentOrder>("payment_orders")
     } else {
@@ -121,15 +201,25 @@ pub async fn settle_and_provision(
             .find_one(doc! { "_id": &order.user_id })
             .await?
             .ok_or_else(|| AppError::NotFound("user".into()))?;
-        // Self-heal: a provisioned activation order whose key mint failed at
-        // settle time (crash between finalize and mint) still gets its key here.
-        if ProductId::parse(&order.product) == Some(ProductId::Secondary)
-            && order.kind.as_deref() == Some("activation")
-        {
-            if let Err(e) = ensure_activation_key(db, &users_coll, order, &user).await {
-                tracing::warn!(error = %e, order = %order.id, "activation key self-heal failed");
+        // Self-heal EVERY entitlement kind, not just activation: a crash after
+        // finalize but before the entitlement writes must be repairable by any
+        // later poll/verify instead of stranding a paid purchase.
+        if is_secondary {
+            match apply_secondary_entitlements(db, &users_coll, order, &user).await {
+                Ok(Some(ak)) => {
+                    order.access_key_plain = Some(ak.key.clone());
+                    order.plan = Some(ak.plan.clone());
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!(error = %e, order = %order.id, "entitlement self-heal failed");
+                }
             }
         }
+        crate::routes::referral::grant_referral_reward_after_purchase(
+            db, cfg, storage, &order.user_id,
+        )
+        .await;
         return Ok(user);
     }
     if order.status != "paid" {
@@ -198,19 +288,6 @@ pub async fn settle_and_provision(
         }
     };
 
-    // Exactly-once credit mutex: the first attempt to flip `credit_applied`
-    // owns the wallet/user $inc. A crashed attempt that flipped the flag but
-    // died before the $inc under-credits (auditable via the missing ledger
-    // row) — it can never double-credit. A reclaiming worker sees the flag
-    // already set and skips the credit entirely.
-    let owns_credit = orders_coll
-        .find_one_and_update(
-            doc! { "_id": &order.id, "status": "provisioning", "credit_applied": { "$ne": true } },
-            doc! { "$set": { "credit_applied": true } },
-        )
-        .await?
-        .is_some();
-
     let revenue = order_revenue_usd(cfg, order);
     let decart_budget = decart_budget_from_payment(cfg, revenue);
     let prepaid_seconds = if cfg.decart_usd_per_second > 0.0 {
@@ -219,51 +296,104 @@ pub async fn settle_and_provision(
         0.0
     };
 
-    // 1) Fund platform Decart budget (what we can afford to burn on Decart API key)
     let coll = wallet_coll(db);
     let mut user = users_coll
         .find_one(doc! { "_id": &order.user_id })
         .await?
         .ok_or_else(|| AppError::NotFound("user".into()))?;
 
-    if owns_credit {
-        get_or_create_wallet(db).await?;
-        coll.update_one(
-            doc! { "_id": WALLET_ID },
-            doc! {
-                "$inc": {
-                    "decart_budget_usd": decart_budget,
-                    "revenue_usd": revenue,
-                },
-                "$set": { "updated_at": Utc::now() }
-            },
-        )
-        .await?;
+    // A discounted upgrade is only valid against the source plan captured at
+    // creation. If another upgrade has already changed the user's plan, this
+    // order is stale and must be refunded rather than discounted a second time.
+    if is_secondary && order.kind.as_deref() == Some("upgrade") {
+        let current = user.plan.as_deref().unwrap_or("starter");
+        if !upgrade_source_is_valid(order.source_plan.as_deref(), current) {
+            let source = order.source_plan.as_deref().unwrap_or("unknown");
+            orders_coll
+                .update_one(
+                    doc! { "_id": &order.id },
+                    doc! { "$set": {
+                        "status": "refund_required",
+                        "refund_reason": format!("upgrade source plan changed: expected {source}, current {current}"),
+                    }},
+                )
+                .await?;
+            return Err(AppError::Conflict(
+                "your plan changed after this upgrade order was created — the order is flagged for refund".into(),
+            ));
+        }
+    }
 
-        // 2) Credit user platform tokens (atomic $inc — safe under concurrent
-        // readers). balance_after is read back from the post-update document
-        // so it can never be a stale read-modify-write value.
-        let updated = users_coll
-            .find_one_and_update(
-                doc! { "_id": &user.id },
-                doc! {
-                    "$inc": { "credit_balance": order.credits },
-                    "$set": { "updated_at": Utc::now() },
-                },
-            )
-            .with_options(
-                mongodb::options::FindOneAndUpdateOptions::builder()
-                    .return_document(mongodb::options::ReturnDocument::After)
-                    .build(),
+    // Starter pack single-claim is enforced AT SETTLEMENT, before any money or
+    // credit moves: order-creation checks alone are raceable (many pending
+    // orders created concurrently). A duplicate paid order is flagged for
+    // refund instead of silently double-crediting.
+    if is_secondary && order.kind.as_deref() == Some("starter_pack") {
+        let claimed = users_coll
+            .update_one(
+                doc! { "_id": &user.id, "starter_pack": { "$ne": true } },
+                doc! { "$set": { "starter_pack": true, "updated_at": Utc::now() } },
             )
             .await?;
-        let balance_after = if let Some(u) = updated {
-            user = u;
-            user.total_credits()
-        } else {
-            user.total_credits() + order.credits
-        };
+        if claimed.matched_count == 0 {
+            orders_coll
+                .update_one(
+                    doc! { "_id": &order.id },
+                    doc! { "$set": {
+                        "status": "refund_required",
+                        "refund_reason": "starter pack already claimed on this account",
+                    }},
+                )
+                .await?;
+            return Err(AppError::Conflict(
+                "starter pack already claimed — this order is flagged for refund".into(),
+            ));
+        }
+    }
 
+    // 1) Fund the platform wallet EXACTLY ONCE per order. The funded_orders
+    // marker on the wallet document makes the increment idempotent across
+    // crashes, stale-claim reclaims, and concurrent workers — no worker ever
+    // reverses another worker's funding.
+    get_or_create_wallet(db).await?;
+    coll.update_one(
+        doc! { "_id": WALLET_ID, "funded_orders": { "$ne": &order.id } },
+        doc! {
+            "$inc": {
+                "decart_budget_usd": decart_budget,
+                "revenue_usd": revenue,
+            },
+            // Bound the idempotency journal: 10k UUIDs is ~0.4 MB, far below
+            // Mongo's 16 MB document limit even alongside other fields.
+            "$push": { "funded_orders": { "$each": [&order.id], "$slice": -10_000 } },
+            "$set": { "updated_at": Utc::now() }
+        },
+    )
+    .await?;
+
+    // 2) Credit the user EXACTLY ONCE per order via the provisioned_orders
+    // marker on the user document (same idempotency-anchor pattern as key
+    // redemption and session burns). A crashed attempt is resumed by any later
+    // worker; the credit can never be duplicated or reversed by a racing
+    // finalizer.
+    let credited = users_coll
+        .find_one_and_update(
+            doc! { "_id": &user.id, "provisioned_orders": { "$ne": &order.id } },
+            doc! {
+                "$inc": { "credit_balance": order.credits },
+                "$push": { "provisioned_orders": { "$each": [&order.id], "$slice": -10_000 } },
+                "$set": { "updated_at": Utc::now() },
+            },
+        )
+        .with_options(
+            mongodb::options::FindOneAndUpdateOptions::builder()
+                .return_document(mongodb::options::ReturnDocument::After)
+                .build(),
+        )
+        .await?;
+    if let Some(u) = credited {
+        let balance_after = u.total_credits();
+        user = u;
         let entry = CreditLedgerEntry {
             id: new_id(),
             user_id: user.id.clone(),
@@ -272,48 +402,58 @@ pub async fn settle_and_provision(
             kind: "purchase".into(),
             ref_id: Some(order.id.clone()),
             note: Some(format!(
-                "paystack_settled pack={} revenue_usd={:.4} decart_budget_usd={:.4} prepaid_secs={:.1}",
+                "settled pack={} revenue_usd={:.4} decart_budget_usd={:.4} prepaid_secs={:.1}",
                 order.package_key, revenue, decart_budget, prepaid_seconds
             )),
             created_at: bson::DateTime::from_chrono(Utc::now()),
         };
-        ledger_coll.insert_one(&entry).await?;
-
-        // Pack purchases also carry the plan tier: desktop clients gate HD and
-        // the settings tier UI on user.tier (free | basic | starter | mid |
-        // pro), so a paid pack must be reflected on the user row. Only ever
-        // upgrade (never downgrade a higher tier); kind=None marks a plain
-        // credit pack — activation/plan orders carry kind and set plan via
-        // their own flow.
-        if order.kind.is_none() {
-            let rank = |t: &str| match t {
-                "basic" => 1,
-                "starter" => 2,
-                "mid" => 3,
-                "pro" => 4,
-                _ => 0,
-            };
-            let new_rank = rank(&order.package_key);
-            if new_rank > rank(&user.tier) {
-                users_coll
-                    .update_one(
-                        doc! { "_id": &user.id },
-                        doc! { "$set": {
-                            "tier": &order.package_key,
-                            "plan": &order.package_key,
-                            "updated_at": Utc::now(),
-                        }},
-                    )
-                    .await?;
+        if let Err(e) = ledger_coll.insert_one(&entry).await {
+            if !e.to_string().contains("E11000") {
+                tracing::warn!(error = %e, order = %order.id, "purchase ledger insert failed");
             }
         }
     }
 
-    // 3) Mark order provisioned + store economics snapshot. The write is
-    // guarded by the claim (status=provisioning AND our claimed_at): if a
-    // concurrent worker reclaimed the stale claim and finalized first, this
-    // matches 0 and we compensate the credit we just applied so the user is
-    // never double-credited.
+    // Pack purchases also carry the plan tier: desktop clients gate HD and
+    // the settings tier UI on user.tier (free | basic | starter | mid |
+    // pro), so a paid pack must be reflected on the user row. Only ever
+    // upgrade (never downgrade a higher tier); kind=None marks a plain
+    // credit pack — activation/plan orders carry kind and set plan via
+    // their own flow.
+    if order.kind.is_none() {
+        let rank = |t: &str| match t {
+            "basic" => 1,
+            "starter" => 2,
+            "mid" => 3,
+            "pro" => 4,
+            _ => 0,
+        };
+        let new_rank = rank(&order.package_key);
+        if new_rank > rank(&user.tier) {
+            users_coll
+                .update_one(
+                    doc! { "_id": &user.id },
+                    doc! { "$set": {
+                        "tier": &order.package_key,
+                        "plan": &order.package_key,
+                        "updated_at": Utc::now(),
+                    }},
+                )
+                .await?;
+        }
+    }
+    // Observability flag for the audit reconciler (no longer a mutex).
+    orders_coll
+        .update_one(
+            doc! { "_id": &order.id },
+            doc! { "$set": { "credit_applied": true } },
+        )
+        .await?;
+
+    // 3) Mark order provisioned + store economics snapshot, guarded by our
+    // claim. If a reclaiming worker finalized first, that is fine: every step
+    // above is exactly-once, so there is NOTHING to compensate — the old
+    // reversal path could zero out the only legitimate credit.
     order.status = "provisioned".into();
     order.provisioned_at = Some(bson::DateTime::from_chrono(Utc::now()));
     let finalize = orders_coll
@@ -333,53 +473,7 @@ pub async fn settle_and_provision(
         )
         .await?;
     if finalize.matched_count == 0 {
-        // We lost the claim to a reclaiming worker — undo our credit AND the
-        // wallet inc (otherwise platform revenue double-counts). Only the
-        // worker that owns the credit mutex may reverse it.
-        if !owns_credit {
-            tracing::warn!(order = %order.id, "provision claim lost; no credit applied, nothing to revert");
-            return users_coll
-                .find_one(doc! { "_id": &order.user_id })
-                .await?
-                .ok_or_else(|| AppError::NotFound("user".into()));
-        }
-        // Revert wallet + user credit, CLAMPED at 0 so a spend between credit and
-        // revert can never drive a balance negative. balance_after is read back
-        // from the post-revert document, not the stale in-memory user.
-        coll.update_one(
-            doc! { "_id": WALLET_ID },
-            doc! { "$set": {
-                "decart_budget_usd": { "$max": [{ "$subtract": [{ "$ifNull": ["$decart_budget_usd", 0.0] }, decart_budget] }, 0.0] },
-                "revenue_usd": { "$max": [{ "$subtract": [{ "$ifNull": ["$revenue_usd", 0.0] }, revenue] }, 0.0] },
-            }},
-        )
-        .await?;
-        let reverted_user = users_coll
-            .find_one_and_update(
-                doc! { "_id": &user.id },
-                doc! { "$set": { "credit_balance": { "$max": [{ "$subtract": [{ "$ifNull": ["$credit_balance", 0.0] }, order.credits] }, 0.0] } } },
-            )
-            .with_options(
-                mongodb::options::FindOneAndUpdateOptions::builder()
-                    .return_document(mongodb::options::ReturnDocument::After)
-                    .build(),
-            )
-            .await?;
-        let balance_after = reverted_user
-            .map(|u| u.total_credits())
-            .unwrap_or(0.0);
-        let undo = CreditLedgerEntry {
-            id: new_id(),
-            user_id: user.id.clone(),
-            delta: -order.credits,
-            balance_after,
-            kind: "purchase_reverted_duplicate_claim".into(),
-            ref_id: Some(order.id.clone()),
-            note: Some("duplicate provision claim lost; credit reverted".into()),
-            created_at: bson::DateTime::from_chrono(Utc::now()),
-        };
-        ledger_coll.insert_one(&undo).await?;
-        tracing::warn!(order = %order.id, "provision claim lost; credit reverted");
+        tracing::warn!(order = %order.id, "provision claim lost to a reclaiming worker; credit is exactly-once, no reversal needed");
         return users_coll
             .find_one(doc! { "_id": &order.user_id })
             .await?
@@ -392,16 +486,14 @@ pub async fn settle_and_provision(
         credits = order.credits,
         revenue_usd = revenue,
         decart_budget_usd = decart_budget,
-        "payment settled: Paystack → Decart budget funded → user credited"
+        "payment settled: budget funded → user credited"
     );
 
-    // Secondary activation payment: mint the user's annual license access key
-    // now that the order is settled. Without this, a paying user gets credits but
-    // never a key, so `licensed()` stays false and they are stuck at the AccessGate.
-    if ProductId::parse(&order.product) == Some(ProductId::Secondary)
-        && order.kind.as_deref() == Some("activation")
-    {
-        match ensure_activation_key(db, &users_coll, order, &user).await {
+    // Secondary entitlements (activation key mint, plan upgrades, renewals).
+    // Failures never fail the settle: the provisioned early-return above
+    // re-runs this exact function on every later poll.
+    if is_secondary {
+        match apply_secondary_entitlements(db, &users_coll, order, &user).await {
             Ok(Some(ak)) => {
                 // Surface the minted key on the in-memory order so verify/status
                 // responses can return it to the client exactly once. The field
@@ -411,73 +503,17 @@ pub async fn settle_and_provision(
             }
             Ok(None) => {}
             Err(e) => {
-                // Order is provisioned and credits applied — never fail the
-                // settle over a key-mint blip; the provisioned early-return path
-                // self-heals on the next poll.
-                tracing::error!(error = %e, order = %order.id, "activation key mint failed after provisioning");
+                tracing::error!(error = %e, order = %order.id, "entitlement application failed after provisioning");
             }
         }
     }
 
-    // Secondary upgrade: promote the user (and any bound license key) to the
-    // target plan so feature tiers unlock immediately after payment settles.
-    if ProductId::parse(&order.product) == Some(ProductId::Secondary) && order.kind.as_deref() == Some("upgrade") {
-        if let Some(ref target) = order.plan {
-            users_coll
-                .update_one(
-                    doc! { "_id": &user.id },
-                    doc! { "$set": { "plan": target, "updated_at": Utc::now() } },
-                )
-                .await?;
-            db.access_keys_secondary()
-                .update_many(
-                    doc! { "user_id": &user.id, "active": true },
-                    doc! { "$set": { "plan": target } },
-                )
-                .await?;
-            info!(
-                user = %user.id,
-                order = %order.id,
-                plan = %target,
-                "upgrade order provisioned: plan promoted"
-            );
-        }
-    }
-
-    // Secondary starter pack: tag the account so the client can show the
-    // starter-specific lock/upsell states (credits exhausted → activate).
-    if ProductId::parse(&order.product) == Some(ProductId::Secondary) && order.kind.as_deref() == Some("starter_pack") {
-        users_coll
-            .update_one(
-                doc! { "_id": &user.id },
-                doc! {
-                    "$set": { "starter_pack": true, "updated_at": Utc::now() }
-                },
-            )
-            .await?;
-    }
-
-    // Secondary renewal: extend every active license key's expiry by a fresh
-    // year. Without this, a paid renewal grants credits but never extends
-    // expires_at — the user pays and stays locked out at the gate.
-    if ProductId::parse(&order.product) == Some(ProductId::Secondary)
-        && order.kind.as_deref() == Some("renew")
-    {
-        let new_expiry = bson::DateTime::from_chrono(Utc::now() + chrono::Duration::days(365));
-        let key_res = db
-            .access_keys_secondary()
-            .update_many(
-                doc! { "user_id": &user.id, "active": true },
-                doc! { "$set": { "expires_at": new_expiry } },
-            )
-            .await?;
-        info!(
-            user = %user.id,
-            order = %order.id,
-            keys_extended = key_res.modified_count,
-            "renew order provisioned: license expiry extended 365 days"
-        );
-    }
+    // Referral rewards are granted on the first SETTLED purchase only
+    // (anti-Sybil), idempotent via the unique referral ledger key.
+    crate::routes::referral::grant_referral_reward_after_purchase(
+        db, cfg, storage, &order.user_id,
+    )
+    .await;
 
     // Reload balances for response
     users_coll
@@ -486,20 +522,115 @@ pub async fn settle_and_provision(
         .ok_or_else(|| AppError::NotFound("user".into()))
 }
 
-/// Mint + bind the annual license key for a settled Secondary activation
-/// order. Idempotent (no-op when the user already has an active key). Returns
-/// the minted key so the caller can surface it on the in-memory order.
+/// Apply (or re-apply) every Secondary entitlement for a provisioned order.
+/// Idempotent: safe to call on every settle and every provisioned poll.
+async fn apply_secondary_entitlements(
+    db: &Db,
+    users_coll: &mongodb::Collection<User>,
+    order: &mut PaymentOrder,
+    user: &User,
+) -> AppResult<Option<AccessKey>> {
+    match order.kind.as_deref() {
+        Some("activation") => ensure_activation_key(db, users_coll, order, user).await,
+        Some("upgrade") => {
+            if let Some(ref target) = order.plan {
+                users_coll
+                    .update_one(
+                        doc! { "_id": &user.id },
+                        doc! { "$set": { "plan": target, "updated_at": Utc::now() } },
+                    )
+                    .await?;
+                db.access_keys_secondary()
+                    .update_many(
+                        doc! { "user_id": &user.id, "active": true },
+                        doc! { "$set": { "plan": target } },
+                    )
+                    .await?;
+                info!(
+                    user = %user.id,
+                    order = %order.id,
+                    plan = %target,
+                    "upgrade order provisioned: plan promoted"
+                );
+            }
+            Ok(None)
+        }
+        Some("starter_pack") => {
+            users_coll
+                .update_one(
+                    doc! { "_id": &user.id },
+                    doc! {
+                        "$set": { "starter_pack": true, "updated_at": Utc::now() }
+                    },
+                )
+                .await?;
+            Ok(None)
+        }
+        Some("renew") => {
+            // Anchor the term to the ORIGINAL paid transition, not the current
+            // poll time. Self-healing runs on every provisioned poll; using
+            // `now + 365 days` here would extend the license every poll and
+            // turn a one-year renewal into a perpetual subscription.
+            let new_expiry = renewal_expiry(order.paid_at, order.provisioned_at);
+            let key_res = db
+                .access_keys_secondary()
+                .update_many(
+                    doc! { "user_id": &user.id, "active": true },
+                    doc! { "$set": { "expires_at": new_expiry } },
+                )
+                .await?;
+            info!(
+                user = %user.id,
+                order = %order.id,
+                keys_extended = key_res.modified_count,
+                "renew order provisioned: license expiry extended 365 days"
+            );
+            Ok(None)
+        }
+        _ => Ok(None),
+    }
+}
+
 async fn ensure_activation_key(
     db: &Db,
     users_coll: &mongodb::Collection<User>,
     order: &PaymentOrder,
     user: &User,
 ) -> AppResult<Option<AccessKey>> {
-    let has_key = db
+    let now = bson::DateTime::from_chrono(Utc::now());
+    // Only an UNEXPIRED active key satisfies an activation purchase. An
+    // expired-but-active key must not swallow a new activation/renewal.
+    let existing = db
         .access_keys_secondary()
-        .find_one(doc! { "user_id": &user.id, "active": true })
+        .find_one(doc! {
+            "user_id": &user.id,
+            "active": true,
+            "$or": [
+                { "expires_at": { "$gt": now } },
+                { "expires_at": { "$exists": false } },
+                { "expires_at": bson::Bson::Null },
+            ],
+        })
         .await?;
-    if has_key.is_some() {
+    if let Some(key) = existing {
+        if key.plan != order.package_key {
+            // Paid plan change on an existing license: promote the key (and
+            // extend the annual term) instead of leaving the old plan in place.
+            let new_expiry = bson::DateTime::from_chrono(Utc::now() + chrono::Duration::days(365));
+            db.access_keys_secondary()
+                .update_one(
+                    doc! { "_id": &key.id },
+                    doc! { "$set": { "plan": &order.package_key, "expires_at": new_expiry } },
+                )
+                .await?;
+            users_coll
+                .update_one(
+                    doc! { "_id": &user.id },
+                    doc! { "$set": { "plan": &order.package_key, "updated_at": Utc::now() } },
+                )
+                .await?;
+            info!(user = %user.id, order = %order.id, plan = %order.package_key, "activation: existing license plan updated");
+        }
         return Ok(None);
     }
     let plan = order.package_key.clone();
@@ -510,7 +641,14 @@ async fn ensure_activation_key(
     // `/keys/validate` from the client would re-grant the same activation
     // credits a second time.
     ak.credits_granted = 0.0;
-    db.access_keys_secondary().insert_one(&ak).await?;
+    if let Err(e) = db.access_keys_secondary().insert_one(&ak).await {
+        if e.to_string().contains("E11000") {
+            // Lost a concurrent mint race (unique active-key-per-user index):
+            // the other worker's key is the user's license.
+            return Ok(None);
+        }
+        return Err(e.into());
+    }
     // Bind the key + plan on the user so subsequent boots are licensed.
     users_coll
         .update_one(
@@ -539,8 +677,12 @@ async fn ensure_activation_key(
     Ok(Some(ak))
 }
 
-/// Debit platform Decart USD budget for `seconds` of generation.
-pub async fn debit_decart_budget(db: &Db, cfg: &Config, seconds: f64) -> AppResult<()> {
+pub async fn debit_decart_budget(
+    db: &Db,
+    cfg: &Config,
+    seconds: f64,
+    charge_id: &str,
+) -> AppResult<()> {
     if seconds <= 0.0 {
         return Ok(());
     }
@@ -549,30 +691,37 @@ pub async fn debit_decart_budget(db: &Db, cfg: &Config, seconds: f64) -> AppResu
         return Ok(());
     }
     let coll = wallet_coll(db);
-    // Conditional debit FIRST: only create the wallet row on a miss (first
-    // use), so the per-tick hot path is a single update rather than a
-    // get_or_create (find + insert) plus the update.
-    let mut res = coll
-        .update_one(
-            doc! { "_id": WALLET_ID, "decart_budget_usd": { "$gte": cost } },
-            doc! {
-                "$inc": { "decart_budget_usd": -cost },
-                "$set": { "updated_at": Utc::now() }
-            },
-        )
-        .await?;
+    // Exactly-once budget burn: charge_id is recorded in the same conditional
+    // update as the balance decrement. A duplicate retry returns success
+    // without burning again; genuine exhaustion still fails closed.
+    let filter = doc! {
+        "_id": WALLET_ID,
+        "billed_charges": { "$ne": charge_id },
+        "decart_budget_usd": { "$gte": cost },
+    };
+    let update = doc! {
+        "$inc": { "decart_budget_usd": -cost },
+        "$push": { "billed_charges": { "$each": [charge_id], "$slice": -10_000 } },
+        "$set": { "updated_at": Utc::now() }
+    };
+    let mut res = coll.update_one(filter.clone(), update.clone()).await?;
     if res.matched_count == 0 {
         get_or_create_wallet(db).await?;
-        res = coll
-            .update_one(
-                doc! { "_id": WALLET_ID, "decart_budget_usd": { "$gte": cost } },
-                doc! {
-                    "$inc": { "decart_budget_usd": -cost },
-                    "$set": { "updated_at": Utc::now() }
-                },
-            )
-            .await?;
-        if res.matched_count == 0 {
+        // A duplicate charge is a successful no-op, not budget exhaustion.
+        if coll
+            .count_documents(doc! { "_id": WALLET_ID, "billed_charges": charge_id })
+            .await?
+            > 0
+        {
+            return Ok(());
+        }
+        res = coll.update_one(filter, update).await?;
+        if res.matched_count == 0
+            && coll
+                .count_documents(doc! { "_id": WALLET_ID, "billed_charges": charge_id })
+                .await?
+                == 0
+        {
             return Err(AppError::PaymentRequired(
                 "platform Decart budget exhausted — top up Decart account / wait for new purchases"
                     .into(),
@@ -633,4 +782,58 @@ pub async fn reconcile_orphaned_provisions(db: &Db, _cfg: &Config) -> AppResult<
         }
     }
     Ok(fixed)
+}
+
+/// One-year renewal expiry anchored to the paid transition. Repeated calls
+/// with the same order timestamps always return the same instant.
+fn renewal_expiry(
+    paid_at: Option<bson::DateTime>,
+    provisioned_at: Option<bson::DateTime>,
+) -> bson::DateTime {
+    let base = paid_at
+        .or(provisioned_at)
+        .map(|t| t.to_chrono())
+        .unwrap_or_else(Utc::now);
+    bson::DateTime::from_chrono(base + chrono::Duration::days(365))
+}
+
+fn upgrade_source_is_valid(source: Option<&str>, current: &str) -> bool {
+    // Legacy orders predate source_plan and remain governed by their stored
+    // price; new orders must still be on the source plan they discounted from.
+    source
+        .map(|expected| expected.eq_ignore_ascii_case(current))
+        .unwrap_or(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upgrade_source_must_match_current_plan() {
+        assert!(upgrade_source_is_valid(Some("starter"), "starter"));
+        assert!(upgrade_source_is_valid(Some("Starter"), "STARTER"));
+        assert!(!upgrade_source_is_valid(Some("starter"), "creator"));
+        assert!(upgrade_source_is_valid(None, "creator"));
+    }
+
+    #[test]
+    fn renewal_expiry_is_stable_across_self_healing_polls() {
+        let paid = chrono::DateTime::parse_from_rfc3339("2026-01-15T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let paid_bson = bson::DateTime::from_chrono(paid);
+        let expected = paid + chrono::Duration::days(365);
+        assert_eq!(
+            renewal_expiry(Some(paid_bson), None).to_chrono().timestamp(),
+            expected.timestamp()
+        );
+        assert_eq!(
+            renewal_expiry(Some(paid_bson), Some(bson::DateTime::from_chrono(Utc::now())))
+                .to_chrono()
+                .timestamp(),
+            expected.timestamp(),
+            "provisioned_at and later poll times must not extend the term"
+        );
+    }
 }

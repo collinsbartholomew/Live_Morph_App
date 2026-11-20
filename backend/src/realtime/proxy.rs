@@ -12,6 +12,90 @@ use tokio::sync::mpsc;
 use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
 use tracing::{error, info, warn};
 
+#[derive(Clone)]
+struct ByteBudget {
+    used: Arc<std::sync::atomic::AtomicUsize>,
+    cap: usize,
+}
+
+impl ByteBudget {
+    fn new(cap: usize) -> Self {
+        Self {
+            used: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            cap,
+        }
+    }
+
+    fn reserve(&self, bytes: usize) -> bool {
+        let mut current = self.used.load(std::sync::atomic::Ordering::Acquire);
+        loop {
+            let Some(next) = current.checked_add(bytes) else {
+                return false;
+            };
+            if next > self.cap {
+                return false;
+            }
+            match self.used.compare_exchange_weak(
+                current,
+                next,
+                std::sync::atomic::Ordering::AcqRel,
+                std::sync::atomic::Ordering::Acquire,
+            ) {
+                Ok(_) => return true,
+                Err(actual) => current = actual,
+            }
+        }
+    }
+
+    fn try_send_text(
+        &self,
+        tx: &mpsc::Sender<String>,
+        text: String,
+    ) -> Result<(), ()> {
+        let bytes = text.len();
+        if !self.reserve(bytes) {
+            return Err(());
+        }
+        match tx.try_send(text) {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                self.used
+                    .fetch_sub(bytes, std::sync::atomic::Ordering::SeqCst);
+                Err(())
+            }
+        }
+    }
+
+    async fn send_text(&self, tx: &mpsc::Sender<String>, text: String) -> Result<(), ()> {
+        let bytes = text.len();
+        if !self.reserve(bytes) {
+            return Err(());
+        }
+        match tx.send(text).await {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                self.used
+                    .fetch_sub(bytes, std::sync::atomic::Ordering::SeqCst);
+                Err(())
+            }
+        }
+    }
+
+    async fn recv_text(&self, rx: &mut mpsc::Receiver<String>) -> Option<String> {
+        let text = rx.recv().await?;
+        self.used
+            .fetch_sub(text.len(), std::sync::atomic::Ordering::SeqCst);
+        Some(text)
+    }
+
+    fn try_recv_text(&self, rx: &mut mpsc::Receiver<String>) -> Option<String> {
+        let text = rx.try_recv().ok()?;
+        self.used
+            .fetch_sub(text.len(), std::sync::atomic::Ordering::SeqCst);
+        Some(text)
+    }
+}
+
 /// Actix WebSocket entry — upgrades the HTTP request then runs the proxy loop.
 pub async fn realtime_ws(
     req: HttpRequest,
@@ -69,6 +153,11 @@ pub async fn realtime_ws(
     if !crate::auth::ratelimit::ws_origin_ok(&req, &cfg) {
         return Err(actix_web::error::ErrorForbidden("cross-origin websocket rejected"));
     }
+    if crate::services::streaming::streaming_disabled_by_operator() {
+        return Err(actix_web::error::ErrorServiceUnavailable(
+            "streaming is temporarily unavailable",
+        ));
+    }
 
     // HD tier selection: client passes ?tier=hd or ?tier=standard (default).
     // The BILLED tier is overridden below from the server-side session-start
@@ -112,33 +201,53 @@ pub async fn realtime_ws(
         ));
     }
 
-    // Billed tier is decided SERVER-SIDE from the user's plan entitlement, not
-    // from the client-supplied ?tier= or the client-stamped REST row (both are
-    // spoofable). HD is only billable when the user is HD-entitled; otherwise
-    // the session is always billed at the standard rate regardless of what the
-    // client claims.
-    if let Ok(Some(row)) = session_coll(&db, product)
-        .find_one(doc! { "user_id": &claims.sub, "status": "live" })
-        .with_options(
-            mongodb::options::FindOneOptions::builder()
-                .sort(doc! { "started_at": -1 })
-                .build(),
-        )
-        .await
-    {
-        if let Ok(t) = row.get_str("tier") {
-            if t == "hd" || t == "standard" {
-                tier = t.to_string();
-            }
-        }
+    // Bind the billed tier to the EXACT REST session-start intent when the
+    // client supplies session_id. Older clients get a short-window fallback;
+    // an arbitrary older "live" row can no longer change this stream's tier.
+    let intent_tier = if let Some(intent_id) = q.get("session_id") {
+        let row = session_coll(&db, product)
+            .find_one(doc! {
+                "_id": intent_id,
+                "user_id": &claims.sub,
+                "status": "live",
+            })
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "session intent lookup failed");
+                actix_web::error::ErrorInternalServerError("database error")
+            })?
+            .ok_or_else(|| actix_web::error::ErrorBadRequest("unknown session intent"))?;
+        row.get_str("tier").ok().map(str::to_string)
+    } else {
+        let recent = Utc::now() - chrono::Duration::seconds(60);
+        session_coll(&db, product)
+            .find_one(doc! {
+                "user_id": &claims.sub,
+                "status": "live",
+                "started_at": { "$gte": recent },
+            })
+            .with_options(
+                mongodb::options::FindOneOptions::builder()
+                    .sort(doc! { "started_at": -1 })
+                    .build(),
+            )
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "recent session intent lookup failed");
+                actix_web::error::ErrorInternalServerError("database error")
+            })?
+            .and_then(|row| row.get_str("tier").ok().map(str::to_string))
+    };
+    let requested_tier = intent_tier.unwrap_or(tier);
+    // HD is a request that requires entitlement. An HD-entitled user choosing
+    // standard pays the standard rate; a non-entitled user requesting HD is
+    // rejected instead of silently receiving HD service or an HD surcharge.
+    if requested_tier == "hd" && !user.hd_entitled() {
+        return Err(actix_web::error::ErrorForbidden(
+            "HD tier requires an eligible paid plan",
+        ));
     }
-    // Server-authoritative HD billing: an HD-entitled user is ALWAYS billed at
-    // the HD rate (they cannot self-downgrade to standard to underpay), and any
-    // client HD request is billed HD too (you pay for what you ask for). A
-    // non-entitled client claiming standard is billed standard.
-    let client_hd = tier == "hd" || q.get("tier").map(|t| t == "hd").unwrap_or(false);
-    let billed_hd = user.hd_entitled() || client_hd;
-    tier = if billed_hd { "hd".into() } else { "standard".into() };
+    tier = if requested_tier == "hd" { "hd".into() } else { "standard".into() };
     let tier_multiplier = if tier == "hd" {
         cfg.hd_credit_multiplier
     } else {
@@ -266,6 +375,49 @@ pub async fn realtime_ws(
                         tokio::time::sleep(std::time::Duration::from_millis(50u64 << attempt)).await;
                     }
                 }
+                if claimed.matched_count == 0 {
+                    // A rollback that ended the previous row but failed to
+                    // release its counter must not lock the user out forever.
+                    // Re-prove there is no slot-owning row after the grace
+                    // window, then reset only this user's stale counter and
+                    // retry the atomic claim once. The per-instance healer
+                    // corrects any delayed release race within one cycle.
+                    let remaining = session_coll(&db, product)
+                        .count_documents(doc! {
+                            "user_id": &claims.sub,
+                            "_id": { "$ne": &session_id },
+                            "status": { "$in": ["connecting", "generating"] },
+                        })
+                        .await
+                        .map_err(|e| {
+                            tracing::warn!(error = %e, "WS stale counter recheck failed");
+                            actix_web::error::ErrorInternalServerError("internal error")
+                        })?;
+                    if remaining == 0 {
+                        let _ = users
+                            .update_one(
+                                doc! { "_id": &claims.sub },
+                                doc! { "$set": { "active_sessions": 0 } },
+                            )
+                            .await;
+                        claimed = users
+                            .update_one(
+                                doc! {
+                                    "_id": &claims.sub,
+                                    "$expr": { "$lt": [
+                                        { "$ifNull": ["$active_sessions", 0] },
+                                        cfg.max_concurrent_sessions as i64,
+                                    ] },
+                                },
+                                doc! { "$inc": { "active_sessions": 1 } },
+                            )
+                            .await
+                            .map_err(|e| {
+                                tracing::warn!(error = %e, "WS stale counter claim failed");
+                                actix_web::error::ErrorInternalServerError("internal error")
+                            })?;
+                    }
+                }
             }
         }
         if claimed.matched_count == 0 {
@@ -303,7 +455,7 @@ pub async fn realtime_ws(
     // Raise the per-frame cap to MAX_BODY_BYTES (actix-ws defaults to 64 KiB,
     // which would kill the session on a large set_image) and aggregate
     // continuation frames so fragmented messages are reassembled.
-    let max_frame = cfg.max_body_bytes as usize;
+    let max_frame = cfg.max_body_bytes;
     let mut msg_stream = msg_stream
         .max_frame_size(max_frame)
         .aggregate_continuations()
@@ -318,7 +470,16 @@ pub async fn realtime_ws(
     let session_for_registry = session.clone();
     let tasks_for_task = tasks.clone();
     if let Some(tasks) = &tasks {
-        tasks.register(session_id.clone(), session_for_registry);
+        if !tasks.register(session_id.clone(), session_for_registry) {
+            mark_session_ended(&db, &claims.sub, &session_id, "server_capacity", product).await;
+            let _ = session
+                .close(Some(actix_ws::CloseReason {
+                    code: actix_ws::CloseCode::Policy,
+                    description: Some("server session capacity reached".into()),
+                }))
+                .await;
+            return Ok(res);
+        }
     }
 
     let _handle = actix_web::rt::spawn(async move {
@@ -377,10 +538,18 @@ pub struct ProxyTasks {
 }
 
 impl ProxyTasks {
-    pub fn register(&self, session_id: String, session: actix_ws::Session) {
+    pub fn register(&self, session_id: String, session: actix_ws::Session) -> bool {
+        const MAX_PROXY_SESSIONS: usize = 1024;
         if let Ok(mut s) = self.sessions.lock() {
+            // Hard resource bound: a reconnect loop cannot grow the registry
+            // without limit. The caller closes the rejected socket and row.
+            if s.len() >= MAX_PROXY_SESSIONS {
+                return false;
+            }
             s.push((session_id, session));
+            return true;
         }
+        false
     }
     /// Close and drop the live proxy WS for one session id (used by REST
     /// /streaming/end so ending a WS-owned row also stops the stream).
@@ -482,27 +651,40 @@ async fn run_proxy(
         error!(session = %session_id, "decart upstream connect timed out after 15s");
         std::io::Error::new(std::io::ErrorKind::TimedOut, "upstream connect timed out")
     })?
-    .map_err(|e| {
+    .inspect_err(|e| {
         // Log only the error KIND plus the query-stripped URL — never the raw
         // Display, which can contain the api_key query parameter.
-        let kind = match &e {
+        let kind = match e {
             tokio_tungstenite::tungstenite::Error::Io(ioe) => format!("io:{:?}", ioe.kind()),
             other => format!("{:?}", std::mem::discriminant(other)),
         };
         error!(session = %session_id, url = %upstream_log, error_kind = %kind, "decart upstream connect failed");
-        e
     })?;
     info!(session = %session_id, "run_proxy: decart upstream connected");
     let (mut up_write, mut up_read) = upstream.split();
 
+    // Message count alone is not a memory bound: each queue is also capped at
+    // 4 request bodies, so stalled peers cannot accumulate unbounded strings.
+    let budget_up = ByteBudget::new(cfg.max_body_bytes.saturating_mul(4));
+    let budget_client = ByteBudget::new(cfg.max_body_bytes.saturating_mul(4));
     let (tx_up, mut rx_up) = mpsc::channel::<String>(256);
     let (tx_client, mut rx_client) = mpsc::channel::<String>(256);
 
     // Writer tasks
+    let budget_up_writer = budget_up.clone();
     let mut up_writer = {
         tokio::spawn(async move {
-            while let Some(text) = rx_up.recv().await {
-                if up_write.send(WsMessage::Text(text.into())).await.is_err() {
+            while let Some(text) = budget_up_writer.recv_text(&mut rx_up).await {
+                // A stalled upstream must not park this task forever with the
+                // session slot held. Bound each write; select!/abort below
+                // guarantees cancellation when any other branch ends.
+                if tokio::time::timeout(
+                    std::time::Duration::from_secs(10),
+                    up_write.send(WsMessage::Text(text.into())),
+                )
+                .await
+                .is_err()
+                {
                     break;
                 }
             }
@@ -529,7 +711,7 @@ async fn run_proxy(
                     // tell the client why, then end — don't silently kill a
                     // healthy billing session.
                     warn!(error = %e, "client WS frame error — ending session");
-                    let _ = tx_client.try_send(json!({ "type": "error", "error": "frame_too_large" }).to_string());
+                    let _ = budget_client.try_send_text(&tx_client,json!({ "type": "error", "error": "frame_too_large" }).to_string());
                     break;
                 }
                 None => break,
@@ -549,7 +731,7 @@ async fn run_proxy(
                     // anything past the API body limit is rejected, not forwarded.
                     if t.len() > cfg.max_body_bytes {
                         warn!(len = t.len(), "oversized client frame rejected");
-                        let _ = tx_client.try_send(json!({ "type": "error", "error": "frame_too_large" }).to_string());
+                        let _ = budget_client.try_send_text(&tx_client,json!({ "type": "error", "error": "frame_too_large" }).to_string());
                         // Drop the frame but KEEP the session: one oversized
                         // image must not end an otherwise healthy stream.
                         continue;
@@ -562,7 +744,7 @@ async fn run_proxy(
                                 // to match the REST 4000-char cap on characters).
                                 if let Some(p) = v.get("prompt").and_then(|x| x.as_str()) {
                                     if p.chars().count() > 4000 {
-                                        let _ = tx_client.try_send(json!({ "type": "error", "error": "prompt_too_long" }).to_string());
+                                        let _ = budget_client.try_send_text(&tx_client,json!({ "type": "error", "error": "prompt_too_long" }).to_string());
                                         continue;
                                     }
                                 }
@@ -571,31 +753,35 @@ async fn run_proxy(
                                 // and if still full, fail the session loudly.
                                 if tokio::time::timeout(
                                     std::time::Duration::from_secs(5),
-                                    tx_up_c.send(t.to_string()),
+                                    budget_up.send_text(&tx_up_c, t.to_string()),
                                 ).await.is_err() {
                                     warn!("upstream channel full — dropping signaling frame");
-                                    let _ = tx_client.try_send(json!({ "type": "error", "error": "upstream_backpressure" }).to_string());
+                                    let _ = budget_client.try_send_text(&tx_client,json!({ "type": "error", "error": "upstream_backpressure" }).to_string());
                                 }
                             }
                             "offer" | "ice-candidate" => {
                                 if tokio::time::timeout(
                                     std::time::Duration::from_secs(5),
-                                    tx_up_c.send(t.to_string()),
+                                    budget_up.send_text(&tx_up_c, t.to_string()),
                                 ).await.is_err() {
                                     warn!("upstream channel full — offer/ICE dropped");
-                                    let _ = tx_client.try_send(json!({ "type": "error", "error": "upstream_backpressure" }).to_string());
+                                    let _ = budget_client.try_send_text(&tx_client,json!({ "type": "error", "error": "upstream_backpressure" }).to_string());
                                 }
                             }
                             "ping" => {
-                                let _ = tx_client.try_send(json!({ "type": "pong" }).to_string());
+                                let _ = budget_client.try_send_text(&tx_client,json!({ "type": "pong" }).to_string());
                             }
                             other => {
                                 // Allowlist only the known signaling/prompt types —
                                 // never relay unknown client JSON upstream.
                                 warn!(%other, "unknown client message type — rejected");
-                                let _ = tx_client.try_send(json!({ "type": "error", "error": "unknown_message_type" }).to_string());
+                                let _ = budget_client.try_send_text(&tx_client,json!({ "type": "error", "error": "unknown_message_type" }).to_string());
                             }
                         }
+                    } else {
+                        // Non-JSON input is rejected explicitly instead of
+                        // disappearing silently into the signaling channel.
+                        let _ = budget_client.try_send_text(&tx_client,json!({ "type": "error", "error": "invalid_json" }).to_string());
                     }
                 }
                 actix_ws::AggregatedMessage::Close(_) => break,
@@ -612,17 +798,17 @@ async fn run_proxy(
 
     // Upstream → client + billing
     let mut last_billed_seconds: f64 = 0.0;
+    // Billing identity starts as this WS row, then becomes Decart's stable
+    // session id once known, so reconnects with a new WS row cannot re-bill.
+    let mut billing_epoch = session_id.to_string();
     let cps = cfg.credits_per_second;
     let effective_cps = cps * tier_multiplier;
     let db_bill = db.clone();
     let cfg_bill = cfg.clone();
     let uid = user_id.to_string();
     let sid = session_id.to_string();
-    // The per-tick session-row write (generation_seconds/credits_charged) is
-    // reporting-only — the authoritative debit is charge_user's atomic user
-    // update. Throttle it to <= 1 write per 5 s to cut Mongo write load; the
-    // generation_ended final write below stays unconditional.
-    let mut last_bill_write = std::time::Instant::now();
+    // The per-tick row write is both reporting and the reconnect-safe billing
+    // watermark. It is written only after a successful debit, never before.
 
     let upstream_to_client = async {
         while let Some(Ok(msg)) = up_read.next().await {
@@ -634,6 +820,32 @@ async fn run_proxy(
                         match typ {
                             "session_id" => {
                                 if let Some(dsid) = v.get("session_id").and_then(|x| x.as_str()) {
+                                    billing_epoch = dsid.to_string();
+                                    // Resume the watermark from the previous WS row for
+                                    // THIS Decart session (not a different/new upstream
+                                    // session). Duplicate ticks after reconnect become 0.
+                                    if let Ok(Some(previous)) = session_coll(&db_bill, product)
+                                        .find_one(doc! {
+                                            "decart_session_id": dsid,
+                                            "_id": { "$ne": &sid },
+                                        })
+                                        .with_options(
+                                            mongodb::options::FindOneOptions::builder()
+                                                .sort(doc! { "started_at": -1 })
+                                                .build(),
+                                        )
+                                        .await
+                                    {
+                                        let previous_secs = previous
+                                            .get_f64("billed_watermark")
+                                            .ok()
+                                            .or_else(|| previous.get_f64("generation_seconds").ok());
+                                        if let Some(previous_secs) = previous_secs {
+                                            if previous_secs.is_finite() {
+                                                last_billed_seconds = last_billed_seconds.max(previous_secs);
+                                            }
+                                        }
+                                    }
                                     let _ = session_coll(&db_bill, product)
                                         .update_one(
                                             doc! { "_id": &sid },
@@ -666,13 +878,16 @@ async fn run_proxy(
                                 let delta_secs = (secs - last_billed_seconds).max(0.0);
                                 if delta_secs > 0.0 {
                                     let charge = delta_secs * effective_cps;
+                                    let mut charged = false;
                                     match charge_user(
                                         &db_bill, &cfg_bill, &uid, charge, delta_secs, &sid,
+                                        &format!("{billing_epoch}:tick:{secs}"),
                                         product,
                                     )
                                     .await
                                     {
                                         Ok(()) => {
+                                            charged = true;
                                             // Charge succeeded — now commit the watermark.
                                             if secs > last_billed_seconds {
                                                 last_billed_seconds = secs;
@@ -697,7 +912,7 @@ async fn run_proxy(
                                                 warn!(error = %e, "billing failed — forcing disconnect");
                                                 let _ = tokio::time::timeout(
                                                     std::time::Duration::from_secs(2),
-                                                    tx_client.send(json!({
+                                                    budget_client.send_text(&tx_client, json!({
                                                         "type": "error",
                                                         "error": code,
                                                         "code": code
@@ -709,20 +924,20 @@ async fn run_proxy(
                                             }
                                         }
                                     }
-                                    let _ = if last_bill_write.elapsed() >= std::time::Duration::from_secs(5) {
-                                        last_bill_write = std::time::Instant::now();
-                                        session_coll(&db_bill, product)
+                                    if charged {
+                                        let _ = session_coll(&db_bill, product)
                                             .update_one(
                                                 doc! { "_id": &sid },
-                                                doc! { "$set": {
-                                                    "generation_seconds": secs,
+                                                doc! {
+                                                    "$set": {
+                                                        "generation_seconds": secs,
+                                                        "billed_watermark": last_billed_seconds,
+                                                    },
+                                                    "$inc": { "credits_charged": charge },
                                                 },
-                                                "$inc": { "credits_charged": charge }},
                                             )
-                                            .await
-                                    } else {
-                                        Ok(mongodb::results::UpdateResult::default())
-                                    };
+                                            .await;
+                                    }
                                 }
                             }
                             "generation_ended" => {
@@ -733,10 +948,12 @@ async fn run_proxy(
                                 // Final charge for any remainder — surface failures so the
                                 // tail usage is never silently granted.
                                 let delta_secs = (secs - last_billed_seconds).max(0.0);
+                                let mut final_charge = 0.0;
                                 if delta_secs > 0.0 {
                                     let charge = delta_secs * effective_cps;
                                     if let Err(e) = charge_user(
                                         &db_bill, &cfg_bill, &uid, charge, delta_secs, &sid,
+                                        &format!("{billing_epoch}:final:{secs}"),
                                         product,
                                     )
                                     .await
@@ -750,10 +967,13 @@ async fn run_proxy(
                                                 doc! { "$set": { "billing_tail_error": true } },
                                             )
                                             .await;
-                                    } else if secs > last_billed_seconds {
-                                        // Advance the terminal watermark only after the
-                                        // charge succeeded, so a late tick never re-bills.
-                                        last_billed_seconds = secs;
+                                    } else {
+                                        final_charge = charge;
+                                        if secs > last_billed_seconds {
+                                            // Advance the terminal watermark only after the
+                                            // charge succeeded, so a late tick never re-bills.
+                                            last_billed_seconds = secs;
+                                        }
                                     }
                                 }
                                 // Record billing tail only — do NOT flip status
@@ -764,9 +984,13 @@ async fn run_proxy(
                                 let _ = session_coll(&db_bill, product)
                                     .update_one(
                                         doc! { "_id": &sid },
-                                        doc! { "$set": {
-                                            "generation_seconds": secs,
-                                        }},
+                                        doc! {
+                                            "$set": {
+                                                "generation_seconds": secs,
+                                                "billed_watermark": last_billed_seconds,
+                                            },
+                                            "$inc": { "credits_charged": final_charge },
+                                        },
                                     )
                                     .await;
                             }
@@ -778,7 +1002,7 @@ async fn run_proxy(
                     // billing session. Only give up if the client is truly stuck.
                     if tokio::time::timeout(
                         std::time::Duration::from_secs(10),
-                        tx_client.send(text_str),
+                        budget_client.send_text(&tx_client, text_str),
                     ).await.is_err() {
                         warn!("client channel full for 10s — ending session");
                         break;
@@ -792,7 +1016,7 @@ async fn run_proxy(
 
     // Client writer from channel
     let client_writer = async {
-        while let Some(text) = rx_client.recv().await {
+        while let Some(text) = budget_client.recv_text(&mut rx_client).await {
             if client.text(text).await.is_err() {
                 break;
             }
@@ -807,12 +1031,16 @@ async fn run_proxy(
         _ = &mut up_writer => "up_writer",
     };
     info!(session = %session_id, "run_proxy: select! returned, branch={}", select_result);
+    // No writer is allowed to outlive the proxy loop: abort even if the
+    // upstream socket is blocked in send(), then drain the client error tail.
+    up_writer.abort();
+    let _ = up_writer.await;
 
     // Drain queued client-bound messages (e.g. a terminal billing error queued
     // right before teardown) so the client sees why the session ended instead
     // of a bare close. The uncompleted select! branches were dropped above,
     // releasing their borrows on rx_client / client.
-    while let Ok(text) = rx_client.try_recv() {
+    while let Some(text) = budget_client.try_recv_text(&mut rx_client) {
         if client.text(text).await.is_err() {
             break;
         }
@@ -827,6 +1055,7 @@ async fn run_proxy(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn charge_user(
     db: &Db,
     cfg: &Config,
@@ -834,103 +1063,101 @@ async fn charge_user(
     amount: f64,
     delta_secs: f64,
     session_id: &str,
+    charge_id: &str,
     product: crate::product::ProductId,
 ) -> anyhow::Result<()> {
     if amount <= 0.0 {
         return Ok(());
     }
-
-    // 1) Debit user first (atomic). Only then burn platform Decart budget —
-    // avoids orphan budget if the user cannot pay.
-    let filter = doc! {
-        "_id": user_id,
-        "$expr": {
-            "$gte": [
-                { "$add": [
-                    { "$ifNull": ["$credit_balance", 0] },
-                    { "$ifNull": ["$bonus_balance", 0] }
-                ]},
-                amount
-            ]
-        }
+    let users_coll = match product {
+        crate::product::ProductId::Secondary => db.users_secondary(),
+        crate::product::ProductId::LiveMorph => db.users(),
     };
+    let already_billed = users_coll
+        .count_documents(doc! { "_id": user_id, "billed_charges": charge_id })
+        .await?
+        > 0;
+    let already_refunded = users_coll
+        .count_documents(doc! { "_id": user_id, "refunded_charges": charge_id })
+        .await?
+        > 0;
+    if already_refunded {
+        // A previous budget failure was already compensated. Never burn budget
+        // or debit this deterministic charge again.
+        anyhow::bail!("platform_budget_exhausted: charge was already refunded");
+    }
 
-    // Atomic debit via aggregation pipeline: bonus-first then credit, each
-    // clamped at zero. The `$expr` filter bounds the *total*; this eliminates
-    // the read-then-split TOCTOU that could drive a field negative concurrently.
-    // ReturnDocument::After gives us the TRUE post-debit balance for the ledger
-    // (the old code computed balance_after from a pre-debit read → wrong under
-    // concurrent ticks).
-    let pipeline = vec![
-        doc! {
+    if !already_billed {
+        // Exactly-once debit: the charge id and balance guard are committed in
+        // the SAME atomic update. A duplicate tick, reconnect, or process crash
+        // can never debit this charge twice.
+        let filter = doc! {
+            "_id": user_id,
+            "billed_charges": { "$ne": charge_id },
+            "$expr": {
+                "$gte": [
+                    { "$add": [
+                        { "$ifNull": ["$credit_balance", 0] },
+                        { "$ifNull": ["$bonus_balance", 0] }
+                    ]},
+                    amount
+                ]
+            }
+        };
+        let pipeline = vec![doc! {
             "$set": {
                 "bonus_balance": {
-                    "$max": [
-                        { "$subtract": ["$bonus_balance", amount] },
-                        0.0,
-                    ]
+                    "$max": [{ "$subtract": ["$bonus_balance", amount] }, 0.0]
                 },
                 "credit_balance": {
-                    "$max": [
-                        {
-                            "$subtract": [
-                                "$credit_balance",
-                                {
-                                    "$subtract": [
-                                        amount,
-                                        { "$min": ["$bonus_balance", amount] },
-                                    ]
-                                },
-                            ]
-                        },
-                        0.0,
-                    ]
+                    "$max": [{
+                        "$subtract": [
+                            "$credit_balance",
+                            { "$subtract": [amount, { "$min": ["$bonus_balance", amount] }] }
+                        ]
+                    }, 0.0]
                 },
+                "billed_charges": { "$slice": [
+                    { "$concatArrays": [{ "$ifNull": ["$billed_charges", []] }, [charge_id]] },
+                    -10_000
+                ] },
                 "updated_at": chrono::Utc::now(),
             }
-        }
-    ];
-
-    let opts = mongodb::options::FindOneAndUpdateOptions::builder()
-        .return_document(mongodb::options::ReturnDocument::After)
-        .build();
-    let updated = match product {
-        crate::product::ProductId::Secondary => {
-            db.users_secondary()
-                .find_one_and_update(filter.clone(), pipeline.clone())
-                .with_options(opts.clone())
+        }];
+        let updated = users_coll
+            .find_one_and_update(filter, pipeline)
+            .with_options(
+                mongodb::options::FindOneAndUpdateOptions::builder()
+                    .return_document(mongodb::options::ReturnDocument::After)
+                    .build(),
+            )
+            .await?;
+        if updated.is_none()
+            && users_coll
+                .count_documents(doc! { "_id": user_id, "billed_charges": charge_id })
                 .await?
+                == 0
+        {
+            anyhow::bail!("insufficient_credits");
         }
-        crate::product::ProductId::LiveMorph => {
-            db.users()
-                .find_one_and_update(filter, pipeline)
-                .with_options(opts)
-                .await?
-        }
-    };
-    let Some(updated) = updated else {
-        anyhow::bail!("insufficient_credits");
-    };
+    }
 
-    // 2) Platform pays Decart on the shared API key
-    if let Err(e) = crate::services::billing::debit_decart_budget(db, cfg, delta_secs).await {
-        // Refund the exact amount back to the credit balance. The debit was
-        // bonus-first, but both balances are interchangeable spendable credits,
-        // so a single credit-balance refund preserves the user's total.
-        // Bounded retry: a swallowed failure here leaves the user debited with
-        // no audit trail, so never give up silently.
-        let refund = doc! {
-            "$inc": { "credit_balance": amount },
-            "$set": { "updated_at": chrono::Utc::now() },
-        };
-        let users_coll = match product {
-            crate::product::ProductId::Secondary => db.users_secondary(),
-            crate::product::ProductId::LiveMorph => db.users(),
-        };
+    // The platform budget uses the SAME deterministic charge id, so a crash
+    // after the user debit but before/after the wallet burn is replay-safe.
+    if let Err(e) = crate::services::billing::debit_decart_budget(db, cfg, delta_secs, charge_id).await {
+        // Compensate the user exactly once. A retry after this refund returns
+        // the already_refunded branch above, never another credit/debit cycle.
         let mut refunded = false;
         for attempt in 0..3 {
             match users_coll
-                .update_one(doc! { "_id": user_id }, refund.clone())
+                .find_one_and_update(
+                    doc! { "_id": user_id, "refunded_charges": { "$ne": charge_id } },
+                    doc! {
+                        "$inc": { "credit_balance": amount },
+                        "$push": { "refunded_charges": { "$each": [charge_id], "$slice": -10_000 } },
+                        "$set": { "updated_at": chrono::Utc::now() },
+                    },
+                )
                 .await
             {
                 Ok(_) => {
@@ -950,40 +1177,35 @@ async fn charge_user(
                 "billing refund FAILED after retries — user debited without budget burn; reconcile manually"
             );
         }
-        // Stable machine-readable prefix so callers classify by prefix, not
-        // by fragile substring matching on the human message.
         anyhow::bail!("platform_budget_exhausted: {e}");
     }
 
-    let balance_after = updated.total_credits();
+    let balance_after = users_coll
+        .find_one(doc! { "_id": user_id })
+        .await?
+        .map(|u| u.total_credits())
+        .unwrap_or(0.0);
     let entry_id = crate::db::new_id();
     let entry = CreditLedgerEntry {
-        id: entry_id.clone(),
+        id: entry_id,
         user_id: user_id.to_string(),
         delta: -amount,
         balance_after,
         kind: "usage".into(),
-        // Unique per charge: the ledger's unique (ref_id, kind) partial index
-        // exists for purchase idempotency — reusing the bare session id here
-        // would make every usage row after the first per session violate it
-        // (E11000) and silently drop the audit row.
-        ref_id: Some(format!("{session_id}:{entry_id}")),
+        // Deterministic id: the unique (ref_id, kind) index deduplicates audit
+        // rows, while billed_charges above is authoritative for the debit.
+        ref_id: Some(format!("{session_id}:{charge_id}")),
         note: Some("decart generation_tick".into()),
         created_at: bson::DateTime::from_chrono(chrono::Utc::now()),
     };
-    // The debit already happened — a ledger-insert failure must NOT propagate
-    // (it would report "insufficient_credits"/force-disconnect for a user who
-    // was actually debited). Log it; the row is cosmetic vs. the balance.
     let ledger_res = match product {
-        crate::product::ProductId::Secondary => {
-            db.ledger_secondary().insert_one(&entry).await
-        }
-        crate::product::ProductId::LiveMorph => {
-            db.ledger().insert_one(&entry).await
-        }
+        crate::product::ProductId::Secondary => db.ledger_secondary().insert_one(&entry).await,
+        crate::product::ProductId::LiveMorph => db.ledger().insert_one(&entry).await,
     };
     if let Err(e) = ledger_res {
-        tracing::error!(error = %e, session = %session_id, "ledger insert failed after debit");
+        if !e.to_string().contains("E11000") {
+            tracing::error!(error = %e, session = %session_id, "ledger insert failed after debit");
+        }
     }
     Ok(())
 }
@@ -995,12 +1217,12 @@ async fn mark_session_ended(
     reason: &str,
     product: crate::product::ProductId,
 ) {
-    // Transition to ended exactly once: only the caller that actually flips a
-    // non-ended row releases the slot, so the reaper and this path can never
-    // double-release.
+    // Transition to ended exactly once, and ONLY from a slot-owning live
+    // state. `$ne: ended` allowed a reaper-ended row to be resurrected and
+    // released a second time; a terminal row must stay terminal.
     let ended = session_coll(db, product)
         .find_one_and_update(
-            doc! { "_id": session_id, "status": { "$ne": "ended" } },
+            doc! { "_id": session_id, "status": { "$in": ["connecting", "generating"] } },
             doc! { "$set": {
                 "status": "ended",
                 "ended_at": chrono::Utc::now(),
@@ -1045,5 +1267,29 @@ async fn mark_session_ended(
                 tokio::time::sleep(std::time::Duration::from_millis(100u64 << attempt)).await;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn byte_budget_rejects_overfill_and_recovers_after_receive() {
+        let (tx, mut rx) = mpsc::channel::<String>(8);
+        let budget = ByteBudget::new(10);
+        assert!(budget.try_send_text(&tx, "12345".into()).is_ok());
+        assert!(budget.try_send_text(&tx, "67890".into()).is_ok());
+        assert!(budget.try_send_text(&tx, "x".into()).is_err());
+        assert_eq!(budget.recv_text(&mut rx).await.unwrap(), "12345");
+        assert_eq!(budget.recv_text(&mut rx).await.unwrap(), "67890");
+        assert!(budget.try_send_text(&tx, "ok".into()).is_ok());
+    }
+
+    #[test]
+    fn byte_budget_never_accepts_an_oversized_single_frame() {
+        let (tx, _rx) = mpsc::channel::<String>(8);
+        let budget = ByteBudget::new(4);
+        assert!(budget.try_send_text(&tx, "12345".into()).is_err());
     }
 }

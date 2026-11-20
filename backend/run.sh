@@ -9,10 +9,16 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 PROFILE="${1:-debug}"
+if [ "$#" -gt 0 ]; then
+    shift
+fi
 if [ "$PROFILE" = "release" ]; then
     BIN="target/release/livemorph-backend"
-else
+elif [ "$PROFILE" = "debug" ]; then
     BIN="target/debug/livemorph-backend"
+else
+    echo "profile must be 'debug' or 'release', got: $PROFILE" >&2
+    exit 2
 fi
 
 if [ ! -x "$BIN" ]; then
@@ -25,4 +31,4 @@ if [ ! -x "$BIN" ]; then
 fi
 
 echo "starting $BIN (Ctrl-C to stop, logs stream below)" >&2
-exec "$BIN"
+exec "$BIN" "$@"

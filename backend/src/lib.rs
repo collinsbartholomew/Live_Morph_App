@@ -13,6 +13,7 @@ pub mod models;
 pub mod product;
 pub mod realtime;
 pub mod routes;
+pub mod runtime_env;
 pub mod services;
 
 use std::sync::LazyLock;

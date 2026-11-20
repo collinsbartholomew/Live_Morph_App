@@ -161,7 +161,7 @@ pub fn is_terminal_failure(status: &str) -> bool {
 pub fn is_in_flight(status: &str) -> bool {
     matches!(
         status.to_ascii_lowercase().as_str(),
-        "waiting" | "confirming" | "sending" | "partially_paid"
+        "waiting" | "confirming" | "confirmed" | "sending" | "partially_paid"
     )
 }
 

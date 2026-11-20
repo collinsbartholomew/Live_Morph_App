@@ -298,7 +298,7 @@ ApplicationWindow {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: qsTr("LiveMorph Live Preview — %1×%2").arg(root.width).arg(root.height)
+                    text: qsTr("LiveMorph Preview / %1×%2").arg(root.width).arg(root.height)
                     color: Colors.textMuted
                     font: Theme.fontMicro
                     anchors.verticalCenter: parent.verticalCenter
@@ -312,7 +312,7 @@ ApplicationWindow {
                 spacing: Theme.spacingMd
 
                 Text {
-                    text: qsTr("A product of TheTools Hub")
+                    text: Constants.organization
                     color: Colors.textMuted
                     font: Theme.fontMicro
                     anchors.verticalCenter: parent.verticalCenter

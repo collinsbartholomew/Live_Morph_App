@@ -1,6 +1,31 @@
 cmake_minimum_required(VERSION 3.22)
 project(LiveMorph VERSION 1.8.0 LANGUAGES CXX)
 
+set(LIVEMORPH_ENV_FILE "${CMAKE_CURRENT_SOURCE_DIR}/.env" CACHE FILEPATH "Frontend build environment file")
+if(NOT EXISTS "${LIVEMORPH_ENV_FILE}")
+    message(FATAL_ERROR "Missing frontend env file: ${LIVEMORPH_ENV_FILE}. Copy .env.example to .env and set LIVEMORPH_API_URL before compiling.")
+endif()
+file(STRINGS "${LIVEMORPH_ENV_FILE}" LIVEMORPH_API_URL_LINES REGEX "^[ \t]*(export[ \t]+)?LIVEMORPH_API_URL[ \t]*=")
+list(LENGTH LIVEMORPH_API_URL_LINES LIVEMORPH_API_URL_LINE_COUNT)
+if(NOT LIVEMORPH_API_URL_LINE_COUNT EQUAL 1)
+    message(FATAL_ERROR "${LIVEMORPH_ENV_FILE} must define LIVEMORPH_API_URL exactly once")
+endif()
+string(REGEX REPLACE "^[^=]*=" "" LIVEMORPH_API_BASE_URL "${LIVEMORPH_API_URL_LINES}")
+string(REGEX REPLACE "[ \t]+#.*$" "" LIVEMORPH_API_BASE_URL "${LIVEMORPH_API_BASE_URL}")
+string(STRIP "${LIVEMORPH_API_BASE_URL}" LIVEMORPH_API_BASE_URL)
+string(REGEX REPLACE "^[\"']" "" LIVEMORPH_API_BASE_URL "${LIVEMORPH_API_BASE_URL}")
+string(REGEX REPLACE "[\"']$" "" LIVEMORPH_API_BASE_URL "${LIVEMORPH_API_BASE_URL}")
+if(LIVEMORPH_API_BASE_URL STREQUAL ""
+    OR NOT LIVEMORPH_API_BASE_URL MATCHES "^https?://[^?#]+$"
+    OR LIVEMORPH_API_BASE_URL MATCHES "[/ ]$"
+    OR LIVEMORPH_API_BASE_URL MATCHES "[\"'\\\\]")
+    message(FATAL_ERROR "LIVEMORPH_API_URL in ${LIVEMORPH_ENV_FILE} must be an absolute HTTP(S) API origin with no trailing slash, query, fragment, or credentials")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${LIVEMORPH_ENV_FILE}")
+message(STATUS "LiveMorph API env file: ${LIVEMORPH_ENV_FILE}")
+message(STATUS "LiveMorph API base URL: ${LIVEMORPH_API_BASE_URL}")
+add_compile_definitions(LIVEMORPH_API_BASE_URL="${LIVEMORPH_API_BASE_URL}")
+
 if(POLICY QTP0004)
     cmake_policy(SET QTP0004 NEW)
 endif()
@@ -91,7 +116,7 @@ qt_add_executable(LiveMorph
     ${HEADERS}
 )
 
-# Custom Info.plist so the livemorph:// URL scheme (OAuth/payment callbacks)
+# Custom Info.plist so the omegarevelation:// URL scheme (OAuth/payment callbacks)
 # is registered in the macOS bundle.
 if(APPLE)
     set_target_properties(LiveMorph PROPERTIES
@@ -117,6 +142,10 @@ set_source_files_properties(
     qml/constants/Constants.qml
     qml/PlatformSettings.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
+)
+set_source_files_properties(
+    qml/components/StyledScrollBar.qml
+    PROPERTIES QT_QML_SKIP_CACHEGEN TRUE
 )
 
 # Source QML dir path baked in for --dev hot-reload mode (loads QML from disk
@@ -165,6 +194,7 @@ qt_add_qml_module(LiveMorph
         qml/components/Honeycomb.qml
         qml/components/Hexagon.qml
         qml/components/HexBadge.qml
+        qml/components/HexSculpture.qml
         qml/components/BrandMark.qml
         qml/components/EmptyState.qml
         qml/components/SectionHeader.qml
@@ -241,6 +271,34 @@ if(BUILD_TESTING)
     target_include_directories(LiveMorph_smoke_test PRIVATE src ../common/i18n)
     add_test(NAME lm_smoke COMMAND LiveMorph_smoke_test)
     set_tests_properties(lm_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(LiveMorph_frontend_integration_test
+        tests/frontend_integration.cpp
+        src/core/AppController.cpp
+        src/core/AuthManager.cpp
+        src/core/CameraManager.cpp
+        src/core/ConfigManager.cpp
+        src/core/DeviceIdentity.cpp
+        src/core/SecureStore.cpp
+        src/core/SessionManager.cpp
+        src/core/RecordingManager.cpp
+        src/core/MorphRecorder.cpp
+        src/core/VirtualCameraHelper.cpp
+        src/models/CharacterCatalogModel.cpp
+        src/services/BackendClient.cpp
+        src/services/WebRtcSignalingClient.cpp)
+    target_link_libraries(LiveMorph_frontend_integration_test PRIVATE
+        Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test Qt6::Network Qt6::WebSockets Qt6::Multimedia Qt6::Concurrent
+        GstRtcPeer StreamServer)
+    target_include_directories(LiveMorph_frontend_integration_test PRIVATE src)
+    target_compile_definitions(LiveMorph_frontend_integration_test PRIVATE
+        LIVEMORPH_APP_VERSION="${PROJECT_VERSION}")
+    if(OpenSSL_FOUND)
+        target_compile_definitions(LiveMorph_frontend_integration_test PRIVATE LIVEMORPH_HAVE_OPENSSL)
+        target_link_libraries(LiveMorph_frontend_integration_test PRIVATE OpenSSL::Crypto)
+    endif()
+    add_test(NAME lm_frontend_integration COMMAND LiveMorph_frontend_integration_test)
+    set_tests_properties(lm_frontend_integration PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
 
 # Install
@@ -289,23 +347,26 @@ include(GNUInstallDirs)
 
 # CPack — produce platform archives; run windeployqt/macdeployqt after install
 set(CPACK_PACKAGE_NAME "LiveMorph")
-set(CPACK_PACKAGE_VENDOR "LiveMorph")
+set(CPACK_PACKAGE_VENDOR "Omega Revelation PLC")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "LiveMorph desktop — AI face morph")
-set(CPACK_PACKAGE_CONTACT "support@livemorph.local")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "LiveMorph desktop — AI face morph by Omega Revelation PLC")
+set(CPACK_PACKAGE_CONTACT "support@omegarevelation.com")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 if(WIN32)
     set(CPACK_GENERATOR "ZIP;NSIS")
     set(CPACK_NSIS_DISPLAY_NAME "LiveMorph")
     set(CPACK_NSIS_PACKAGE_NAME "LiveMorph")
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
-    # Register the livemorph:// protocol at INSTALL time (HKCU), so the Google
+    # Register the omegarevelation:// protocol at INSTALL time (HKCU), so the Google
     # OAuth / payment deep-link return launches the app on Windows end users.
     set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
+      WriteRegStr HKCU \"Software\\\\Classes\\\\omegarevelation\" \"URL Protocol\" \"\"
+      WriteRegStr HKCU \"Software\\\\Classes\\\\omegarevelation\\\\shell\\\\open\\\\command\" \"\" \"\\\"$INSTDIR\\\\bin\\\\LiveMorph.exe\\\" \\\"%1\\\"\"
       WriteRegStr HKCU \"Software\\\\Classes\\\\livemorph\" \"URL Protocol\" \"\"
       WriteRegStr HKCU \"Software\\\\Classes\\\\livemorph\\\\shell\\\\open\\\\command\" \"\" \"\\\"$INSTDIR\\\\bin\\\\LiveMorph.exe\\\" \\\"%1\\\"\"
     ")
     set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
+      DeleteRegKey HKCU \"Software\\\\Classes\\\\omegarevelation\"
       DeleteRegKey HKCU \"Software\\\\Classes\\\\livemorph\"
     ")
 elseif(APPLE)

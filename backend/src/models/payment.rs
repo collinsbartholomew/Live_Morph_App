@@ -48,6 +48,10 @@ pub struct PaymentOrder {
     pub kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan: Option<String>,
+    /// Plan the user held when an upgrade order was created. Settlement must
+    /// revalidate this before honoring the discounted price.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_plan: Option<String>,
     /// HMAC hash of the activation key (hash-at-rest; never the plaintext).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access_key_hash: Option<String>,

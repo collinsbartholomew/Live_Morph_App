@@ -8,7 +8,7 @@ Item {
     // Narrow layout below Theme.narrowBreakpoint: the workshop shrinks so the
     // stage keeps a usable 16:9 box on small windows (min window 1024x640).
     readonly property bool narrowLayout: width < Theme.narrowBreakpoint
-    readonly property int workshopEffectiveWidth: narrowLayout ? Math.min(300, width * 0.34) : Theme.workshopWidth
+    readonly property int workshopEffectiveWidth: narrowLayout ? Math.min(288, width * 0.3) : Theme.workshopWidth
     readonly property bool useCompactChrome: Config.compactChrome || height < Theme.compactChromeBelow
     readonly property int actionBarEffectiveHeight: useCompactChrome
           ? Theme.actionBarHeightCompact
@@ -135,8 +135,8 @@ Item {
                 // in the column with 24px padding — letterboxed, not full-bleed.
                 Item {
                     id: stageBox
-                    readonly property real maxW: Math.min(parent.width - 48, 960)
-                    readonly property real w: Math.min(maxW, (parent.height - 48) * 16 / 9)
+                    readonly property real maxW: Math.min(parent.width - 32, 1100)
+                    readonly property real w: Math.min(maxW, (parent.height - 32) * 16 / 9)
                     readonly property real h: w * 9 / 16
                     anchors.centerIn: parent
                     width: Math.min(Math.max(320, w), parent.width)
@@ -209,6 +209,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: statusBar.top
         height: root.actionBarEffectiveHeight
+        compact: root.useCompactChrome
     }
 
     StatusBar {
@@ -305,7 +306,7 @@ Item {
     // Global shortcuts (Electron has no Ctrl+B — the workshop is always up)
     Shortcut {
         sequence: "Ctrl+E"
-        enabled: !root.textEditorFocused()
+        enabled: !App.showLockScreen && !root.textEditorFocused()
         onActivated: Config.promptBarVisible = !Config.promptBarVisible
     }
     Connections {
@@ -418,7 +419,7 @@ Item {
         }
         function onShowWhatsNewChanged() {
             if (App.showWhatsNew) {
-                Config.whatsNewSeenVersion = Backend.appVersion || Constants.appVersion
+                Config.whatsNewSeenVersion = App.appVersion || Constants.appVersion
                 whatsNew.open = true
                 App.showWhatsNew = false
             }

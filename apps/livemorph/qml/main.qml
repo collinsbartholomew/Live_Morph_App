@@ -271,6 +271,7 @@ ApplicationWindow {
 
     Item {
         id: content
+        enabled: !App.showLockScreen
 
         anchors.top: offlineBanner.bottom
         anchors.left: parent.left
@@ -372,7 +373,7 @@ ApplicationWindow {
 
     Shortcut {
         sequence: "?"
-        enabled: App.currentPage === "dashboard" && !hasTextFocus()
+        enabled: App.currentPage === "dashboard" && !App.showLockScreen && !hasTextFocus()
         onActivated: shortcutsSheet.toggle()
     }
 
@@ -400,13 +401,13 @@ ApplicationWindow {
 
     Shortcut {
         sequence: "Ctrl+P"
-        enabled: App.currentPage === "dashboard"
+        enabled: App.currentPage === "dashboard" && !App.showLockScreen
         onActivated: openPreview()
     }
 
     Shortcut {
         sequence: "Ctrl+Shift+P"
-        enabled: App.currentPage === "dashboard"
+        enabled: App.currentPage === "dashboard" && !App.showLockScreen
         onActivated: openPopout()
     }
 
@@ -423,7 +424,7 @@ ApplicationWindow {
     }
 
     DownloadsScreen {
-        visible: App.showDownloads
+        visible: App.showDownloads && !App.showLockScreen
         z: Theme.zDrawer
     }
 
@@ -431,11 +432,22 @@ ApplicationWindow {
 
     Connections {
         function onPreviewRequested() {
-            openPreview();
+            if (!App.showLockScreen)
+                openPreview();
         }
 
         function onPopoutRequested() {
-            openPopout();
+            if (!App.showLockScreen)
+                openPopout();
+        }
+
+        function onShowLockScreenChanged() {
+            if (App.showLockScreen) {
+                if (previewWin)
+                    previewWin.close();
+                if (popoutWin)
+                    popoutWin.close();
+            }
         }
 
         target: App

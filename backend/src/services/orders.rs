@@ -91,9 +91,20 @@ pub async fn create_plan_order(
             .ok_or_else(|| AppError::NotFound("user".into()))?,
     };
 
+    let source_plan = if kind == "upgrade" {
+        let current = user.plan.as_deref().unwrap_or("starter").to_string();
+        if current.eq_ignore_ascii_case(plan) {
+            return Err(AppError::BadRequest(
+                "you are already on the requested plan".into(),
+            ));
+        }
+        Some(current)
+    } else {
+        None
+    };
     let (dollars, credits) = if kind == "upgrade" {
         // Discounted upgrade price from the user's current plan (reference).
-        plans::upgrade_pricing(user.plan.as_deref().unwrap_or("starter"), plan).unwrap_or_else(|| {
+        plans::upgrade_pricing(source_plan.as_deref().unwrap_or("starter"), plan).unwrap_or_else(|| {
             plans::activation_plan(plan)
                 .map(|p| (p.dollars, p.credits))
                 .unwrap_or((0.0, 0.0))
@@ -144,6 +155,7 @@ pub async fn create_plan_order(
         crypto_status: None,
         kind: Some(kind.to_string()),
         plan: Some(plan.to_string()),
+        source_plan,
         access_key_hash: None,
         access_key_plain: None,
         device_id: None,

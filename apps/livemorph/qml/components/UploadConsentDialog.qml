@@ -1,31 +1,48 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import LiveMorph
 
-/**
- * Upload consent dialog (Electron iy, ground truth):
- *   w-[520px] panel-premium · title "Before you upload, read this"
- *   intro: "…Decart's Acceptable Use Policy and ours both require you to
- *   attest to a few things on every reference image…"
- *   custom 16px checkboxes (rounded-3, accent when checked, label-row hover)
- *   dual AUP links (ours + Decart's) · footer: ghost Cancel + primary
- *   "I Agree & Upload"
- */
 Dialog {
     id: root
     property string modalId: "upload-consent"
+    property bool consentGiven: firstCheck.checked && secondCheck.checked && thirdCheck.checked
+
     modal: true
-    // Center on the window overlay — callers embed this dialog inside narrow
-    // panels (workshop), where centerIn: parent would misplace/shrink it.
     anchors.centerIn: Overlay.overlay ? Overlay.overlay : parent
-    width: Math.min(520, (Overlay.overlay ? Overlay.overlay.width : 800) - 48)
-    height: Math.min((Overlay.overlay ? Overlay.overlay.height : 800) - 64, 560)
+    width: Math.min(560, (Overlay.overlay ? Overlay.overlay.width : 800) - 48)
+    height: Math.min((Overlay.overlay ? Overlay.overlay.height : 800) - 64, 600)
     closePolicy: Popup.NoAutoClose
     padding: 0
 
-    // Modal stack registration: the global Escape shortcut closes this.
-    // (merged with the checkbox-reset onOpened below)
+    background: Rectangle {
+        color: Colors.surfaceOverlay
+        border.color: Colors.surfaceBorderStrong
+        border.width: 1
+        radius: Theme.radiusLg
+        clip: true
+        Honeycomb {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: 150
+            cellSize: Theme.honeycombCellLg
+            lineColor: Colors.honeycombLineFaint
+            focusX: width * 0.85
+            focusY: 0
+            fadeRadius: width * 0.6
+            depthEvery: 9
+        }
+        CornerTicks {
+            anchors.fill: parent
+            inset: 10
+            tickSize: 10
+            thickness: 1
+            color: Colors.accent40
+        }
+    }
+
     Connections {
         target: App
         function onModalEscapeRequested(id) {
@@ -34,279 +51,265 @@ Dialog {
         }
     }
 
-    property bool consentGiven: chk1Label.checked && chk2Label.checked && chk3Label.checked
+    contentItem: ColumnLayout {
+        spacing: 0
 
-    background: Rectangle {
-        color: Colors.surfaceOverlay
-        border.color: Colors.surfaceBorder
-        border.width: 1
-        radius: Theme.radiusLg
-        clip: true
+        Column {
+            Layout.fillWidth: true
+            Layout.margins: 28
+            Layout.bottomMargin: 20
+            spacing: Theme.spacingMd
+
+            RowLayout {
+                width: parent.width
+                spacing: Theme.spacingLg
+                HexBadge {
+                    size: 48
+                    iconName: "shield-check"
+                    iconSize: 21
+                    lineWidth: 1.5
+                    lineColor: Colors.accent40
+                    fillColor: Colors.accent10
+                    iconColor: Colors.accent
+                    Layout.alignment: Qt.AlignTop
+                }
+                Column {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingXs
+                    Text {
+                                        text: qsTr("RESPONSIVE CREATION / CONSENT")
+                                        color: Colors.textMuted
+                                        font.family: Theme.fontLabel.family; font.pixelSize: Theme.fontLabel.pixelSize; font.weight: Theme.fontLabel.weight
+                                        font.letterSpacing: 1.2
+                    }
+                    Text {
+                        width: parent.width
+                        text: qsTr("Create responsibly")
+                        color: Colors.textPrimary
+                        font.family: Theme.fontHeadline.family; font.pixelSize: Theme.fontHeadline.pixelSize; font.weight: Theme.fontHeadline.weight
+                        font.letterSpacing: -0.6
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
+
+            Text {
+                width: parent.width
+                text: qsTr("Before your first upload, confirm these standards. This acknowledgment is remembered on this device, and you remain responsible for every image you add.")
+                color: Colors.textSecondary
+                font.family: Theme.fontUi.family; font.pixelSize: Theme.fontUi.pixelSize
+                wrapMode: Text.WordWrap
+                lineHeight: 1.45
+            }
+        }
+
+        Flickable {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.leftMargin: 28
+            Layout.rightMargin: 28
+            contentWidth: width
+            contentHeight: checkColumn.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: StyledScrollBar { thin: true }
+
+            ColumnLayout {
+                id: checkColumn
+                width: parent.width
+                spacing: Theme.spacingMd
+
+                Controls.Button {
+                    id: firstCheck
+                    Layout.fillWidth: true
+                    implicitHeight: firstLabel.implicitHeight + 32
+                    checkable: true
+                    checked: false
+                    hoverEnabled: true
+                    Accessible.checkable: true
+                    Accessible.checked: checked
+                    Accessible.name: qsTr("Likeness and consent acknowledgment")
+                    background: Rectangle {
+                        color: firstCheck.checked ? Colors.accent10 : firstCheck.hovered ? Colors.surfaceHover : Colors.surfaceRaised
+                        border.color: firstCheck.activeFocus ? Colors.accent : firstCheck.checked ? Colors.accent40 : Colors.surfaceBorder
+                        border.width: 1
+                        radius: Theme.radiusMd
+                    }
+                    contentItem: RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: Theme.spacingMd
+                        Hexagon {
+                            size: 22
+                            lineWidth: 1.5
+                            lineColor: firstCheck.checked ? Colors.accent : Colors.surfaceBorderStrong
+                            fillColor: firstCheck.checked ? Colors.accent : Colors.surfaceBase
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: 2
+                            Icon {
+                                visible: firstCheck.checked
+                                anchors.centerIn: parent
+                                name: "check"
+                                size: 13
+                                color: Colors.textOnAccent
+                            }
+                        }
+                        Text {
+                            id: firstLabel
+                            Layout.fillWidth: true
+                            text: qsTr("This image is fictional, or I have explicit documented consent from the real person it depicts. I will not impersonate anyone without consent.")
+                            color: Colors.textPrimary
+                            font.family: Theme.fontUi.family; font.pixelSize: Theme.fontUi.pixelSize
+                            wrapMode: Text.WordWrap
+                            lineHeight: 1.4
+                        }
+                    }
+                }
+
+                Controls.Button {
+                    id: secondCheck
+                    Layout.fillWidth: true
+                    implicitHeight: secondLabel.implicitHeight + 32
+                    checkable: true
+                    checked: false
+                    hoverEnabled: true
+                    Accessible.checkable: true
+                    Accessible.checked: checked
+                    Accessible.name: qsTr("AI disclosure acknowledgment")
+                    background: Rectangle {
+                        color: secondCheck.checked ? Colors.accent10 : secondCheck.hovered ? Colors.surfaceHover : Colors.surfaceRaised
+                        border.color: secondCheck.activeFocus ? Colors.accent : secondCheck.checked ? Colors.accent40 : Colors.surfaceBorder
+                        border.width: 1
+                        radius: Theme.radiusMd
+                    }
+                    contentItem: RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: Theme.spacingMd
+                        Hexagon {
+                            size: 22
+                            lineWidth: 1.5
+                            lineColor: secondCheck.checked ? Colors.accent : Colors.surfaceBorderStrong
+                            fillColor: secondCheck.checked ? Colors.accent : Colors.surfaceBase
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: 2
+                            Icon {
+                                visible: secondCheck.checked
+                                anchors.centerIn: parent
+                                name: "check"
+                                size: 13
+                                color: Colors.textOnAccent
+                            }
+                        }
+                        Text {
+                            id: secondLabel
+                            Layout.fillWidth: true
+                            text: qsTr("I will disclose AI-generated output to viewers and will not present it as authentic news, real events, or testimony from a real person.")
+                            color: Colors.textPrimary
+                            font.family: Theme.fontUi.family; font.pixelSize: Theme.fontUi.pixelSize
+                            wrapMode: Text.WordWrap
+                            lineHeight: 1.4
+                        }
+                    }
+                }
+
+                Controls.Button {
+                    id: thirdCheck
+                    Layout.fillWidth: true
+                    implicitHeight: thirdLabel.implicitHeight + 32
+                    checkable: true
+                    checked: false
+                    hoverEnabled: true
+                    Accessible.checkable: true
+                    Accessible.checked: checked
+                    Accessible.name: qsTr("Acceptable use policy acknowledgment")
+                    background: Rectangle {
+                        color: thirdCheck.checked ? Colors.accent10 : thirdCheck.hovered ? Colors.surfaceHover : Colors.surfaceRaised
+                        border.color: thirdCheck.activeFocus ? Colors.accent : thirdCheck.checked ? Colors.accent40 : Colors.surfaceBorder
+                        border.width: 1
+                        radius: Theme.radiusMd
+                    }
+                    contentItem: RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: Theme.spacingMd
+                        Hexagon {
+                            size: 22
+                            lineWidth: 1.5
+                            lineColor: thirdCheck.checked ? Colors.accent : Colors.surfaceBorderStrong
+                            fillColor: thirdCheck.checked ? Colors.accent : Colors.surfaceBase
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: 2
+                            Icon {
+                                visible: thirdCheck.checked
+                                anchors.centerIn: parent
+                                name: "check"
+                                size: 13
+                                color: Colors.textOnAccent
+                            }
+                        }
+                        Text {
+                            id: thirdLabel
+                            Layout.fillWidth: true
+                            text: qsTr("I have read and agree to both acceptable use policies, including their rules for consent, disclosure, and prohibited content.")
+                            color: Colors.textPrimary
+                            font.family: Theme.fontUi.family; font.pixelSize: Theme.fontUi.pixelSize
+                            wrapMode: Text.WordWrap
+                            lineHeight: 1.4
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingSm
+                    Text {
+                        text: qsTr("REVIEW POLICIES")
+                        color: Colors.textMuted
+                        font.family: Theme.fontLabel.family; font.pixelSize: Theme.fontLabel.pixelSize; font.weight: Theme.fontLabel.weight
+                        Layout.fillWidth: true
+                    }
+                    GhostButton {
+                        text: qsTr("LiveMorph AUP")
+                        onClicked: Backend.openExternal(Constants.urlAup)
+                    }
+                    GhostButton {
+                        text: qsTr("Decart AUP")
+                        onClicked: Backend.openExternal(Constants.urlDecartAup)
+                    }
+                }
+            }
+        }
+    }
+
+    footer: Item {
+        implicitHeight: 76
         Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
             height: 1
-            color: Colors.insetHighlight
+            color: Colors.surfaceBorder
         }
-        Honeycomb {
+        RowLayout {
             anchors.fill: parent
-            cellSize: Theme.honeycombCell
-            lineColor: Colors.honeycombLineFaint
-            opacity: 0.5
-        }
-        CornerTicks {
-            anchors.fill: parent
-            inset: 8
-            tickSize: 8
-            thickness: 1.5
-            color: Colors.accent50
-        }
-    }
-
-    contentItem: ColumnLayout {
-        id: contentCol
-        spacing: 0
-
-        // Header (Electron): icon BESIDE title on one row, intro underneath
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.margins: Theme.spacingXl
-            Layout.bottomMargin: Theme.spacingLg
+            anchors.leftMargin: 28
+            anchors.rightMargin: 28
             spacing: Theme.spacingMd
-
-            RowLayout {
+            SecondaryButton {
                 Layout.fillWidth: true
-                spacing: Theme.spacingMd
-                HexBadge {
-                    size: 42
-                    iconName: "shield"
-                    iconSize: Theme.iconMd
-                    lineWidth: 1.5
-                    lineColor: Colors.accent20
-                    fillColor: Colors.accent10
-                    iconColor: Colors.accent
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                Text {
-                    text: qsTr("Before you upload, read this")
-                    color: Colors.textPrimary
-                    font.pixelSize: Theme.fontTitle.pixelSize
-                    font.weight: Font.Bold
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignVCenter
-                    wrapMode: Text.WordWrap
-                }
+                Layout.preferredHeight: 44
+                text: qsTr("Cancel")
+                onClicked: root.reject()
             }
-
-            Text {
-                text: qsTr("LiveMorph is powered by Decart Lucy 2. Decart's Acceptable Use Policy and ours both require you to attest to a few things on every reference image. Take a moment to check each one.")
-                color: Colors.textMuted
-                font.pixelSize: Theme.fontMono.pixelSize
-                wrapMode: Text.WordWrap
+            PrimaryButton {
                 Layout.fillWidth: true
-                lineHeight: 1.625
-            }
-        }
-
-        Rectangle { Layout.fillWidth: true; height: 1; color: Colors.surfaceBorderSubtle }
-
-        // Checks (px-6 py-5, gap-2) — custom Electron-style checkboxes.
-        // Scrollable so the footer never renders outside the panel on short windows.
-        Flickable {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredHeight: Math.max(0, Math.min(checksCol.implicitHeight + 48,
-                                             (Overlay.overlay ? Overlay.overlay.height : 800) - 64 - 220))
-            contentWidth: width
-            contentHeight: checksCol.implicitHeight + 48
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.vertical: StyledScrollBar { thin: true }
-
-        ColumnLayout {
-            id: checksCol
-            width: parent.width - 48
-            x: 24
-            spacing: Theme.spacingSm
-
-            // Check 1: likeness consent
-            RowLayout {
-                id: row1
-                Layout.fillWidth: true
-                spacing: Theme.spacingMd
-                // Keyboard accessible: focusable row, Space/Enter toggles.
-                // main.qml's global Space shortcut defers to spaceToggles items.
-                focus: true
-                property bool spaceToggles: true
-                Keys.onSpacePressed: (e) => { chk1Label.checked = !chk1Label.checked; e.accepted = true }
-                Keys.onReturnPressed: (e) => { chk1Label.checked = !chk1Label.checked; e.accepted = true }
-                // Hex checkbox (honeycomb signature on consent checks)
-                Hexagon {
-                    size: 16
-                    lineWidth: 1
-                    lineColor: chk1Label.checked ? Colors.accent
-                        : (row1Ma.containsMouse ? Colors.textMuted : Colors.surfaceBorderStrong)
-                    fillColor: chk1Label.checked ? Colors.accent : Colors.surfaceBase
-                    Layout.alignment: Qt.AlignVCenter
-                    Icon {
-                        visible: chk1Label.checked
-                        anchors.centerIn: parent
-                        name: "check"
-                        size: 11
-                        color: Colors.textOnAccent
-                    }
-                }
-                Text {
-                    id: chk1Label
-                    property bool checked: false
-                    Layout.fillWidth: true
-                    text: qsTr("This image is either a fictional character, OR I have explicit, documented consent from the real person it depicts. I will not use LiveMorph to impersonate anyone without their consent.")
-                    color: row1Ma.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                    font.pixelSize: Theme.fontMono.pixelSize
-                    wrapMode: Text.WordWrap
-                    lineHeight: 1.625
-                    MouseArea {
-                        id: row1Ma
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: chk1Label.checked = !chk1Label.checked
-                    }
-                }
-            }
-
-            // Check 2: AI disclosure
-            RowLayout {
-                id: row2
-                Layout.fillWidth: true
-                spacing: Theme.spacingMd
-                focus: true
-                property bool spaceToggles: true
-                Keys.onSpacePressed: (e) => { chk2Label.checked = !chk2Label.checked; e.accepted = true }
-                Keys.onReturnPressed: (e) => { chk2Label.checked = !chk2Label.checked; e.accepted = true }
-                Hexagon {
-                    size: 16
-                    lineWidth: 1
-                    lineColor: chk2Label.checked ? Colors.accent
-                        : (row2Ma.containsMouse ? Colors.textMuted : Colors.surfaceBorderStrong)
-                    fillColor: chk2Label.checked ? Colors.accent : Colors.surfaceBase
-                    Layout.alignment: Qt.AlignVCenter
-                    Icon {
-                        visible: chk2Label.checked
-                        anchors.centerIn: parent
-                        name: "check"
-                        size: 11
-                        color: Colors.textOnAccent
-                    }
-                }
-                Text {
-                    id: chk2Label
-                    property bool checked: false
-                    Layout.fillWidth: true
-                    text: qsTr("I will disclose to my viewers that my stream is AI-generated (stream title, panel, or scene overlay) and will not present this output as authentic news, real events, or testimony of a real person.")
-                    color: row2Ma.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                    font.pixelSize: Theme.fontMono.pixelSize
-                    wrapMode: Text.WordWrap
-                    lineHeight: 1.625
-                    MouseArea {
-                        id: row2Ma
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: chk2Label.checked = !chk2Label.checked
-                    }
-                }
-            }
-
-            // Check 3: AUP links (ours + Decart's)
-            RowLayout {
-                id: row3
-                Layout.fillWidth: true
-                spacing: Theme.spacingMd
-                focus: true
-                property bool spaceToggles: true
-                Keys.onSpacePressed: (e) => { chk3Label.checked = !chk3Label.checked; e.accepted = true }
-                Keys.onReturnPressed: (e) => { chk3Label.checked = !chk3Label.checked; e.accepted = true }
-                Hexagon {
-                    size: 16
-                    lineWidth: 1
-                    lineColor: chk3Label.checked ? Colors.accent
-                        : (row3Ma.containsMouse ? Colors.textMuted : Colors.surfaceBorderStrong)
-                    fillColor: chk3Label.checked ? Colors.accent : Colors.surfaceBase
-                    Layout.alignment: Qt.AlignVCenter
-                    Icon {
-                        visible: chk3Label.checked
-                        anchors.centerIn: parent
-                        name: "check"
-                        size: 11
-                        color: Colors.textOnAccent
-                    }
-                }
-                Text {
-                    id: chk3Label
-                    property bool checked: false
-                    Layout.fillWidth: true
-                    text: qsTr("I have read and agree to both: ") +
-                          "<a href='" + Constants.urlAup + "'>LiveMorph AUP</a> / " +
-                          "<a href='" + Constants.urlDecartAup + "'>Decart AUP</a>."
-                    textFormat: Text.RichText
-                    linkColor: Colors.accent;
-                    color: row3Ma.containsMouse ? Colors.textPrimary : Colors.textSecondary
-                    font.pixelSize: Theme.fontMono.pixelSize
-                    wrapMode: Text.WordWrap
-                    onLinkActivated: (link) => {
-                        if (link.indexOf("https://") === 0)
-                            Qt.openUrlExternally(link)
-                    }
-                    MouseArea {
-                        id: row3Ma
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: function(mouse) {
-                            var link = chk3Label.linkAt(mouse.x, mouse.y)
-                            if (link) {
-                                if (link.indexOf("https://") === 0)
-                                    Qt.openUrlExternally(link)
-                                return
-                            }
-                            chk3Label.checked = !chk3Label.checked
-                        }
-                    }
-                }
-            }
-        }
-        }
-
-        // Footer strip (px-6 py-4, bg-surface-base/40): ghost Cancel + primary
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 64
-            color: Colors.base40
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                height: 1
-                color: Colors.border50
-            }
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: Theme.spacingXl
-                anchors.rightMargin: Theme.spacingXl
-                Item { Layout.fillWidth: true }
-                GhostButton {
-                    text: qsTr("Cancel")
-                    onClicked: root.reject()
-                }
-                PrimaryButton {
-                    text: qsTr("I Agree & Upload")
-                    enabled: root.consentGiven
-                    onClicked: {
-                        Config.uploadConsentShown = true
-                        root.accept()
-                    }
+                Layout.preferredHeight: 44
+                text: qsTr("I agree, choose image")
+                enabled: root.consentGiven
+                onClicked: {
+                    Config.uploadConsentShown = true
+                    root.accept()
                 }
             }
         }
@@ -314,10 +317,10 @@ Dialog {
 
     onOpened: {
         App.modalOpened(root.modalId)
-        chk1Label.checked = false
-        chk2Label.checked = false
-        chk3Label.checked = false
-        row1.forceActiveFocus()
+        firstCheck.checked = false
+        secondCheck.checked = false
+        thirdCheck.checked = false
+        firstCheck.forceActiveFocus()
     }
     onClosed: App.modalClosed(root.modalId)
 }

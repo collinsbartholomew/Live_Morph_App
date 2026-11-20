@@ -51,6 +51,15 @@ bool isValidIceServerUri(const QString &uri)
     return re.match(uri).hasMatch();
 }
 
+void destroySourceById(GMainContext *context, guint &sourceId)
+{
+    if (!sourceId)
+        return;
+    if (GSource *source = g_main_context_find_source_by_id(context, sourceId))
+        g_source_destroy(source);
+    sourceId = 0;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -185,10 +194,7 @@ void onOfferCreated(GstPromise *promise, gpointer userData)
         g_free(text);
     }
     im->offerCreated = true;
-    if (im->offerFallbackId) {
-        g_source_remove(im->offerFallbackId);
-        im->offerFallbackId = 0;
-    }
+    destroySourceById(im->ctx, im->offerFallbackId);
     gst_webrtc_session_description_free(offer);
 }
 
@@ -759,10 +765,7 @@ gboolean workerStop(gpointer userData)
         im->vp8enc = nullptr;
         im->offerCreated = false;
         im->remoteDescriptionSet = false;
-        if (im->offerFallbackId) {
-            g_source_remove(im->offerFallbackId);
-            im->offerFallbackId = 0;
-        }
+        destroySourceById(im->ctx, im->offerFallbackId);
         im->stallTicks = 0;
         im->stallEmitted = false;
         im->lastDecodedProbe.store(0);

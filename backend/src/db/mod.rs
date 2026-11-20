@@ -23,7 +23,23 @@ pub struct Db {
 impl Db {
     pub async fn connect(cfg: &Config) -> anyhow::Result<Self> {
         let mut opts = ClientOptions::parse(&cfg.mongodb_uri).await?;
+        if cfg.is_production() {
+            match &opts.tls {
+                None | Some(mongodb::options::Tls::Disabled) => {
+                    anyhow::bail!("MONGODB_URI must negotiate TLS in production (mongodb+srv:// or ?tls=true)")
+                }
+                Some(mongodb::options::Tls::Enabled(t)) => {
+                    if t.allow_invalid_certificates == Some(true) {
+                        anyhow::bail!(
+                            "MONGODB_URI must not disable certificate/hostname verification in production"
+                        );
+                    }
+                }
+            }
+        }
         opts.app_name = Some("livemorph-backend".into());
+        opts.connect_timeout = Some(std::time::Duration::from_secs(5));
+        opts.server_selection_timeout = Some(std::time::Duration::from_secs(10));
         let client = Client::with_options(opts)?;
         // Ping
         client
@@ -149,6 +165,21 @@ impl Db {
                     }
                 }
             }
+            // Build the replacement unique index FIRST (under a stable new
+            // name), then retire the legacy ones: dropping the live uniqueness
+            // guard before its replacement exists would open a window during
+            // rolling deploys.
+            let key_hash_idx = IndexModel::builder()
+                .keys(doc! { "key_hash": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name(Some("key_hash_uq_sparse".to_string()))
+                        .unique(true)
+                        .sparse(true)
+                        .build(),
+                )
+                .build();
+            ak_docs.create_index(key_hash_idx).await?;
             for name in ["key_1", "key_hash_1"] {
                 if let Err(e) = ak_docs.drop_index(name).await {
                     if !e.to_string().contains("IndexNotFound") {
@@ -156,11 +187,6 @@ impl Db {
                     }
                 }
             }
-            let key_hash_idx = IndexModel::builder()
-                .keys(doc! { "key_hash": 1 })
-                .options(IndexOptions::builder().unique(true).sparse(true).build())
-                .build();
-            ak_docs.create_index(key_hash_idx).await?;
         }
         // User and order rows historically cached the plaintext license key in
         // `access_key`; migrate to `access_key_hash` and unset the plaintext.
@@ -215,6 +241,19 @@ impl Db {
         // Drop-then-create: Mongo refuses to change options on an existing index
         // name (IndexKeySpecsConflict), so drop any prior key_hash_1/key_1 first.
         for coll in [self.credit_keys(), self.credit_keys_secondary()] {
+            // Replacement unique index first, legacy drops second (never leave
+            // a boot window with no uniqueness guard).
+            let ck_key = IndexModel::builder()
+                .keys(doc! { "key_hash": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name(Some("key_hash_uq_sparse".to_string()))
+                        .unique(true)
+                        .sparse(true)
+                        .build(),
+                )
+                .build();
+            coll.create_index(ck_key).await?;
             for name in ["key_hash_1", "key_1"] {
                 if let Err(e) = coll.drop_index(name).await {
                     if !e.to_string().contains("IndexNotFound") {
@@ -222,11 +261,6 @@ impl Db {
                     }
                 }
             }
-            let ck_key = IndexModel::builder()
-                .keys(doc! { "key_hash": 1 })
-                .options(IndexOptions::builder().unique(true).sparse(true).build())
-                .build();
-            coll.create_index(ck_key).await?;
         }
 
         // Access-key lookups by owner (keys/status, claim binding).
@@ -234,6 +268,14 @@ impl Db {
         if let Err(e) = self.access_keys_secondary().create_index(ak_user).await {
             tracing::warn!(error = %e, "access_keys user_id index create failed (non-fatal lookup index)");
         }
+        // Users may legitimately hold several bound keys (renewals, plan
+        // changes, dev-issued keys), so uniqueness must NOT be enforced at the
+        // DB level — activation minting is guarded in application code. Clean
+        // up the experimental partial unique index if it exists.
+        let _ = self
+            .access_keys_secondary()
+            .drop_index("one_active_key_per_user")
+            .await;
 
         let otp_ttl = IndexModel::builder()
             .keys(doc! { "expires_at": 1 })

@@ -349,9 +349,16 @@ bool MorphRecorder::close(QString *err)
     // un-drained recording keeps the ".part" suffix so scanOrphans() finds
     // it; streamable fMP4 means such files are still playable once renamed.
     if (drained) {
-        QFile::remove(path);
-        if (!QFile::rename(partPath, path) && err)
-            *err = QStringLiteral("could not finalize recording file");
+        if (QFile::exists(path)) {
+            if (err)
+                *err = QStringLiteral("destination already exists — kept as .part for recovery");
+            return false;
+        }
+        if (!QFile::rename(partPath, path)) {
+            if (err)
+                *err = QStringLiteral("could not finalize recording file");
+            return false;
+        }
     } else if (err) {
         *err = workerErr.isEmpty()
             ? QStringLiteral("muxer did not flush within 1s — kept as .part for recovery")

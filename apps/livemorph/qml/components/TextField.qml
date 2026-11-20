@@ -41,11 +41,18 @@ Controls.TextField {
                  : control.hovered ? Colors.surfaceHover
                  : Colors.surfaceElevated
             border.color: !control.enabled ? Colors.surfaceBorderSubtle
-                        : control.activeFocus ? Colors.focusRing
+                        : control.activeFocus ? Colors.accent
                         : control.hovered ? Colors.surfaceBorderStrong
                         : Colors.surfaceBorder
             border.width: 1
-            // Inset highlight (top edge)
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.margins: 5
+                width: 2
+                color: control.activeFocus ? Colors.accent : Colors.transparent
+            }
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right

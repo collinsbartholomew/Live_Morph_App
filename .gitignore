@@ -1,6 +1,7 @@
 # ---- Environment files with secrets (templates below stay tracked) ----
 backend/.env
-deploy_kaggle.py   # contains real secrets (JWT, Decart, Paystack, SMTP) — never commit
+# Kaggle deployment contains real testing secrets and must stay local.
+deploy_kaggle.py
 backend/.env.local
 backend/.env.production
 backend/.test.env

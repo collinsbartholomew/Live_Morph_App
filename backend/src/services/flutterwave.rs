@@ -199,7 +199,9 @@ pub fn amount_matches(order_subunit: i64, paid_amount: Option<f64>) -> bool {
     if !paid.is_finite() {
         return false;
     }
-    let paid_subunit = (paid * 100.0).round() as i64;
+    // Floor (never round): 9.995 against a 10.00 order must count as 999
+    // subunits, not 1000 — rounding here would accept a small underpayment.
+    let paid_subunit = (paid * 100.0).floor() as i64;
     // Underpayment must never provision — strict integer compare.
     paid_subunit >= order_subunit
 }

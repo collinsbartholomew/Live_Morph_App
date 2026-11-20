@@ -3,6 +3,10 @@
 
 use serde::Deserialize;
 
+/// Which dotenv file (if any) was loaded at startup, for logging. Path only.
+pub static DOTENV_LOADED_PATH: std::sync::OnceLock<Option<std::path::PathBuf>> =
+    std::sync::OnceLock::new();
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     // Server
@@ -280,22 +284,77 @@ fn default_true() -> bool {
 }
 
 impl Config {
-    pub fn from_env() -> Result<Self, envy::Error> {
+    pub fn from_env() -> Result<Self, String> {
         // Load .env if present; only fall back to .test.env behind an explicit
         // opt-in, otherwise a deploy started without .env would silently boot
-        // with the shipped test secrets and all dev-mode guards.
-        if dotenvy::dotenv().is_err()
-            && std::env::var("ALLOW_TEST_ENV").as_deref() == Ok("1")
-        {
-            let _ = dotenvy::from_filename(".test.env");
+        // with the shipped test secrets and all dev-mode guards. The loaded
+        // path (never its values) is recorded for startup logging: dotenvy
+        // walks CWD ancestors, so an unintended parent .env must be visible.
+        let env_loaded = if let Ok(path) = std::env::var("LIVEMORPH_ENV_FILE") {
+            if path.trim().is_empty() {
+                return Err("LIVEMORPH_ENV_FILE must not be empty".into());
+            }
+            dotenvy::from_filename(&path)
+                .map_err(|e| format!("failed to load LIVEMORPH_ENV_FILE '{path}': {e}"))?;
+            let _ = DOTENV_LOADED_PATH.set(Some(std::path::PathBuf::from(path)));
+            true
+        } else {
+            let loaded = dotenvy::dotenv().ok();
+            let _ = DOTENV_LOADED_PATH.set(loaded.clone());
+            loaded.is_some()
+        };
+        if !env_loaded && std::env::var("ALLOW_TEST_ENV").as_deref() == Ok("1") {
+            if dotenvy::from_filename(".test.env").is_ok() {
+                let _ = DOTENV_LOADED_PATH.set(Some(std::path::PathBuf::from(".test.env")));
+            }
         }
-        envy::from_env::<Config>()
+        envy::from_env::<Config>().map_err(|e| e.to_string())
     }
 
     /// Build the config, then fill in the derived defaults that envy cannot
     /// express (a field default may not depend on another field).
-    pub fn load() -> Result<Self, envy::Error> {
+    pub fn load() -> Result<Self, String> {
         let mut cfg = Self::from_env()?;
+        // Derived default: an empty PUBLIC_BASE_URL means "this API's own
+        // bind address" rather than failing validation or emitting relative
+        // links. Production still requires https on the explicit value.
+        cfg.public_base_url = cfg.public_base_url.trim().to_string();
+        if cfg.public_base_url.is_empty() {
+            cfg.public_base_url = format!("http://{}:{}", cfg.host, cfg.port);
+        }
+        // Normalize every optional string: present-but-empty (SMTP_HOST=) must
+        // behave exactly like unset, and secrets never carry stray whitespace.
+        fn norm(slot: &mut Option<String>) {
+            if let Some(v) = slot {
+                let t = v.trim().to_string();
+                *slot = if t.is_empty() { None } else { Some(t) };
+            }
+        }
+        for slot in [
+            &mut cfg.decart_allowed_models,
+            &mut cfg.paystack_secret_key,
+            &mut cfg.paystack_public_key,
+            &mut cfg.paystack_callback_url,
+            &mut cfg.nowpayments_api_key,
+            &mut cfg.nowpayments_ipn_callback_url,
+            &mut cfg.nowpayments_ipn_secret,
+            &mut cfg.google_client_id,
+            &mut cfg.google_client_secret,
+            &mut cfg.google_redirect_uri,
+            &mut cfg.cors_origins,
+            &mut cfg.paystack_webhook_secret,
+            &mut cfg.admin_secret,
+            &mut cfg.flutterwave_secret_key,
+            &mut cfg.flutterwave_public_key,
+            &mut cfg.smtp_host,
+            &mut cfg.smtp_username,
+            &mut cfg.smtp_password,
+            &mut cfg.ice_servers_json,
+        ] {
+            norm(slot);
+        }
+        cfg.jwt_secret = cfg.jwt_secret.trim().to_string();
+        cfg.decart_api_key = cfg.decart_api_key.trim().to_string();
         // The second product's database defaults to its wire id, so claiming
         // the slot only needs SECONDARY_PRODUCT_ID.
         if std::env::var("MONGODB_DB_SECONDARY").is_err()
@@ -509,6 +568,52 @@ impl Config {
                 }
             }
         }
+        fn http_url(name: &str, value: &str, production: bool) -> Result<(), String> {
+            let parsed = url::Url::parse(value.trim())
+                .map_err(|e| format!("{name} must be an absolute http(s) URL: {e}"))?;
+            if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+                return Err(format!("{name} must be an absolute http(s) URL with a host"));
+            }
+            if production && parsed.scheme() != "https" {
+                return Err(format!("{name} must use https:// in production"));
+            }
+            if !parsed.username().is_empty() || parsed.password().is_some() {
+                return Err(format!("{name} must not contain URL credentials"));
+            }
+            if parsed.query().is_some() || parsed.fragment().is_some() {
+                return Err(format!("{name} must not contain a query string or fragment"));
+            }
+            Ok(())
+        }
+        http_url("PUBLIC_BASE_URL", &self.public_base_url, self.is_production())?;
+        let mongo_uri = self.mongodb_uri.trim();
+        if !(mongo_uri.starts_with("mongodb://") || mongo_uri.starts_with("mongodb+srv://"))
+            || mongo_uri.chars().any(char::is_whitespace)
+        {
+            return Err("MONGODB_URI must be a valid mongodb:// or mongodb+srv:// URI without whitespace".into());
+        }
+        let signaling = url::Url::parse(self.decart_signaling_url.trim())
+            .map_err(|e| format!("DECART_SIGNALING_URL must be an absolute ws(s) URL: {e}"))?;
+        if !matches!(signaling.scheme(), "ws" | "wss") || signaling.host_str().is_none() {
+            return Err("DECART_SIGNALING_URL must be an absolute ws(s) URL with a host".into());
+        }
+        for (name, value) in [
+            ("PAYSTACK_CALLBACK_URL", self.paystack_callback_url.as_deref()),
+            ("NOWPAYMENTS_IPN_CALLBACK_URL", self.nowpayments_ipn_callback_url.as_deref()),
+            ("GOOGLE_REDIRECT_URI", self.google_redirect_uri.as_deref()),
+        ] {
+            if let Some(value) = value {
+                http_url(name, value, self.is_production())?;
+            }
+        }
+        let google_fields = [
+            self.google_client_id.is_some(),
+            self.google_client_secret.is_some(),
+            self.google_redirect_uri.is_some(),
+        ];
+        if google_fields.into_iter().any(|set| set) && !google_fields.into_iter().all(|set| set) {
+            return Err("GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI must be set together".into());
+        }
         // CORS origins must be explicit absolute http(s) URIs; a literal "*"
         // (or garbage) would either fail actix-cors init obscurely or widen the
         // allowlist. Empty list is fine (deny-all in production).
@@ -557,8 +662,48 @@ impl Config {
             if !self.public_base_url.starts_with("https://") {
                 return Err("PUBLIC_BASE_URL must be https:// in production".into());
             }
-            if self.mongodb_uri.starts_with("mongodb://") && !self.mongodb_uri.contains("tls=true") {
-                return Err("MONGODB_URI must use mongodb+srv:// or tls=true in production".into());
+            {
+                // Parse the URI query instead of substring-matching: "tls=true"
+                // inside a password or an unrelated value must not count, and
+                // mongodb+srv:// with an explicit tls=false must be rejected.
+                let uri = self.mongodb_uri.trim();
+                let mut tls_on = uri.starts_with("mongodb+srv://");
+                let mut insecure = false;
+                if let Some((_, q)) = uri.split_once('?') {
+                    for pair in q.split('&') {
+                        let mut kv = pair.splitn(2, '=');
+                        let k = kv.next().unwrap_or("").to_ascii_lowercase();
+                        let v = kv.next().unwrap_or("").to_ascii_lowercase();
+                        match k.as_str() {
+                            "tls" | "ssl" => tls_on = v == "true",
+                            "tlsinsecure"
+                            | "tlsallowinvalidcertificates"
+                            | "tlsallowinvalidhostnames" => {
+                                if v == "true" {
+                                    insecure = true;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                if !tls_on {
+                    return Err("MONGODB_URI must enable TLS in production (mongodb+srv:// or ?tls=true / ?ssl=true)".into());
+                }
+                if insecure {
+                    return Err("MONGODB_URI must not set tlsInsecure/tlsAllowInvalidCertificates/tlsAllowInvalidHostnames in production".into());
+                }
+            }
+            if self
+                .cors_origins
+                .as_deref()
+                .unwrap_or("")
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .any(|o| !o.starts_with("https://"))
+            {
+                return Err("CORS_ORIGINS entries must be https:// in production".into());
             }
             if self.smtp_host.is_some() && (self.smtp_username.is_none() || self.smtp_password.is_none()) {
                 return Err("SMTP_HOST requires SMTP_USERNAME and SMTP_PASSWORD".into());
@@ -580,6 +725,28 @@ impl Config {
         // must be an explicit opt-out.
         if self.smtp_host.is_some() && !self.smtp_starttls && self.smtp_port == 587 {
             return Err("SMTP_STARTTLS must be true on port 587 (set SMTP_STARTTLS=true)".into());
+        }
+        // A trailing slash produces double-slash links in emails and OAuth
+        // callbacks (callers concatenate paths directly).
+        if self.public_base_url.trim_end().ends_with('/') {
+            return Err("PUBLIC_BASE_URL must not end with '/'".into());
+        }
+        if self.stream_default_port == 0 {
+            return Err("STREAM_DEFAULT_PORT must be >= 1".into());
+        }
+        // Fail at boot on malformed ICE config instead of silently serving the
+        // STUN fallback to every client at request time.
+        if let Some(ice) = &self.ice_servers_json {
+            let parsed: serde_json::Value = serde_json::from_str(ice)
+                .map_err(|e| format!("ICE_SERVERS_JSON is not valid JSON: {e}"))?;
+            let ok = parsed.is_array()
+                || parsed
+                    .get("iceServers")
+                    .map(|s| s.is_array())
+                    .unwrap_or(false);
+            if !ok {
+                return Err("ICE_SERVERS_JSON must be a JSON array or an object with an iceServers array".into());
+            }
         }
         Ok(())
     }
@@ -623,7 +790,6 @@ mod tests {
         Config {
             decart_allowed_models: allowlist.map(String::from),
             decart_default_model: default_model.to_string(),
-            ..Config::from_env().unwrap_or_else(|_| Config {
                 host: "127.0.0.1".into(),
                 port: 3001,
                 public_base_url: "http://127.0.0.1:3001".into(),
@@ -648,8 +814,6 @@ mod tests {
                 hd_credit_multiplier: 1.5,
                 decart_api_key: "your-key".into(),
                 decart_signaling_url: "wss://api3.decart.ai/v1/stream".into(),
-                decart_default_model: "lucy-2.1".into(),
-                decart_allowed_models: None,
                 stream_default_port: 4789,
                 seed_starter_catalog: true,
                 paystack_secret_key: None,
@@ -682,7 +846,6 @@ mod tests {
                 smtp_starttls: true,
                 ice_servers_json: None,
                 max_concurrent_sessions: 1,
-            })
         }
     }
 
@@ -703,5 +866,33 @@ mod tests {
         let c = cfg_with(None, "lucy-2.5");
         assert_eq!(c.resolve_model(Some("lucy-2.1")).unwrap(), "lucy-2.1");
         assert!(c.resolve_model(Some("unknown")).is_err());
+    }
+
+    #[test]
+    fn deployment_urls_are_validated() {
+        let mut c = cfg_with(None, "lucy-2.5");
+        c.public_base_url = "not-a-url".into();
+        assert!(c.validate().unwrap_err().contains("PUBLIC_BASE_URL"));
+
+        c = cfg_with(None, "lucy-2.5");
+        c.mongodb_uri = "http://127.0.0.1:27017".into();
+        assert!(c.validate().unwrap_err().contains("MONGODB_URI"));
+
+        c = cfg_with(None, "lucy-2.5");
+        c.decart_signaling_url = "https://api3.decart.ai/v1/stream".into();
+        assert!(c.validate().unwrap_err().contains("DECART_SIGNALING_URL"));
+    }
+
+    #[test]
+    fn oauth_requires_a_complete_configuration() {
+        let mut c = cfg_with(None, "lucy-2.5");
+        c.google_client_id = Some("client-id".into());
+        c.google_client_secret = None;
+        c.google_redirect_uri = None;
+        assert!(c.validate().unwrap_err().contains("GOOGLE_CLIENT_ID"));
+
+        c.google_client_secret = Some("client-secret".into());
+        c.google_redirect_uri = Some("http://127.0.0.1:3001/api/v1/auth/oauth/google/callback".into());
+        c.validate().unwrap();
     }
 }

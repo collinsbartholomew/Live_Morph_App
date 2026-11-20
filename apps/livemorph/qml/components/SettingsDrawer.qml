@@ -25,6 +25,17 @@ Item {
 
 
 
+    function tabTitle() {
+        switch (activeTab) {
+        case "camera": return qsTr("Camera")
+        case "stream": return qsTr("Stream output")
+        case "recording": return qsTr("Recording")
+        case "account": return qsTr("Account and billing")
+        case "about": return qsTr("About LiveMorph")
+        default: return qsTr("General")
+        }
+    }
+
     function pickTab(t) {
         activeTab = t
         contentFlick.contentY = 0 // always land at the top of the new tab
@@ -82,7 +93,7 @@ Item {
             anchors.fill: parent
             cellSize: Theme.honeycombCell
             lineColor: Colors.honeycombLineFaint
-            opacity: 0.35
+            opacity: 0.16
         }
 
         // Panel hairline — solid white rule with hex ticks
@@ -156,12 +167,21 @@ Item {
                         fillColor: Colors.accent12
                         iconColor: Colors.accentHover
                     }
-                    Text {
-                        text: qsTr("Settings")
-                        color: Colors.textPrimary
-                        font.pixelSize: Theme.fontTitle.pixelSize
-                        font.weight: Font.Bold
+                    Column {
                         Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            text: qsTr("Settings")
+                            color: Colors.textPrimary
+                            font.pixelSize: Theme.fontTitle.pixelSize
+                            font.weight: Font.Bold
+                        }
+                        Text {
+                            text: qsTr("STUDIO CONFIGURATION")
+                            color: Colors.textMuted
+                            font.family: Theme.fontMicro.family; font.pixelSize: Theme.fontMicro.pixelSize
+                            font.letterSpacing: 1
+                        }
                     }
                     IconButton {
                         name: "help-circle"
@@ -428,7 +448,7 @@ Item {
                             radius: Theme.radiusLg
                             clip: true
                             color: Colors.surfaceRaised
-                            border.color: Colors.surfaceBorderSubtle
+                            border.color: Colors.surfaceBorder
                             border.width: 1
                             Rectangle {
                                 anchors.left: parent.left
@@ -444,6 +464,26 @@ Item {
                         anchors.fill: parent
                         anchors.margins: Theme.padSection
                         spacing: 0
+
+                        Column {
+                            Layout.fillWidth: true
+                            Layout.bottomMargin: 24
+                            spacing: 4
+                            Text {
+                                text: qsTr("CONTROL PANEL / %1").arg(root.activeTab.toUpperCase())
+                                color: Colors.textMuted
+                                font.family: Theme.fontMicro.family; font.pixelSize: Theme.fontMicro.pixelSize
+                                font.letterSpacing: 1
+                            }
+                            Text {
+                                width: parent.width
+                                text: root.tabTitle()
+                                color: Colors.textPrimary
+                                font.family: Theme.fontHeadline.family; font.pixelSize: Theme.fontHeadline.pixelSize; font.weight: Theme.fontHeadline.weight
+                                font.letterSpacing: -0.5
+                                wrapMode: Text.WordWrap
+                            }
+                        }
 
                         // ════════════════════════ GENERAL ═══════════════════════
                         ColumnLayout {
@@ -1938,8 +1978,8 @@ Item {
                             }
 
                             // Links row (Electron: horizontal, hairline dividers)
-                            RowLayout {
-                                Layout.alignment: Qt.AlignHCenter
+                            Flow {
+                                Layout.fillWidth: true
                                 Layout.topMargin: Theme.padSection
                                 spacing: Theme.gapCard
 

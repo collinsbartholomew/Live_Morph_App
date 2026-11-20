@@ -2,21 +2,18 @@ import QtQuick
 import QtQuick.Controls
 import LiveMorph
 
-/**
- * Obsidian Hex scrollbar: slim rounded thumb; accent-colored while dragged,
- * strong border color on hover, hidden when content fits.
- * Attach: Flickable { ScrollBar.vertical: StyledScrollBar { } }
- */
 ScrollBar {
     id: control
     property bool thin: false
-    implicitWidth: thin ? 4 : 6
+    implicitWidth: thin ? 12 : 14
+    leftPadding: thin ? 4 : 4
+    rightPadding: thin ? 4 : 4
     contentItem: Rectangle {
-        implicitWidth: control.implicitWidth
+        implicitWidth: control.thin ? 4 : 6
         radius: Theme.radiusFull
-        color: control.pressed ? Colors.accent60
-             : control.interactive && control.hovered ? Colors.surfaceBorderStrong
-             : Colors.surfaceElevated
-        opacity: control.size < 1.0 || control.pressed || control.hovered ? 1.0 : 0.0
+        color: control.pressed ? Colors.accent80
+             : control.interactive && control.hovered ? Colors.textMuted
+             : Colors.surfaceBorderStrong
+        opacity: control.size < 1.0 || control.pressed || control.hovered ? 0.9 : 0.0
     }
 }

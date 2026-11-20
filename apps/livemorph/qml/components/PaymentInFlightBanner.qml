@@ -16,9 +16,9 @@ Rectangle {
     property int elapsedSec: 0
     property string mode: "card" // card | crypto
     property string statusHint: ""
-    // Poll caps (Electron): card 60 polls (5 min), crypto 720 polls (60 min)
+    // Poll caps: card 60 × 5s (5 min), crypto 360 × 10s (60 min)
     property int pollCount: 0
-    readonly property int pollCap: mode === "crypto" ? 720 : 60
+    readonly property int pollCap: mode === "crypto" ? 360 : 60
 
     signal openPanel()
 
@@ -166,12 +166,11 @@ Rectangle {
         onTriggered: root.elapsedSec++
     }
 
-    // Auto-poll order status every 5s. Electron caps: 60 polls (5 min) for
-    // card providers, 720 polls (60 min) for crypto — the old Qt timer ran
-    // uncapped for as long as the banner was visible.
+    // Auto-poll within the backend's per-user status rate limit. The drawer
+    // uses the same crypto cadence so simultaneous pollers stay below 20/min.
     Timer {
         running: root.active && root.orderId.length > 0 && root.pollCount < root.pollCap
-        interval: 5000
+        interval: root.mode === "crypto" ? 10000 : 5000
         repeat: true
         onTriggered: {
             root.pollCount++

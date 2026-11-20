@@ -74,12 +74,10 @@ async fn settings_credit_burn_rate(
 #[get("/settings/platform-settings")]
 async fn settings_platform_settings(req: HttpRequest) -> HttpResponse {
     let p = product(&req);
-    let support = std::env::var("SUPPORT_EMAIL")
-        .unwrap_or_else(|_| "support@platform.local".into());
-    let min_app = std::env::var("APP_LATEST_VERSION")
-        .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").into());
+    let support = crate::runtime_env::support_email();
+    let min_app = crate::runtime_env::app_latest_version();
     HttpResponse::Ok().json(json!({
-        "maintenance": false,
+        "maintenance": crate::runtime_env::app_maintenance(),
         "support_email": support,
         "min_app_version": min_app,
         "product": p.as_str()
@@ -109,9 +107,12 @@ async fn settings_payment_gateway(cfg: web::Data<Arc<Config>>, req: HttpRequest)
 }
 
 #[get("/settings/streaming-availability")]
-async fn settings_streaming_availability(req: HttpRequest) -> HttpResponse {
+async fn settings_streaming_availability(
+    cfg: web::Data<Arc<Config>>,
+    req: HttpRequest,
+) -> HttpResponse {
     let p = product(&req);
-    let available = crate::services::streaming::streaming_available();
+    let available = crate::services::streaming::streaming_available(&cfg);
     HttpResponse::Ok().json(json!({
         "available": available.0,
         "reason": available.1,
@@ -140,7 +141,14 @@ async fn settings_crypto(cfg: web::Data<Arc<Config>>, req: HttpRequest) -> HttpR
     HttpResponse::Ok().json(json!({
         "enabled": enabled,
         "fee_usd": 0.0,
-        "base_amount_usd": cfg.min_credits_to_start,
+        // USD cost of the minimum start credit balance (credits → seconds →
+        // USD), NOT the raw credit count labelled as dollars.
+        "base_amount_usd": if cfg.credits_per_second > 0.0 {
+            cfg.min_credits_to_start / cfg.credits_per_second * cfg.decart_usd_per_second
+        } else {
+            0.0
+        },
+        "base_amount_credits": cfg.min_credits_to_start,
         "coins": coins,
         "product": p.as_str(),
     }))
@@ -148,9 +156,7 @@ async fn settings_crypto(cfg: web::Data<Arc<Config>>, req: HttpRequest) -> HttpR
 
 #[get("/settings/dashboard-maintenance")]
 async fn settings_dashboard_maintenance() -> HttpResponse {
-    let maintenance = std::env::var("APP_MAINTENANCE")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+    let maintenance = crate::runtime_env::app_maintenance();
     HttpResponse::Ok().json(json!({
         "maintenance": maintenance,
         "allowed": !maintenance,
@@ -178,10 +184,10 @@ async fn settings_api_endpoint(cfg: web::Data<Arc<Config>>, req: HttpRequest) ->
 
 #[get("/settings/dashboard-notification")]
 async fn settings_dashboard_notification() -> HttpResponse {
-    let title = std::env::var("DASHBOARD_NOTIFICATION_TITLE").ok();
-    let message = std::env::var("DASHBOARD_NOTIFICATION_MESSAGE").ok();
+    let title = crate::runtime_env::dashboard_notification_title();
+    let message = crate::runtime_env::dashboard_notification_message();
     match (title, message) {
-        (Some(title), Some(message)) if !title.is_empty() && !message.is_empty() => {
+        (Some(title), Some(message)) => {
             HttpResponse::Ok().json(json!({
                 "notification": {
                     "id": "dashboard",
@@ -198,13 +204,12 @@ async fn settings_dashboard_notification() -> HttpResponse {
 /// must use the `/api/v1/realtime` signaling proxy. Requires a signed-in user.
 #[get("/settings/engine-key")]
 async fn settings_engine_key(
+    cfg: web::Data<Arc<Config>>,
     req: HttpRequest,
 ) -> AppResult<HttpResponse> {
     crate::auth::middleware::require_user(&req)?;
     let p = product(&req);
-    let configured = std::env::var("DECART_API_KEY")
-        .map(|k| !k.trim().is_empty())
-        .unwrap_or(false);
+    let configured = !cfg.decart_api_key.trim().is_empty();
     if configured {
         Ok(HttpResponse::Ok().json(json!({
             "mode": "proxy",
@@ -223,16 +228,19 @@ async fn settings_engine_key(
 }
 
 #[post("/settings/engine-key/next")]
-async fn settings_engine_key_next(req: HttpRequest) -> AppResult<HttpResponse> {
+async fn settings_engine_key_next(
+    cfg: web::Data<Arc<Config>>,
+    req: HttpRequest,
+) -> AppResult<HttpResponse> {
     crate::auth::middleware::require_user(&req)?;
     let p = product(&req);
-    let configured = std::env::var("DECART_API_KEY")
-        .map(|k| !k.trim().is_empty())
-        .unwrap_or(false);
+    let configured = !cfg.decart_api_key.trim().is_empty();
     Ok(HttpResponse::Ok().json(json!({
         "ok": true,
         "mode": "proxy",
         "configured": configured,
+        "rotated": false,
+        "message": "proxy mode: the upstream key is static server-side configuration — rotate DECART_API_KEY on the host and restart",
         "product": p.as_str(),
     })))
 }
@@ -280,13 +288,21 @@ async fn settings_engine_key_admin_impl(
     }
     if let Some(ref key) = body.engine_key {
         if !key.trim().is_empty() {
-            // Session-scoped key: store in-process only (proxy mode remains canonical).
-            tracing::info!(product = %p.as_str(), "admin engine key set for session");
+            // Never claim a key was installed/rotated when nothing is stored:
+            // proxy mode has exactly one upstream key (DECART_API_KEY env).
+            return HttpResponse::BadRequest().json(json!({
+                "ok": false,
+                "error": "engine key overrides are not supported in proxy mode — set DECART_API_KEY on the host and restart",
+                "supported": false,
+                "mode": "proxy",
+                "product": p.as_str(),
+            }));
         }
     }
     HttpResponse::Ok().json(json!({
         "ok": true,
         "mode": "proxy",
+        "message": "no engine key supplied; nothing changed",
         "product": p.as_str(),
     }))
 }

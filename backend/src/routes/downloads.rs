@@ -18,25 +18,17 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 async fn downloads_list(req: HttpRequest) -> AppResult<HttpResponse> {
     let _auth = require_user(&req)?;
     let product = ProductId::from_request(&req);
-    let items = std::env::var("DOWNLOAD_URLS")
-        .map(|s| {
-            s.split(',')
-                .filter(|v| !v.trim().is_empty())
-                .enumerate()
-                .map(|(i, v)| {
-                    let v = v.trim();
-                    json!({
-                        "id": format!("dl-{}", i + 1),
-                        "name": std::env::var(format!("DOWNLOAD_NAME_{}", i + 1))
-                            .unwrap_or_else(|_| format!("Tutorial {}", i + 1)),
-                        "url": v,
-                        "type": std::env::var(format!("DOWNLOAD_TYPE_{}", i + 1))
-                            .unwrap_or_else(|_| "video/mp4".into()),
-                    })
-                })
-                .collect::<Vec<_>>()
+    let items = crate::runtime_env::download_items()
+        .iter()
+        .map(|d| {
+            json!({
+                "id": d.id,
+                "name": d.name,
+                "url": d.url,
+                "type": d.mime,
+            })
         })
-        .unwrap_or_default();
+        .collect::<Vec<_>>();
     Ok(HttpResponse::Ok().json(json!({
         "downloads": items,
         "product": product.as_str(),

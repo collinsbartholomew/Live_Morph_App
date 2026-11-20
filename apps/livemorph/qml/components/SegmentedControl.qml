@@ -29,7 +29,7 @@ Rectangle {
         root.activated(vals[idx])
     }
 
-    implicitHeight: 36
+    implicitHeight: 40
     implicitWidth: row.implicitWidth + 8
     radius: Theme.radiusSm
     color: Colors.surfaceBase
@@ -59,7 +59,7 @@ Rectangle {
                 width: root.equalWidths
                        ? (root.width - 8 - (root.model.length - 1) * 2) / root.model.length
                        : segRow.implicitWidth + 20
-                height: 30
+                height: 32
                 radius: Theme.radiusXs
                 color: seg.active ? Colors.accent
                      : (segMa.containsMouse ? Colors.overlay50 : Colors.transparent)
@@ -74,7 +74,7 @@ Rectangle {
                     // icon (with an icon, the icon itself marks the selection;
                     // swapping glyphs would shift the segment width on select).
                     Hexagon {
-                        visible: seg.active && seg.itemIcon.length === 0
+                        visible: false
                         size: 8
                         lineWidth: 0
                         fillColor: Colors.textOnAccent
@@ -97,7 +97,9 @@ Rectangle {
                         elide: Text.ElideRight
                         // Content-sized by default; only elides when the parent
                         // constrains the segment (equalWidths).
-                        width: root.equalWidths ? seg.width - 20 : implicitWidth
+                        width: root.equalWidths
+                               ? Math.max(0, seg.width - 28 - (seg.itemIcon.length > 0 ? Theme.iconXs + 5 : 0))
+                               : implicitWidth
                         horizontalAlignment: Text.AlignHCenter
                         anchors.verticalCenter: parent.verticalCenter
                     }

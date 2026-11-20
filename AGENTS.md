@@ -29,6 +29,7 @@ cd backend && cargo check               # fast compile check
 cd backend && cargo test                # in-src unit tests + tests/security_hardening.rs
 cd backend && bash tests/integration_tests.sh   # needs a running backend at 127.0.0.1:3874
 cd backend && bash scripts/endpoint_smoke.sh
+cd backend && bash scripts/check-config.sh release   # no-DB config preflight; ENV_FILE=.env.production selects a named file
 ```
 
 `.env.example` ships `RUST_ENV=development`, so a plain `cp .env.example .env` boots without the production guards. Only set `RUST_ENV=production` once the checklist in gotcha 2 is satisfied.
@@ -52,10 +53,12 @@ BASE=http://host:port bash verify.sh   # target a non-default backend
 Frontend (needs Qt 6.5+ with Multimedia, WebSockets, Svg, Test, LinguistTools; C++20; plus GStreamer 1.x dev packages with `gstreamer-webrtc-1.0`):
 
 ```bash
-cd apps/livemorph && ./build.sh                       # Release build into build/ (set CMAKE_PREFIX_PATH to your Qt kit if needed)
+cd apps/livemorph && cp .env.example .env            # set LIVEMORPH_API_URL before compiling (required)
+cd apps/livemorph && ./build.sh                       # Release build + CTest + QML gates (VERIFY=0 skips checks; CMAKE_PREFIX_PATH selects Qt)
 # or: cmake --preset debug && cmake --build build    # presets in CMakePresets.json (debug/release)
 cmake --build build
-QT_QPA_PLATFORM=offscreen ./build/bin/LiveMorph_smoke_test   # smoke test (or `ctest` in the build dir — CTest is wired up, see gotcha 12)
+QT_QPA_PLATFORM=offscreen ./build/bin/LiveMorph_smoke_test   # model/i18n smoke tests (or `ctest` in the build dir)
+QT_QPA_PLATFORM=offscreen ./build/bin/LiveMorph_frontend_integration_test   # loopback network/session/state/security integration tests
 ./build/bin/LiveMorph --verify-qml                    # headless QML load check (sets QPA=offscreen itself); used by verify.sh
 ./build/bin/LiveMorph --shot /tmp/shots               # headless screenshot pass: walks fixed UI states, saves one PNG per state
 ./build/bin/LiveMorph --dev                           # QML hot reload from the source qml/ tree
@@ -63,7 +66,7 @@ QT_QPA_PLATFORM=offscreen ./build/bin/LiveMorph_smoke_test   # smoke test (or `c
 
 Preset binary dirs differ: `debug` → `build/`, `release` → `build-release/`, `relwithdebinfo` → `build-relwithdeb/` (`CMakePresets.json`). The app binary always lands in `<build-dir>/bin/LiveMorph` (`CMAKE_RUNTIME_OUTPUT_DIRECTORY`).
 
-Deploy: `backend/Dockerfile` is the multi-stage production image (healthcheck hits `/api/v1/health`; `rust-toolchain.toml` is kept in the build context so the pin applies). The bundled `docker-compose.yml` is a local dev stack (`RUST_ENV=development` + non-TLS `mongodb://mongo:27017`, loopback-published) — for staging/prod set a TLS Mongo URI and `RUST_ENV=production` (gotcha 18). Desktop packaging scripts live in `apps/livemorph/packaging/` (`deploy-linux.sh`, `deploy-macos.sh`, `deploy-windows.ps1`); CPack is configured in `CMakeLists.txt` (TGZ/DEB on Linux, DragNDrop on macOS, ZIP/NSIS on Windows).
+Deploy: `docs/DEPLOYMENT.md` is the authoritative local/production/Kaggle/desktop guide. `backend/Dockerfile` is the multi-stage production image (healthcheck hits `/api/v1/health`; locked Rust 1.88 build). The bundled `docker-compose.yml` defaults to a local dev stack (`RUST_ENV=development` + non-TLS `mongodb://mongo:27017`, loopback-published) — for staging/prod select `LIVEMORPH_BACKEND_ENV_FILE`, set a TLS Mongo URI and `RUST_ENV=production` (gotcha 18). Backend preflight supports `LIVEMORPH_ENV_FILE=/path/to/env` without shell-sourcing secrets. Desktop packaging scripts live in `apps/livemorph/packaging/` and fail on missing runtimes or QML verification errors; CPack is configured in `CMakeLists.txt`.
 
 ## Backend architecture
 
@@ -98,13 +101,13 @@ MONGODB_DB_SECONDARY=myclient_db  # its isolated Mongo database (defaults to SEC
 ## Frontend architecture
 
 - Qt6 QML app, module URI `LiveMorph`, binary `build/bin/LiveMorph`. C++ (`src/core`, `src/services`, `src/models`) is exposed to QML as **singleton instances** registered in `apps/livemorph/src/main.cpp:384-404`: `App`, `Auth`, `Session`, `CameraCtrl`, `Recording`, `StreamServer`, `VirtualCamera`, `Config`, `I18n`, `Notifier`, `Catalog`, `Presets`, `Backend`, `Signaling`. `src/core` also carries internal (non-singleton) helpers: `SecureStore`, `DeviceIdentity`, `MorphRecorder`.
-- `BackendClient` talks to `http://127.0.0.1:3874` (configurable at runtime via `Config.apiBaseUrl`, default at `BackendClient.cpp:46`), `WebRtcSignalingClient` does WS signaling; media goes through the shared `GstRtcPeer` (GStreamer `webrtcbin`), **not** WebEngine (see `tools/spike-m0/M0_REPORT.md` — webrtcbin interop proven; the only unproven step was CGNAT/no-TURN, environmental).
+- `BackendClient` uses the API origin read from `apps/livemorph/.env` at CMake configure time (`LIVEMORPH_API_URL`, exposed as `Config.apiBaseUrl`), with explicit Settings and process-env overrides; there is no hardcoded localhost fallback. `WebRtcSignalingClient` does WS signaling; media goes through the shared `GstRtcPeer` (GStreamer `webrtcbin`), **not** WebEngine (see `tools/spike-m0/M0_REPORT.md` — webrtcbin interop proven; the only unproven step was CGNAT/no-TURN, environmental).
 - The client sends `X-Frontend-Id: livemorph` **and** `X-Client-Product: livemorph` on REST (`BackendClient.cpp:79-80`) and `frontend_id=livemorph` on the WS query (`WebRtcSignalingClient.cpp:68`).
 - `SessionManager` is the orchestrator: it owns the session state machine (`enum class Status { Idle, Connecting, Connected, Generating, Cooldown, InsufficientCredits, Error }`, `src/core/SessionManager.h:56`), the reconnect ladder (5 attempts with exponential backoff + jitter, 35 s first-frame watchdog — `SessionManager.h:206-218`, `SessionManager.cpp:117-137`), and the native peer lifecycle.
 - `StreamServer` serves local MJPEG (default port 4789, `STREAM_DEFAULT_PORT`) for OBS Browser Source / virtual camera; JPEG encoding is off the GUI thread and the frame mailbox is latest-wins. Frames stay client-side.
 - Notifications have a **single funnel**: C++ signals → `Notifier` store → toast + notification center (`apps/livemorph/src/main.cpp:296-325`). Route new user-facing messages through `AppController::notify` / `Notifier::push`, not ad-hoc QML dialogs.
 - Settings live in `QSettings` via `ConfigManager` (`src/core/ConfigManager.h`) and are exposed as `Q_PROPERTY` pairs with `NOTIFY` signals; changing the API base URL re-points both HTTP and the cached WS sockets (`main.cpp:250,268-270`).
-- Single-instance guard via `QLocalServer` key `livemorph-single-instance` (`main.cpp:494`); deep links use the `livemorph://` URL scheme (`main.cpp:134,504,601,803-813`).
+- Single-instance guard via `QLocalServer` key `livemorph-single-instance` (`main.cpp:494`); deep links use the `omegarevelation://` URL scheme (`main.cpp:134,504,601,803-813`) with legacy `livemorph://` links still accepted for older OS protocol registrations. All persistent QSettings stores use the explicit `LiveMorph`/`LiveMorph` key regardless of the `Omega Revelation PLC` organization branding.
 - App-wide: `QQuickStyle::setStyle("Basic")`, a hand-set dark `QPalette` (`main.cpp:221-232`, native chrome only), and embedded Maple Mono fonts loaded from `:/fonts/` (`main.cpp:204-209`; fontconfig fallback was resolving "Inter" to Noto Sans).
 
 ### i18n (not Qt Linguist runtime)
@@ -149,8 +152,8 @@ The UI is the **"Obsidian Hex"** system (see the header comments in `qml/theme/C
 - **Backend unit tests**: `cargo test` runs 19 in-source `#[cfg(test)]` tests (e.g. `backend/src/config.rs:690` onward) plus 15 in `backend/tests/security_hardening.rs` (HMAC verify, JWT secret policy, token package economics) — 34 total, all green. The tree currently carries ~10 compiler warnings (dead code, unused imports) — `cargo test` still passes; don't treat existing warnings as a regression.
 - **Backend integration**: `backend/tests/integration_tests.sh` is bash + curl against a **running** backend, using `X-Frontend-Id` headers to target products. It registers throwaway users per run, so it is safe to re-run but it does mutate the database. The second product slot is addressed with `P2_*` variables and the `P2_ID` wire id (default `secondary`).
 - **Endpoint smoke**: `backend/scripts/endpoint_smoke.sh` asserts 2xx on the public/unauthenticated endpoint surface for both product slots.
-- **Frontend smoke**: `apps/livemorph/tests/smoke.cpp` (QtTest, 7 cases) exercises only the dependency-free models (`CharacterCatalogModel`, `PresetModel`). Run the binary directly with `QT_QPA_PLATFORM=offscreen`, or `ctest` from the build dir (`include(CTest)` is set and `add_test` carries `QT_QPA_PLATFORM=offscreen` — see gotcha 12).
-- **QML load gate**: `./build/bin/LiveMorph --verify-qml` is the real UI regression gate and the only frontend check `verify.sh` runs. It installs a Qt message handler that flags runtime-only QML errors ("Cannot assign to non-existent", "is not a type", "Cannot create component", "object creation failed", "Required property"), loads the UI headless, flips to the dashboard so every dashboard component instantiates, and exits non-zero on any match (`apps/livemorph/src/main.cpp:65` for the message handler, `700-713` for the dashboard flip and exit). It sets `QT_QPA_PLATFORM=offscreen` itself; benign warnings (missing `omega.png` asset, VDPAU probe) print but do not fail the gate.
+- **Frontend smoke + integration**: `apps/livemorph/tests/smoke.cpp` exercises dependency-free models and i18n. `apps/livemorph/tests/frontend_integration.cpp` plus `tests/loopback_api.h` adds 20 loopback integration cases for API contracts, auth, payments, realtime lifecycle, settings, recording, storage, controller state, and security. Run `LiveMorph_smoke_test` and `LiveMorph_frontend_integration_test` directly with `QT_QPA_PLATFORM=offscreen`, or `ctest` from the build dir (both are registered with `add_test`; see gotcha 12).
+- **QML load gate**: `./build/bin/LiveMorph --verify-qml` is the UI-specific runtime regression gate and runs alongside the CTest suites. It installs a Qt message handler that flags runtime-only QML errors ("Cannot assign to non-existent", "is not a type", "Cannot create component", "object creation failed", "Required property"), loads the UI headless, flips to the dashboard so every dashboard component instantiates, and exits non-zero on any match (`apps/livemorph/src/main.cpp:65` for the message handler, `700-713` for the dashboard flip and exit). It sets `QT_QPA_PLATFORM=offscreen` itself; benign warnings (missing `omega.png` asset, VDPAU probe) print but do not fail the gate.
 - **`--shot <dir>`**: headless screenshot pass (`main.cpp:167` for the flag, `714-753` for the state walk) — loads the UI offscreen, walks a fixed state list (auth, dashboard, notifications, settings, buy-credits, whats-new, lock screen, narrow 1024x640) on a timer schedule, and saves one PNG per state into `<dir>`. Useful for visually reviewing UI changes without a display.
 - No unit-test framework exists for the C++ services; keep new C++ logic testable through the models or the `--verify-qml` path.
 

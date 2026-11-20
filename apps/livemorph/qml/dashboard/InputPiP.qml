@@ -350,9 +350,10 @@ Rectangle {
         z: Theme.zLocal5
 
         Rectangle {
+            id: lostCard
             anchors.centerIn: parent
-            width: lostCol.implicitWidth + 40
-            implicitHeight: lostCol.implicitHeight + 32
+            width: Math.min(parent.width - 12, 260)
+            implicitHeight: lostCol.implicitHeight + 24
             radius: Theme.radiusLg
             color: Colors.surfaceOverlay
             border.color: Colors.statusError40
@@ -361,6 +362,7 @@ Rectangle {
             Column {
                 id: lostCol
                 anchors.centerIn: parent
+                width: lostCard.width - 24
                 spacing: Theme.spacingSm
                 Item {
                     width: 48; height: 48
@@ -391,9 +393,12 @@ Rectangle {
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width
                     text: qsTr("Check your camera in Settings")
                     color: Colors.textSecondary
                     font.pixelSize: Theme.fontLabel.pixelSize
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
                 }
             }
         }

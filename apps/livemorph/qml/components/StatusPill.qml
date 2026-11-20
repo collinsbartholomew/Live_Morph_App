@@ -39,7 +39,7 @@ Rectangle {
         }
     }
 
-    implicitWidth: row.implicitWidth + 20
+    implicitWidth: Math.min(row.implicitWidth + 20, 260)
     implicitHeight: 24
     // Long/server-derived status text must truncate, never push the pill (and
     // the TopBar cluster behind it) out of place.
@@ -69,7 +69,7 @@ Rectangle {
         Text {
             text: root.effectiveText
             textFormat: Text.PlainText // status text may carry server-derived error prose
-            width: Math.min(implicitWidth, Math.max(0, root.width - 36))
+            width: Math.min(implicitWidth, 220)
             elide: Text.ElideRight
             color: root.isError ? Colors.statusError
                  : root.isActive ? Colors.statusSuccess

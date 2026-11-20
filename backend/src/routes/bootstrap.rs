@@ -107,18 +107,12 @@ fn shared_decart(cfg: &Config) -> Value {
 
 fn shared_ui(_cfg: &Config) -> Value {
 	json!({
-		"min_app_version": std::env::var("APP_LATEST_VERSION")
-			.unwrap_or_else(|_| env!("CARGO_PKG_VERSION").into()),
-		"force_update": std::env::var("APP_FORCE_UPDATE")
-			.map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-			.unwrap_or(false),
+		"min_app_version": crate::runtime_env::app_latest_version(),
+		"force_update": crate::runtime_env::app_force_update(),
 		// Same source as /settings/dashboard-maintenance so bootstrap clients
 		// actually see maintenance mode.
-		"maintenance": std::env::var("APP_MAINTENANCE")
-			.map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-			.unwrap_or(false),
-		"support_email": std::env::var("SUPPORT_EMAIL")
-			.unwrap_or_else(|_| "support@platform.local".into()),
+		"maintenance": crate::runtime_env::app_maintenance(),
+		"support_email": crate::runtime_env::support_email(),
 	})
 }
 

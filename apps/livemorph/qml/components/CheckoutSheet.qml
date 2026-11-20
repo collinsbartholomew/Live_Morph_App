@@ -180,6 +180,7 @@ Item {
 
                     // Status pill
                     Rectangle {
+                        visible: false
                         radius: Theme.radiusXs
                         color: Colors.accent10
                         border.color: Colors.accent30
@@ -259,7 +260,7 @@ Item {
                         color: Colors.textSecondary
                         font.pixelSize: Theme.fontSmall.pixelSize
                         lineHeight: 1.45
-                        text: qsTr("Checkout opened in your system browser. After paying, come back and tap Recheck to confirm.")
+                        text: root.statusText + "\n\n" + qsTr("Checkout opened in your system browser. After paying, come back and tap Recheck to confirm.")
                     }
 
                     // Order chip

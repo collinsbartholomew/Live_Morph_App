@@ -137,8 +137,8 @@ void StreamServer::start()
     // Generate ONCE per process (not on every start) so a stop/start cycle
     // doesn't mint a new token and 401 the OBS Browser Source holding the old URL.
     if (m_authToken.isEmpty())
-        m_authToken = QString::number(QRandomGenerator::global()->generate64(), 16)
-                    + QString::number(QRandomGenerator::global()->generate64(), 16);
+        m_authToken = QString::number(QRandomGenerator::system()->generate64(), 16)
+                    + QString::number(QRandomGenerator::system()->generate64(), 16);
     if (m_mode.isEmpty())
         m_mode = QStringLiteral("obs");
     emit runningChanged();
@@ -301,24 +301,24 @@ void StreamServer::onNewConnection()
             }
             if (diff != 0) {
                 sock->write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                sock->flush();
                 sock->disconnectFromHost();
-                sock->deleteLater();
                 return;
             }
             if (path == QByteArrayLiteral("/status")) {
                 sock->write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
                             "Connection: close\r\nCache-Control: no-cache\r\n\r\n" +
                             statusJson());
+                sock->flush();
                 sock->disconnectFromHost();
-                sock->deleteLater();
                 return;
             }
             if (path == QByteArrayLiteral("/obs") || path == QByteArrayLiteral("/obs/")) {
                 sock->write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
                             "Connection: close\r\nCache-Control: no-cache\r\n\r\n" +
                             obsHtml());
+                sock->flush();
                 sock->disconnectFromHost();
-                sock->deleteLater();
                 return;
             }
             // Default: /stream multipart (also tolerate empty path from raw sockets)

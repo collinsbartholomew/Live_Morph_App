@@ -12,17 +12,17 @@ import QtQuick
 QtObject {
     // Surfaces (layered depth on a true-black canvas, clear luminance ladder)
     readonly property color surfaceBase:         "#000000"
-    readonly property color surfaceRaised:       "#0a0a0a"
-    readonly property color surfaceRaised40:     "#660a0a0a"
-    readonly property color surfaceOverlay:      "#141414"
-    readonly property color surfaceElevated:     "#1a1a1a"
-    readonly property color surfaceHover:        "#242424"
-    readonly property color surfaceFocus:        "#0d0d0d"
-    readonly property color surfaceBorder:       "#2a2a2a"
-    readonly property color surfaceBorderSubtle: "#1c1c1c"
-    readonly property color surfaceBorderStrong: "#404040"
-    readonly property color surfaceGlass:        "#141414"
-    readonly property color surfaceGlassStrong:  "#0a0a0a"
+    readonly property color surfaceRaised:       "#080808"
+    readonly property color surfaceRaised40:     "#66080808"
+    readonly property color surfaceOverlay:      "#101010"
+    readonly property color surfaceElevated:     "#181818"
+    readonly property color surfaceHover:        "#222222"
+    readonly property color surfaceFocus:        "#0c0c0c"
+    readonly property color surfaceBorder:       "#303030"
+    readonly property color surfaceBorderSubtle: "#1d1d1d"
+    readonly property color surfaceBorderStrong: "#484848"
+    readonly property color surfaceGlass:        "#101010"
+    readonly property color surfaceGlassStrong:  "#080808"
     // Alpha variants of the surfaces
     readonly property color overlay20:           "#33141414"
     readonly property color overlay30:           "#4d141414"
@@ -45,7 +45,7 @@ QtObject {
     // Text (AA on surfaceBase: primary 21:1, secondary 12.6:1, muted 5.9:1)
     readonly property color textPrimary:         "#ffffff"
     readonly property color textSecondary:       "#b8b8b8"
-    readonly property color textMuted:           "#7f7f7f"
+    readonly property color textMuted:           "#8c8c8c"
     readonly property color textInverse:         "#000000"
     readonly property color textMuted10:         "#1a7f7f7f"
     readonly property color textMuted20:         "#337f7f7f"
@@ -207,10 +207,10 @@ QtObject {
     readonly property color toastErrorBg:        "#f21f0c0c"
 
     // ── Honeycomb texture tokens (signature pattern; see Honeycomb.qml) ──
-    readonly property color honeycombLine:        "#12ffffff"
-    readonly property color honeycombLineStrong:  "#2effffff"
-    readonly property color honeycombLineFaint:   "#0affffff"
-    readonly property color honeycombFill:        "#06ffffff"
+    readonly property color honeycombLine:        "#16ffffff"
+    readonly property color honeycombLineStrong:  "#38ffffff"
+    readonly property color honeycombLineFaint:   "#0bffffff"
+    readonly property color honeycombFill:        "#08ffffff"
     readonly property color honeycombCell:        "#ffffff"   // single highlighted cell
     readonly property color honeycombCellBg:      "#141414"
     readonly property color honeycombOnBlack:     "#1affffff" // lines over pure black

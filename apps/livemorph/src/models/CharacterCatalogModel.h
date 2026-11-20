@@ -17,6 +17,8 @@ struct CharacterEntry {
     bool isPremium = false;
     bool isStarter = false;
     bool isHidden = false;
+    bool isUserOwned = false;
+    bool isFavorite = false;
 };
 
 class CharacterCatalogModel : public QAbstractListModel
@@ -64,6 +66,8 @@ public:
 public slots:
     void load();
     void loadFromBackend(const QVariantList &entries);
+    void mergeUserCharacters(const QVariantList &entries);
+    void upsertUserCharacter(const QVariantMap &entry);
     QVariantMap get(int index) const;
     int indexOfId(const QString &id) const;
     int savedCount() const; // user characters (non-starters) currently listed
@@ -92,6 +96,8 @@ signals:
     void loadingChanged();
     void categoriesChanged();
     void characterDeleteRequested(const QString &id);
+    void characterCreateRequested(const QString &name, const QString &prompt, const QString &imageUrl);
+    void characterUpdateRequested(const QString &id, const QString &name, const QString &prompt, bool isFavorite);
     void characterAdded(const QString &id);
 
 private:

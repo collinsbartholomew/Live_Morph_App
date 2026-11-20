@@ -6,7 +6,7 @@
 #include "ConfigManager.h"
 
 namespace {
-const QString kDefaultApiBaseUrl = QStringLiteral("http://127.0.0.1:3874");
+const QString kDefaultApiBaseUrl = QStringLiteral(LIVEMORPH_API_BASE_URL);
 
 bool isLoopbackHost(const QString &host)
 {
@@ -14,32 +14,35 @@ bool isLoopbackHost(const QString &host)
         || host == QLatin1String("::1") || host == QLatin1String("[::1]");
 }
 
+bool isValidModelId(const QString &model)
+{
+    static const QRegularExpression modelRe(QStringLiteral("^[A-Za-z0-9._-]{1,64}$"));
+    return modelRe.match(model).hasMatch();
+}
+
 // Normalize a candidate API base URL into a safe value, or return empty when
 // the input is unusable. Shared by the setter AND the getter so a persisted or
 // env-provided value can never bypass the plaintext-remote-host rule.
 QString normalizeApiBaseUrl(const QString &raw)
 {
-    QString v = raw.trimmed();
-    while (v.endsWith(QLatin1Char('/')))
-        v.chop(1);
-    if (v.isEmpty())
+    QString value = raw.trimmed();
+    if (value.isEmpty())
         return {};
-    // Only allow http(s) with a real host — prevent file:/javascript:/etc.
-    // scheme injection into the network stack.
-    if (!v.startsWith(QLatin1String("http://")) && !v.startsWith(QLatin1String("https://")))
-        v = QStringLiteral("http://") + v;
-    const QUrl url(v);
-    if ((url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https"))
-        || url.host().isEmpty())
+    if (!value.contains(QLatin1String("://")))
+        value.prepend(QStringLiteral("http://"));
+    QUrl url(value, QUrl::StrictMode);
+    if (!url.isValid() || url.host().isEmpty()
+        || (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https"))
+        || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment()) {
         return {};
-    if (url.scheme() == QLatin1String("http") && !isLoopbackHost(url.host())) {
-        // The JWT travels in the Authorization header — plain http to ANY
-        // non-loopback host (including *.local mDNS names) would expose it on
-        // the wire. Upgrade so the effective value can never send the token in
-        // cleartext.
-        v.replace(QLatin1String("http://"), QLatin1String("https://"));
     }
-    return v;
+    QString path = url.path();
+    while (path.endsWith(QLatin1Char('/')))
+        path.chop(1);
+    url.setPath(path);
+    if (url.scheme() == QLatin1String("http") && !isLoopbackHost(url.host()))
+        url.setScheme(QStringLiteral("https"));
+    return url.toString(QUrl::FullyEncoded);
 }
 } // namespace
 
@@ -180,10 +183,10 @@ QString ConfigManager::defaultModel() const
 {
     // 1. Explicit user choice wins.
     const QString saved = m_settings.value(QStringLiteral("decart/model")).toString();
-    if (!saved.isEmpty())
+    if (isValidModelId(saved))
         return saved;
     // 2. Server-advertised default from bootstrap (decart.default_model).
-    if (!m_serverDefaultModel.isEmpty())
+    if (isValidModelId(m_serverDefaultModel))
         return m_serverDefaultModel;
     // 3. Hardcoded fallback.
     return QStringLiteral("lucy-2.6");
@@ -192,6 +195,8 @@ QString ConfigManager::defaultModel() const
 void ConfigManager::setServerDefaultModel(const QString &m)
 {
     const QString v = m.trimmed();
+    if (!v.isEmpty() && !isValidModelId(v))
+        return;
     if (v == m_serverDefaultModel)
         return;
     m_serverDefaultModel = v;
@@ -204,9 +209,8 @@ void ConfigManager::setDefaultModel(const QString &m)
 {
     // Validate: a model id is a short slug; anything else would 400 every
     // session start server-side (the backend only accepts allow-listed ids).
-    static const QRegularExpression modelRe(QStringLiteral("^[A-Za-z0-9._-]{1,64}$"));
     const QString v = m.trimmed();
-    if (v.isEmpty() || !modelRe.match(v).hasMatch())
+    if (v.isEmpty() || !isValidModelId(v))
         return; // reject — keep the previous valid model
     if (defaultModel() == v) return;
     m_settings.setValue(QStringLiteral("decart/model"), v);
@@ -225,22 +229,28 @@ QString ConfigManager::apiBaseUrl() const
         if (!normalized.isEmpty())
             return normalized;
     }
-    // 2. Persisted user setting (from Settings drawer) — same normalization:
-    // a stale/hand-edited plaintext remote value is upgraded, not trusted.
+    // 2. An explicit choice made through Settings wins over the build default.
+    // Legacy values without this marker are ignored, so an old localhost value
+    // cannot override the API origin selected in the frontend env file.
     const QString saved = m_settings.value(QStringLiteral("api/baseUrl")).toString();
-    if (!saved.isEmpty()) {
+    if (m_settings.value(QStringLiteral("api/baseUrlUserSet"), false).toBool() && !saved.isEmpty()) {
         const QString normalized = normalizeApiBaseUrl(saved);
         if (!normalized.isEmpty())
             return normalized;
     }
-    // 3. Fall back to local dev default
-    return kDefaultApiBaseUrl;
+    // 3. Use the API origin read from the frontend env file at configure time.
+    return normalizeApiBaseUrl(kDefaultApiBaseUrl);
 }
 
 bool ConfigManager::envApiUrlOverrideActive()
 {
     const QByteArray envUrl = qgetenv("LIVEMORPH_API_URL");
     return !envUrl.isEmpty() && !normalizeApiBaseUrl(QString::fromUtf8(envUrl)).isEmpty();
+}
+
+QString ConfigManager::normalizeApiBaseUrl(const QString &raw)
+{
+    return ::normalizeApiBaseUrl(raw);
 }
 
 QByteArray ConfigManager::turnUrlsEnv()
@@ -257,8 +267,10 @@ void ConfigManager::setApiBaseUrl(const QString &u)
         qWarning() << "ConfigManager: rejecting invalid apiBaseUrl:" << u;
         return;
     }
-    if (apiBaseUrl() == v) return;
+    if (apiBaseUrl() == v && m_settings.value(QStringLiteral("api/baseUrlUserSet"), false).toBool())
+        return;
     m_settings.setValue(QStringLiteral("api/baseUrl"), v);
+    m_settings.setValue(QStringLiteral("api/baseUrlUserSet"), true);
     emit apiBaseUrlChanged();
     emit configChanged();
 }

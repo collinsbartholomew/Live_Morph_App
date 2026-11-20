@@ -46,8 +46,8 @@ QHash<int, QByteArray> PresetModel::roleNames() const
 
 static QString presetStorePath()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
-           + QStringLiteral("/presets.json");
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return base.isEmpty() ? QString() : base + QStringLiteral("/presets.json");
 }
 
 void PresetModel::load()
@@ -99,6 +99,8 @@ void PresetModel::load()
 
 void PresetModel::persist() const
 {
+    if (presetStorePath().isEmpty())
+        return;
     QJsonArray arr;
     for (const auto &p : m_items) {
         if (!p.id.startsWith(QStringLiteral("custom-")))

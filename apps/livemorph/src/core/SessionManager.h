@@ -213,6 +213,10 @@ private:
     QPointer<QVideoSink> m_previewWindowSink;
 
     bool m_active = false;
+    bool m_sessionStartPending = false;
+    bool m_sessionAnnounced = false;
+    quint64 m_sessionStartRequestId = 0;
+    QString m_restSessionId;
     int m_lastElapsedNotifySec = -1;
     bool m_signalingConnected = false;
     Status m_status = Status::Idle;

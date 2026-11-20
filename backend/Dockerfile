@@ -1,11 +1,12 @@
 # LiveMorph API — multi-stage production image
 FROM rust:1.88-bookworm AS builder
 WORKDIR /app
-COPY Cargo.toml Cargo.lock* ./
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 # Dummy src for dependency cache
-RUN mkdir src && echo "fn main(){}" > src/main.rs && cargo build --release
+RUN mkdir src && printf 'fn main(){}\n' > src/main.rs && printf '\n' > src/lib.rs \
+    && cargo build --release --locked
 COPY src ./src
-RUN touch src/main.rs && cargo build --release
+RUN touch src/main.rs src/lib.rs && cargo build --release --locked
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
@@ -19,7 +20,8 @@ ENV RUST_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3874
 EXPOSE 3874
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=6m --retries=3 \
   CMD curl -fsS http://127.0.0.1:3874/api/v1/health || exit 1
+STOPSIGNAL SIGTERM
 USER nobody
 CMD ["livemorph-backend"]

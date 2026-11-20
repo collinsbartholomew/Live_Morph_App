@@ -15,8 +15,8 @@ QtObject {
     // version) is authoritative everywhere else. Keep in sync with
     // CMakeLists.txt project(LiveMorph VERSION ...).
     readonly property string appVersion: "1.8.0"
-    readonly property string organization: "LiveMorph"
-    readonly property string domain: "livemorph.com"
+    readonly property string organization: "Omega Revelation PLC"
+    readonly property string domain: "omegarevelation.com"
 
     // ── Backend ─────────────────────────────────────────────────────
     // Base URL comes from LIVEMORPH_API_URL env var or Settings (no hardcoded port).
@@ -61,28 +61,28 @@ QtObject {
     // ── Layout (synced with Theme; Electron: titlebar 40, topbar 48,
     //    status footer 36 FIXED — no compact variant) ────────────────
     readonly property int titleBarHeight: 40
-    readonly property int topBarHeight: 48
-    readonly property int statusBarHeight: 36
-    readonly property int actionBarHeight: 72
-    readonly property int workshopWidth: 360
-    readonly property int actionLeftWidth: 360
-    readonly property int settingsDrawerWidth: 560
-    readonly property int buyCreditsDrawerWidth: 500
-    readonly property int notificationsWidth: 340
+    readonly property int topBarHeight: 64
+    readonly property int statusBarHeight: 32
+    readonly property int actionBarHeight: 80
+    readonly property int workshopWidth: 320
+    readonly property int actionLeftWidth: 320
+    readonly property int settingsDrawerWidth: 640
+    readonly property int buyCreditsDrawerWidth: 600
+    readonly property int notificationsWidth: 380
     readonly property int pipWidth: 180
     readonly property int pipHeight: 120
 
     // ── External links ──────────────────────────────────────────────
-    readonly property string urlTerms: "https://livemorph.com/terms"
-    readonly property string urlPrivacy: "https://livemorph.com/privacy"
-    readonly property string urlAup: "https://livemorph.com/acceptable-use"
-    readonly property string urlSupport: "https://livemorph.com/support"
-    readonly property string urlReport: "https://livemorph.com/report"
-    readonly property string urlBilling: "https://livemorph.com/billing"
-    readonly property string urlSite: "https://livemorph.com"
-    readonly property string urlLegalAup: "https://livemorph.com/legal/aup"
-    readonly property string urlLinktree: "https://linktr.ee/thetoolshub"
-    readonly property string urlDiscord: "https://discord.gg/livemorph"
+    readonly property string urlTerms: "https://omegarevelation.com/terms"
+    readonly property string urlPrivacy: "https://omegarevelation.com/privacy"
+    readonly property string urlAup: "https://omegarevelation.com/acceptable-use"
+    readonly property string urlSupport: "https://omegarevelation.com/support"
+    readonly property string urlReport: "https://omegarevelation.com/report"
+    readonly property string urlBilling: "https://omegarevelation.com/billing"
+    readonly property string urlSite: "https://omegarevelation.com"
+    readonly property string urlLegalAup: "https://omegarevelation.com/legal/aup"
+    readonly property string urlLinktree: "https://omegarevelation.com"
+    readonly property string urlDiscord: "https://discord.gg/omegarevelation"
     readonly property string urlDecartAup: "https://docs.platform.decart.ai/resources/aup"
     readonly property string urlNowPayments: "https://nowpayments.io/payment/"
 

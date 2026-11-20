@@ -8,7 +8,17 @@ use serde_json::json;
 use std::sync::Arc;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(health).service(version).service(metrics);
+    cfg.service(health)
+        .service(health_live)
+        .service(version)
+        .service(metrics);
+}
+
+/// Dependency-free liveness probe (load balancers): the process is alive even
+/// when Mongo is degraded. Readiness stays on /health.
+#[get("/health/live")]
+async fn health_live() -> HttpResponse {
+    HttpResponse::Ok().json(json!({ "status": "ok" }))
 }
 
 #[get("/health")]

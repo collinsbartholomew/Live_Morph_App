@@ -126,7 +126,7 @@ async fn password_reset_request(
     // Per-email cap (in addition to per-IP): without it, an attacker rotating
     // IPs can still mail-bomb one victim. Mirrors the OTP per-email window.
     {
-        let since = Utc::now() - Duration::seconds(cfg.auth_lockout_secs.max(1) as i64);
+        let since = Utc::now() - Duration::seconds(cfg.auth_lockout_secs.max(1));
         let recent = reset_token_store(&db, product)
             .count_documents(doc! { "email": &email, "created_at": { "$gte": bson::DateTime::from_chrono(since) } })
             .await?;
@@ -230,20 +230,69 @@ async fn password_reset_complete(
     let email = consumed.get_str("email").unwrap_or("").to_string();
 
     let users = user_store(&db, product);
-    let user = users
-        .find_one(doc! { "email": &email })
-        .await?
-        .ok_or_else(|| AppError::NotFound("user".into()))?;
+    let token_id = consumed.get("_id").cloned().unwrap_or(bson::Bson::Null);
+    let user = match users.find_one(doc! { "email": &email }).await {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            // Do not strand a valid reset token when the account lookup cannot
+            // complete: only a successful password update may consume it.
+            let _ = coll
+                .update_one(
+                    doc! { "_id": token_id.clone() },
+                    doc! { "$set": { "consumed": false }, "$unset": { "consumed_at": "" } },
+                )
+                .await;
+            return Err(AppError::NotFound("user".into()));
+        }
+        Err(e) => {
+            let _ = coll
+                .update_one(
+                    doc! { "_id": token_id.clone() },
+                    doc! { "$set": { "consumed": false }, "$unset": { "consumed_at": "" } },
+                )
+                .await;
+            return Err(e.into());
+        }
+    };
     // bcrypt-12 is ~250ms CPU — run it on a blocking thread, never the async worker.
     let pw = body.password.clone();
-    let new_hash = web::block(move || hash_password(&pw)).await.map_err(|e| AppError::Internal(format!("blocking: {e}")))??;
-    users
+    let new_hash = match web::block(move || hash_password(&pw)).await {
+        Ok(Ok(hash)) => hash,
+        Ok(Err(e)) => {
+            let _ = coll
+                .update_one(
+                    doc! { "_id": token_id.clone() },
+                    doc! { "$set": { "consumed": false }, "$unset": { "consumed_at": "" } },
+                )
+                .await;
+            return Err(e);
+        }
+        Err(e) => {
+            let _ = coll
+                .update_one(
+                    doc! { "_id": token_id.clone() },
+                    doc! { "$set": { "consumed": false }, "$unset": { "consumed_at": "" } },
+                )
+                .await;
+            return Err(AppError::Internal(format!("blocking: {e}")));
+        }
+    };
+    if let Err(e) = users
         .update_one(
             doc! { "_id": &user.id },
             doc! { "$set": { "password_hash": new_hash, "updated_at": Utc::now() },
                    "$inc": { "token_version": 1 } },
         )
-        .await?;
+        .await
+    {
+        let _ = coll
+            .update_one(
+                doc! { "_id": token_id },
+                doc! { "$set": { "consumed": false }, "$unset": { "consumed_at": "" } },
+            )
+            .await;
+        return Err(e.into());
+    }
     // token_version bumped -> drop cached revocation state immediately so the
     // old access tokens are rejected now, not after the 10 s cache TTL.
     crate::auth::middleware::invalidate_user_active(product, &user.id);
@@ -1265,7 +1314,7 @@ async fn oauth_google_callback(
             .take(64)
             .collect();
         let deep = format!(
-            "livemorph://oauth/callback?error={}&state={}",
+            "omegarevelation://oauth/callback?error={}&state={}",
             urlencoding_simple(&safe_err),
             urlencoding_simple(state),
         );
@@ -1376,7 +1425,7 @@ async fn oauth_google_callback(
     // the nonce it started with (session-fixation guard) — the deep link MUST
     // echo it or the protocol-handler path always fails verification.
     let deep = format!(
-        "livemorph://oauth/callback?ticket={}&state={}",
+        "omegarevelation://oauth/callback?ticket={}&state={}",
         urlencoding_simple(&ticket),
         urlencoding_simple(state)
     );
